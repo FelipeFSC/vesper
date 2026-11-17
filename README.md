@@ -29,8 +29,11 @@ Para consultar depois, use a **Wiki** (manual com fotos e exemplos, em [wiki/ind
 ## O que dá para fazer
 
 - **Mapas e cenas:** envie a imagem do mapa, ajuste o grid e crie várias cenas. Dá para separar um ou mais jogadores numa cena só deles.
+- **Imagens no mapa:** solte baús, árvores, fogueiras e armadilhas no mapa; mova, gire, redimensione, esconda dos jogadores e escolha quem fica por cima (imagens e tokens dividem os mesmos níveis).
+- **Mostrar aos jogadores:** prepare cartas, retratos e pistas (imagem, texto ou os dois) e, na hora, abra na tela de todos ou de jogadores escolhidos.
 - **Fichas livres:** atributos, barras (PV, Mana…), ações com fórmulas de dados e anotações. Personagens, NPCs e criaturas.
 - **Combate automático:** escolha a ação, clique no alvo e o sistema rola ataque × defesa, aplica o dano e mostra o resultado no mapa. Alcance, áreas de magia, críticos, iniciativa e turnos.
+- **Movimento por caminho:** arrastando o token, o botão direito marca pontos de passagem; a régua mostra cada trecho e o total, e todos veem o rastro.
 - **Dados:** `2d6+3`, vantagem `2d20kh1`, `4d6dl1`, dado explosivo `1d6!`, `@forca` puxa o atributo da ficha.
 - **Luz e visão:** os jogadores só veem o que está iluminado e à vista. Tochas, visão no escuro, portas e névoa de guerra.
 - **Paredes e cobertura:** parede absoluta, cobertura total, três quartos (+5) e meia (+2). A altura de cada criatura conta, e criaturas podem voar.

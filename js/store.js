@@ -32,6 +32,9 @@
       rooms: [],
       // Grupos de tokens: {id, name}; cada token guarda t.group
       groups: [],
+      // Imagens soltas no mapa: {id, img, name, x, y, w, h, rot (graus), flip, hidden, opacity, locked, z}
+      // O nível (z) é compartilhado com os tokens: quem tem z maior é desenhado por cima.
+      props: [],
     };
   }
 
@@ -85,6 +88,7 @@
     minZero: true,      // barras não ficam negativas
     actOnTurn: false,   // em combate, jogador só usa ações na própria vez
     hideNumbers: true,  // jogadores não veem Defesa/PV de quem não controlam
+    trailSecs: 3,       // segundos que o caminho de um movimento fica no mapa para todos (0 = não mostra)
   };
 
   // Som: biblioteca (categoria por nome de arquivo), o que toca em cada canal e volumes. Só o mestre altera.
@@ -100,6 +104,8 @@
       actors: sampleActors(), chat: [], players: {},
       // Jogadores separados do grupo: {idDoJogador: idDaCena}. Quem não está aqui fica na cena ativa.
       playerScenes: {},
+      // Entregas preparadas pelo mestre para mostrar na hora: {id, title, img|null, text}
+      handouts: [],
       combat: { active: false, round: 0, turn: 0, entries: [] },
       conditions: DEFAULT_CONDITIONS.slice(),
       attrs: DEFAULT_ATTRS.slice(), barNames: DEFAULT_BARS.slice(),
@@ -124,12 +130,14 @@
       sc.sounds = Array.isArray(sc.sounds) ? sc.sounds : [];
       sc.rooms = Array.isArray(sc.rooms) ? sc.rooms : [];
       sc.groups = Array.isArray(sc.groups) ? sc.groups : [];
+      sc.props = Array.isArray(sc.props) ? sc.props : [];
       st.scenes[id] = sc;
       if (!st.sceneOrder.includes(id)) st.sceneOrder.push(id);
     }
     st.sceneOrder = st.sceneOrder.filter((id) => st.scenes[id]);
     if (!st.scenes[st.activeSceneId]) st.activeSceneId = st.sceneOrder[0] || null;
     st.playerScenes = st.playerScenes && typeof st.playerScenes === 'object' ? st.playerScenes : {};
+    st.handouts = Array.isArray(st.handouts) ? st.handouts : [];
     for (const [pid, sid] of Object.entries(st.playerScenes)) if (!st.scenes[sid] || sid === st.activeSceneId) delete st.playerScenes[pid];
     for (const a of Object.values(st.actors)) {
       a.bars = a.bars || []; a.stats = a.stats || []; a.actions = a.actions || [];
@@ -277,7 +285,13 @@
     },
 
     'token.add': (s, a) => { sceneOf(s, a.sceneId).tokens[a.token.id] = a.token; },
-    'token.move': (s, a) => { const t = tok(s, a); t.x = a.x; t.y = a.y; },
+    'token.move': (s, a) => {
+      const t = tok(s, a); t.x = a.x; t.y = a.y;
+      if (Array.isArray(a.path) && a.path.length >= 2 && a.path.length <= 64) {
+        const pts = a.path.map((p) => [Math.round(Number(p[0]) || 0), Math.round(Number(p[1]) || 0)]);
+        t.lastMove = { pts, at: Number(a.at) || Date.now() };
+      }
+    },
     'token.update': (s, a) => { Object.assign(tok(s, a), a.patch); },
     'token.delete': (s, a) => {
       delete sceneOf(s, a.sceneId).tokens[a.id];
@@ -326,6 +340,24 @@
       const sc = sceneOf(s, a.sceneId);
       for (const t of Object.values(sc.tokens)) if (t.group === a.id) { t.hidden = a.vis === 'hidden'; t.masked = a.vis === 'masked'; }
     },
+    'prop.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = sc.props || []; sc.props.push(a.prop); },
+    'prop.update': (s, a) => { const x = (sceneOf(s, a.sceneId).props || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
+    'prop.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = (sc.props || []).filter((y) => y.id !== a.id); },
+    // Níveis: imagens e tokens numa só ordem. dir = front | up | down | back (none = só renumera). Renumera tudo de 0 a n.
+    'order.move': (s, a) => {
+      const sc = sceneOf(s, a.sceneId);
+      const items = Object.values(sc.tokens).map((o) => ({ o, k: 1 })).concat((sc.props || []).map((o) => ({ o, k: 0 })))
+        .sort((x, y) => (x.o.z || 0) - (y.o.z || 0) || x.k - y.k);
+      const i = items.findIndex((x) => x.o.id === a.id && x.k === (a.kind === 'prop' ? 0 : 1));
+      if (i < 0) return false;
+      const [it] = items.splice(i, 1);
+      const j = a.dir === 'none' ? i : a.dir === 'front' ? items.length : a.dir === 'back' ? 0 : a.dir === 'up' ? Math.min(items.length, i + 1) : Math.max(0, i - 1);
+      items.splice(j, 0, it);
+      items.forEach((x, n) => { x.o.z = n; });
+    },
+    'handout.add': (s, a) => { s.handouts = s.handouts || []; s.handouts.push(a.handout); },
+    'handout.update': (s, a) => { const x = (s.handouts || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
+    'handout.delete': (s, a) => { s.handouts = (s.handouts || []).filter((y) => y.id !== a.id); },
     'room.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.rooms = sc.rooms || []; sc.rooms.push(a.room); },
     'room.update': (s, a) => { const x = (sceneOf(s, a.sceneId).rooms || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
     'room.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.rooms = (sc.rooms || []).filter((y) => y.id !== a.id); },
@@ -750,7 +782,7 @@
           && !('height' in a.patch) && !('coverShow' in a.patch); // altura e visibilidade atrás do muro: o mestre decide
       }
       case 'chat.add':
-        if (!a.msg || a.msg.kind === 'system') return false;
+        if (!a.msg || a.msg.kind === 'system' || a.msg.kind === 'handout') return false;
         a.msg.playerId = pid;
         return true;
       case 'drawing.add':

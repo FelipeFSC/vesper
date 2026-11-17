@@ -145,9 +145,12 @@ td:first-child { white-space: nowrap; }
     <a href="#salvar">Salvar e levar a campanha</a>
     <h3>Preparar a mesa</h3>
     <a href="#cenas">Cenas e mapas</a>
+    <a href="#imagens">Imagens no mapa</a>
+    <a href="#mostrar">Mostrar aos jogadores</a>
     <a href="#separar">Separar jogadores em cenas</a>
     <a href="#fichas">Fichas</a>
     <a href="#tokens">Tokens no mapa</a>
+    <a href="#caminho">Andar por um caminho</a>
     <a href="#grupos">Vultos e grupos</a>
     <a href="#voo">Criaturas que voam</a>
     <a href="#desenho">Desenho, névoa e régua</a>
@@ -283,6 +286,50 @@ td:first-child { white-space: nowrap; }
   </table></div>
   <p>As imagens são convertidas para WebP e reduzidas sozinhas (mapas até 4096 px), então a campanha não fica pesada.</p>
 
+  <h4 id="imagens">Imagens no mapa</h4>
+  <p>Baú, fogueira, carroça, árvore, mancha de sangue, armadilha: imagens soltas que você coloca, move, gira e esconde quando quiser.</p>
+  <figure><img src="img/imagens-mapa.jpg" alt="Mapa com uma árvore girada e selecionada (moldura roxa, alças nos cantos e bolinha de giro em cima) por cima do Goblin 1, e um tapete por baixo da Lyra. À direita, o painel da imagem com Visível, Nível, Largura, Altura, Giro, Opacidade, Travar, Espelhar, Duplicar e Apagar" width="1180" height="560" loading="lazy"><figcaption>A árvore está acima do Goblin 1 e o tapete abaixo da Lyra. O painel da imagem selecionada fica à direita.</figcaption></figure>
+  <ol>
+    <li>Escolha a ferramenta <b>Imagem</b> <kbd>I</kbd> e clique em <b>Enviar imagem…</b>, ou <b>arraste arquivos</b> do computador direto para o mapa (dá para soltar vários de uma vez).</li>
+    <li>A imagem entra encaixada no grid, com o lado maior em 2 quadrados e a proporção certa.</li>
+    <li>Clique nela para mexer: arraste para mover, puxe os <b>cantos</b> para redimensionar (<kbd>Shift</kbd> deforma) e a <b>bolinha de cima</b> para girar (<kbd>Shift</kbd> gira de 15 em 15°).</li>
+  </ol>
+  <div class="tbl"><table>
+    <thead><tr><th>No painel da imagem</th><th>Para que serve</th></tr></thead>
+    <tbody>
+      <tr><td><b>Visível / Invisível</b></td><td>Invisível só você vê (apagada e tracejada). Prepare a armadilha e revele na hora.</td></tr>
+      <tr><td><b>Nível</b></td><td>Trazer para frente, subir, descer, mandar para trás. Imagens e tokens dividem a mesma ordem.</td></tr>
+      <tr><td><b>Largura, Altura, Giro</b></td><td>Medidas exatas, em quadrados e graus. Mudar a largura ou a altura mantém a proporção.</td></tr>
+      <tr><td><b>Opacidade</b></td><td>Deixa a imagem transparente (uma poça, uma névoa).</td></tr>
+      <tr><td><b>Travar</b></td><td>A imagem não sai do lugar sem querer.</td></tr>
+      <tr><td><b>Espelhar, Duplicar, Apagar</b></td><td>Também pelos atalhos <kbd>Ctrl</kbd>+<kbd>D</kbd> (duplicar) e <kbd>Delete</kbd> (apagar).</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Níveis:</b> imagem nova entra por baixo dos tokens (objetos no chão). Para a copa da árvore cobrir o goblin, use <b>Trazer para frente</b>. O painel do token tem os mesmos botões de nível. O mapa de fundo e o grid ficam sempre embaixo de tudo.</li>
+    <li><b>Imagens da campanha:</b> nas opções da ferramenta Imagem ficam as miniaturas de tudo o que você já usou. Arraste para o mapa ou clique para colocar no centro da tela, em qualquer cena.</li>
+    <li>Os jogadores veem as imagens visíveis, sem moldura e sem poder mexer. A névoa e a escuridão escondem as imagens como o resto do mapa. O jogador sempre vê o próprio token, mesmo debaixo de uma copa.</li>
+    <li>A imagem não bloqueia a visão. Para uma carroça bloquear, desenhe uma parede por cima.</li>
+    <li>As imagens vão junto quando você exporta a cena ou a campanha.</li>
+  </ul>
+
+  <h4 id="mostrar">Mostrar aos jogadores</h4>
+  <p>Uma carta, o retrato do vilão, um mapa do tesouro, uma pista: prepare antes da sessão e, na hora, mostre na tela dos jogadores com um clique.</p>
+  <figure><img src="img/mostrar-mestre.jpg" alt="Painel Mostrar aos jogadores com o botão Nova entrega e três entregas preparadas: Carta do duque (imagem e texto), Sussurro (só texto) e Retrato da condessa (só imagem), cada uma com o botão Mostrar" width="372" height="382" loading="lazy"><figcaption>O painel <b>Mostrar</b>, do mestre, com as entregas preparadas.</figcaption></figure>
+  <ol>
+    <li>No dock, abra <b>Mostrar</b> e clique em <b>Nova entrega</b>.</li>
+    <li>Dê um título e coloque uma <b>imagem</b> (enviar do computador ou escolher da biblioteca), um <b>texto</b> ou os dois.</li>
+    <li>Na hora do jogo, clique em <b>Mostrar</b> na entrega e escolha <b>Todos</b> ou <b>Escolher jogadores</b>.</li>
+  </ol>
+  <figure><img src="img/mostrar-jogador.jpg" alt="Janela Carta do duque aberta na tela do jogador por cima do mapa, com a imagem da carta, o texto embaixo e a hora em que o mestre mostrou" width="566" height="636" loading="lazy"><figcaption>O que o jogador vê: uma janela por cima do mapa, que dá para arrastar.</figcaption></figure>
+  <ul>
+    <li>Na tela de quem recebeu abre uma <b>janela</b> com a imagem e o texto. Dá para arrastar a janela e continuar mexendo no mapa. Cada jogador fecha a sua.</li>
+    <li><b>Zoom</b> na imagem: roda do mouse aproxima, arrastar move, dois cliques volta ao tamanho normal.</li>
+    <li>No <b>chat</b> de quem recebeu fica a entrega com a miniatura; clicar abre de novo. Quem não foi escolhido não vê nada. Você vê no chat para quem mostrou.</li>
+    <li>Quem mostra vê uma prévia da janela, igual à dos jogadores.</li>
+    <li>As imagens das entregas também aparecem em <b>Imagens da campanha</b>, para usar no mapa.</li>
+  </ul>
+
   <h4 id="separar">Separar jogadores em cenas diferentes</h4>
   <p>Um jogador explora a cripta sozinho enquanto o grupo continua na taverna: cada um vê e ouve só a cena em que está.</p>
   <figure><img src="img/cenas-jogadores.jpg" alt="Lista de cenas: Caverna do Goblin com as bolinhas de Bruno e Caio e a etiqueta Cena do grupo; Cripta com a bolinha de Ana; botões Ativar e Mover jogadores" width="236" height="360" loading="lazy"><figcaption>As bolinhas mostram quem está em cada cena.</figcaption></figure>
@@ -370,6 +417,24 @@ td:first-child { white-space: nowrap; }
   <h4>Condições</h4>
   <p>Em <b>Adicionar condição…</b>, escolha a condição (Envenenado, Atordoado…) e, se quiser, quantas rodadas ela dura no campo <b>rod.</b>. No combate, a duração cai sozinha no início do turno do token. A lista de condições é editada no painel <b>Mesa</b>.</p>
 
+  <h4 id="caminho">Andar por um caminho</h4>
+  <p>Para contornar uma parede, uma mesa ou um aliado sem "cortar caminho" na contagem, marque <b>pontos de passagem</b> enquanto arrasta o token.</p>
+  <figure><img src="img/caminho.jpg" alt="Lyra sendo arrastada por um caminho de três trechos com distâncias 4, 3 e 3, o último em vermelho porque atravessa uma parede, e a régua mostrando 10 quad. · 15 m" width="620" height="300" loading="lazy"><figcaption>Três trechos (4 + 3 + 3) e o total do caminho. O último trecho está vermelho porque atravessa uma parede.</figcaption></figure>
+  <ol>
+    <li>Segure o token com o <b>botão esquerdo</b> e arraste.</li>
+    <li>Sem soltar, clique com o <b>botão direito</b>: fica um ponto no centro do quadrado. Continue arrastando e marque quantos pontos quiser.</li>
+    <li>Cada trecho mostra a sua distância, e a régua perto do token mostra o <b>total</b>.</li>
+    <li>Solte o botão esquerdo: o token <b>desliza pelo caminho</b> até o destino.</li>
+  </ol>
+  <ul>
+    <li><kbd>Backspace</kbd> (ainda segurando) desfaz o último ponto.</li>
+    <li>Trecho que atravessa parede ou porta fechada fica <b>vermelho</b>, só como aviso: o movimento é permitido.</li>
+    <li>Na regra <b>alternada 1-2-1</b>, a contagem das diagonais continua de um trecho para o outro.</li>
+    <li>Depois de mover, <b>todos</b> veem o rastro do caminho com o total por alguns segundos. O mestre escolhe quanto tempo em <b>Mesa → Regras automáticas → Rastro do movimento</b> (0 desliga).</li>
+    <li>A <b>Régua</b> <kbd>R</kbd> aceita os mesmos pontos com o botão direito, para medir sem mover ninguém.</li>
+    <li>Sem segurar nada, o botão direito continua movendo a câmera.</li>
+  </ul>
+
   <h4 id="vultos">Visível, vulto ou invisível <span class="who gm">Mestre</span></h4>
   <p>No painel do token, em <b>Para os jogadores</b>:</p>
   <div class="tbl"><table>
@@ -417,7 +482,7 @@ td:first-child { white-space: nowrap; }
     <tbody>
       <tr><td>Selecionar</td><td><kbd>V</kbd></td><td>Clica e arrasta tokens. Arrastar no vazio move a câmera.</td></tr>
       <tr><td>Mover câmera</td><td><kbd>H</kbd></td><td>Também funciona com o botão direito ou segurando <kbd>Espaço</kbd>.</td></tr>
-      <tr><td>Régua</td><td><kbd>R</kbd></td><td>Arraste para medir, em quadrados e na unidade da cena.</td></tr>
+      <tr><td>Régua</td><td><kbd>R</kbd></td><td>Arraste para medir, em quadrados e na unidade da cena. Botão direito (segurando) marca pontos de passagem.</td></tr>
       <tr><td>Ping</td><td><kbd>P</kbd></td><td>Clique para chamar a atenção de todos para um ponto.</td></tr>
       <tr><td>Desenho livre, linha, retângulo, círculo</td><td><kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>E</kbd></td><td>Marcar salas, áreas de magia, caminhos. Cor e espessura aparecem na barra ao lado.</td></tr>
       <tr><td>Borracha</td><td><kbd>X</kbd></td><td>Apaga desenhos e paredes.</td></tr>
@@ -724,6 +789,7 @@ td:first-child { white-space: nowrap; }
       <tr><td>Barras não ficam negativas</td><td>A vida para em 0.</td></tr>
       <tr><td>Jogador só usa ações na própria vez</td><td>Fora da vez, o botão avisa "Aguarde a sua vez".</td></tr>
       <tr><td>Esconder Defesa e PV dos monstros</td><td>Os jogadores não veem os números dos monstros, nem a chance de acerto.</td></tr>
+      <tr><td>Rastro do movimento</td><td>Quantos segundos o caminho de um movimento fica no mapa para todos (0 = não mostra).</td></tr>
     </tbody>
   </table></div>
   <a class="top" href="#">Voltar ao topo</a>
@@ -812,13 +878,15 @@ td:first-child { white-space: nowrap; }
     <tbody>
       <tr><td><kbd>1</kbd> a <kbd>9</kbd></td><td>Usa a ação de mesmo número do token selecionado.</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Cancela a mira ou a ferramenta.</td></tr>
+      <tr><td>Botão direito, segurando um token ou a régua</td><td>Marca um ponto de passagem. <kbd>Backspace</kbd> desfaz o último.</td></tr>
+      <tr><td>Clicar de novo na ferramenta ativa</td><td>Fecha as opções dela e volta para Selecionar.</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Confirma alvos marcados (ações com vários alvos).</td></tr>
       <tr><td><kbd>Setas</kbd></td><td>Movem o token selecionado.</td></tr>
       <tr><td><kbd>Alt</kbd></td><td>Ao soltar um token: sem encaixe no grid. Ao mirar (mestre): aceita qualquer alvo.</td></tr>
       <tr><td><kbd>Delete</kbd></td><td>Remove o token selecionado (mestre).</td></tr>
       <tr><td><kbd>V</kbd> <kbd>H</kbd> <kbd>R</kbd> <kbd>P</kbd></td><td>Selecionar, mover câmera, régua, ping.</td></tr>
       <tr><td><kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>E</kbd> <kbd>X</kbd></td><td>Desenho livre, linha, retângulo, círculo, borracha.</td></tr>
-      <tr><td><kbd>F</kbd> <kbd>G</kbd> <kbd>W</kbd> <kbd>O</kbd> <kbd>M</kbd></td><td>Revelar névoa, esconder névoa, parede, porta, sala de som.</td></tr>
+      <tr><td><kbd>F</kbd> <kbd>G</kbd> <kbd>W</kbd> <kbd>O</kbd> <kbd>M</kbd> <kbd>I</kbd></td><td>Revelar névoa, esconder névoa, parede, porta, sala de som, imagem.</td></tr>
     </tbody>
   </table></div>
   <a class="top" href="#">Voltar ao topo</a>

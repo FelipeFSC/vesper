@@ -38,6 +38,7 @@
     { id: 'fog-hide', icon: 'cloud-fog', title: 'Névoa: esconder área (G)', gm: true, edit: true },
     { id: 'wall', icon: 'brick-wall', title: 'Parede (W): absoluta, total, três quartos ou meia\nArraste de um canto do grid a outro', gm: true, edit: true },
     { id: 'door', icon: 'door-closed', title: 'Porta (O): parede que abre e fecha\nClique no marcador dourado para abrir', gm: true, edit: true },
+    { id: 'prop', icon: 'image', title: 'Imagem (I): coloque imagens soltas no mapa\nArraste arquivos do computador para o mapa ou use a biblioteca', gm: true, edit: true },
     { id: 'room', icon: 'music', title: 'Sala de som (M): área à prova de som, com música própria\nArraste um retângulo (ou clique nos cantos no modo polígono)', gm: true, edit: true },
   ];
   const DOCK = [
@@ -45,8 +46,9 @@
     { id: 'dice', icon: 'dices', label: 'Dados' },
     { id: 'combat', icon: 'swords', label: 'Combate' },
     { id: 'audio', icon: 'music', label: 'Som', gm: true },
+    { id: 'handouts', icon: 'scroll-text', label: 'Mostrar', gm: true },
   ];
-  const PANEL_TITLE = { chat: 'Chat', dice: 'Dados', combat: 'Combate', table: 'Mesa', audio: 'Som' };
+  const PANEL_TITLE = { chat: 'Chat', dice: 'Dados', combat: 'Combate', table: 'Mesa', audio: 'Som', handouts: 'Mostrar aos jogadores' };
   const KIND = { pc: 'Personagem', npc: 'NPC', monster: 'Criatura' };
   const KIND_GROUP = { pc: 'Personagens', npc: 'NPCs', monster: 'Criaturas' };
   const DRAW_COLORS = ['#e8e6ef', '#8f8d9a', '#1c1c21', '#d9574f', '#e07b4f', '#d2a24c', '#4fb27a', '#3f8f86', '#5b8be0', '#8b72f0'];
@@ -174,6 +176,7 @@
     if (UI.tab) renderPanel(UI.tab);
     renderChat();
     renderFeed();
+    checkHandouts();
     for (const w of UI.windows.values()) renderWindow(w);
     checkMyTurn();
   };
@@ -294,27 +297,68 @@
       for (const t of TOOLS) {
         if ((t.gm && !gm) || (t.edit && !edit)) continue;
         if (t.sep) { bar.append(h('div', { class: 'tool-sep' })); continue; }
-        bar.append(h('button', { class: 'tool', 'data-tool': t.id, title: t.title, onclick: () => B.setTool(t.id) }, ic(t.icon)));
+        // Clicar de novo na ferramenta ativa fecha as opções dela e volta para Selecionar
+        bar.append(h('button', { class: 'tool', 'data-tool': t.id, title: t.title, onclick: () => B.setTool(B.tool === t.id && t.id !== 'select' ? 'select' : t.id) }, ic(t.icon)));
       }
     }
     for (const el of bar.querySelectorAll('[data-tool]')) el.classList.toggle('on', el.dataset.tool === B.tool);
     renderToolOpts();
   };
 
+  // Imagens já usadas em qualquer cena da campanha (biblioteca da ferramenta Imagem)
+  function campaignImages() {
+    const st = S().state, seen = new Set();
+    if (!st) return [];
+    for (const id of st.sceneOrder) for (const p of (st.scenes[id] && st.scenes[id].props) || []) if (p.img && App.Images.src(p.img)) seen.add(p.img);
+    for (const ho of st.handouts || []) if (ho.img && App.Images.src(ho.img)) seen.add(ho.img);
+    return [...seen];
+  }
   const fmtM = (n) => String(Math.round(Number(n) * 100) / 100).replace('.', ',') + ' m';
+  // Mantém o quadro de opções inteiro dentro do mapa: sobe se precisar; se ainda não couber, rola por dentro
+  function fitToolOpts(box) {
+    const area = box.parentElement;
+    if (!area) return;
+    const H = area.clientHeight, m = 14;
+    box.style.maxHeight = Math.max(160, H - m * 2) + 'px';
+    const want = box._want ?? m, hgt = box.offsetHeight;
+    box.style.top = Math.max(m, Math.min(want, H - hgt - m)) + 'px';
+  }
+  UI.fitToolOpts = () => { const b = $('#tool-opts'); if (b && !b.hidden) fitToolOpts(b); };
+  window.addEventListener('resize', () => UI.fitToolOpts());
+
   function renderToolOpts() {
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
-    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room') || UI.mode !== 'edit') { box.hidden = true; return; }
+    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room' || t.id === 'prop') || UI.mode !== 'edit') { box.hidden = true; return; }
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
-    box.style.top = (btn ? btn.offsetTop + 14 - 5 : 14) + 'px';
+    const tb = $('#toolbar');
+    box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
+    fitToolOpts(box);
     const rsc = S().currentScene();
-    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom;
+    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom;
     box.hidden = false;
     if (box._sig === sig) return;
     box._sig = sig;
     box.innerHTML = '';
     const redo = () => { box._sig = null; renderToolOpts(); };
+    requestAnimationFrame(() => fitToolOpts(box));
+    if (t.id === 'prop') {
+      const lib = campaignImages();
+      box.append(h('span', { class: 'eyebrow' }, 'Imagens no mapa'),
+        btnI('upload', 'Enviar imagem…', { class: 'btn primary block', onclick: async () => {
+          const file = await U.pickFile('image/*');
+          if (file) await B.addPropFromFile(file, B.viewCenter());
+        } }),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Ou arraste arquivos do computador para o mapa. Clique numa imagem para mover; os cantos redimensionam e a bolinha de cima gira (Shift: de 15 em 15°).'),
+        h('span', { class: 'eyebrow' }, 'Imagens da campanha'),
+        lib.length ? h('div', { class: 'img-lib' }, lib.map((id) => {
+          const im = h('img', { src: App.Images.src(id) || '', alt: '', draggable: 'true', title: 'Arraste para o mapa ou clique para colocar no centro',
+            onclick: () => B.placeImage(id, B.viewCenter()) });
+          im.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-image', id); e.dataTransfer.effectAllowed = 'copy'; });
+          return im;
+        })) : h('p', { class: 'hint', style: { margin: 0 } }, 'As imagens que você colocar aparecem aqui para usar de novo em qualquer cena.'));
+      return;
+    }
     if (t.id === 'room') {
       const rooms = (rsc && rsc.rooms) || [];
       box.append(h('span', { class: 'eyebrow' }, 'Desenhar sala'),
@@ -373,6 +417,7 @@
       class: 'btn' + (B.style.snap ? ' on' : ''), title: 'Encaixar tokens e desenhos no grid (segure Alt ao soltar para ignorar)',
       onclick: () => { B.style.snap = !B.style.snap; box._sig = null; renderBoardActions(); },
     }));
+    requestAnimationFrame(placeZoom);
   }
 
   // =============== Faixa de iniciativa ===============
@@ -635,7 +680,7 @@
     const box = $('#layers'), sc = S().currentScene(), gm = S().gmView(), L = App.Board.layers;
     if (!sc) { box.innerHTML = ''; return; }
     const sig = JSON.stringify([L, gm, Object.keys(sc.tokens).length, sc.drawings.length, sc.fog.enabled, sc.fog.shapes.length, !!sc.bg, UI.rightTab,
-      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, S().viewAs,
+      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, (sc.props || []).length, S().viewAs,
       sc.groups, Object.values(sc.tokens).map((t) => [t.group, t.hidden, t.masked]), App.Board.selected]);
     if (box._sig === sig) return;
     box._sig = sig;
@@ -654,6 +699,7 @@
     if (gm) box.append(row('walls', 'brick-wall', 'Paredes e portas', (sc.walls || []).length));
     if (gm) box.append(row('sounds', 'volume-2', 'Sons no mapa', (sc.sounds || []).length));
     if (gm) box.append(row('rooms', 'music', 'Salas de som', (sc.rooms || []).length));
+    box.append(row('props', 'image', 'Imagens', (sc.props || []).filter((p) => gm || !p.hidden).length));
     if (gm && sc.light.enabled) box.append(row('light', 'moon', 'Escuridão', sc.light.global ? 'dia' : 'noite'));
     if (UI.rightTab === 'layers') box.append(h('p', { class: 'hint' }, 'Esconder uma camada vale só para a sua tela: os outros continuam vendo.'));
     if (gm) box.append(groupsSection(sc));
@@ -691,11 +737,35 @@
   }
 
   // =============== Dock inferior ===============
+  // O zoom fica no centro de baixo; se o dock (que cresce da esquerda) encostar nele, o zoom vai para o lado.
+  // Se ainda bater nos botões da direita, sobe para cima do dock.
+  function placeZoom() {
+    const z = $('#zoom'), d = $('#dock'), ba = $('#board-actions'), wrap = $('#board-wrap');
+    if (!z || !d || !wrap) return;
+    z.style.left = ''; z.style.bottom = ''; z.style.transform = '';
+    if (ba) ba.style.bottom = '';
+    const W = wrap.getBoundingClientRect(), dr = d.getBoundingClientRect(), up = (W.bottom - dr.top + 8) + 'px';
+    // botões da direita (Trocar mapa, Encaixe) sobem uma linha se encostarem no dock
+    let br = ba && ba.getBoundingClientRect();
+    if (br && br.width && br.left < dr.right + 12) { ba.style.bottom = up; br = ba.getBoundingClientRect(); }
+    const sameRow = (r) => r && r.width && r.bottom > dr.top;
+    const zr = z.getBoundingClientRect();
+    const free = (l, r) => l >= dr.right + 12 && (!sameRow(br) || r + 12 <= br.left);
+    if (free(zr.left, zr.right)) return;
+    const left = dr.right + 12;
+    if (free(left, left + zr.width)) { z.style.left = (left - W.left) + 'px'; z.style.transform = 'none'; return; }
+    // sem espaço na linha de baixo: sobe para cima do dock, à esquerda
+    z.style.left = '14px'; z.style.transform = 'none'; z.style.bottom = up;
+  }
+  UI.placeZoom = placeZoom;
+  window.addEventListener('resize', () => placeZoom());
+
   function renderDock() {
     for (const b of document.querySelectorAll('#dock [data-dock]')) {
       b.classList.toggle('on', b.dataset.dock === UI.tab);
-      if (b.dataset.dock === 'audio') b.hidden = !S().gmView();
+      if (b.dataset.dock === 'audio' || b.dataset.dock === 'handouts') b.hidden = !S().gmView();
     }
+    requestAnimationFrame(placeZoom);
     const st = S().state, count = $('#dock [data-dock="chat"] .count');
     if (!st || !count) return;
     if (UI.tab === 'chat') { const l = st.chat[st.chat.length - 1]; UI.seenChatId = l ? l.id : null; }
@@ -708,7 +778,12 @@
     const i = list.findIndex((m) => m.id === id);
     return i < 0 ? list : list.slice(i + 1);
   }
-  const visibleMsg = (m) => !m.secret || S().gmView() || m.playerId === S().me.id;
+  // Quem está olhando: o próprio jogador, ou o jogador que o mestre está simulando em "ver como"
+  const viewerId = () => (S().isGM() && S().viewAs && S().viewAs !== '*' ? S().viewAs : S().me.id);
+  const visibleMsg = (m) => {
+    if (m.kind === 'handout' && Array.isArray(m.to)) return S().gmView() || m.to.includes(viewerId());
+    return !m.secret || S().gmView() || m.playerId === S().me.id;
+  };
 
   UI.showTab = function (id) {
     UI.tab = id;
@@ -732,6 +807,7 @@
     else if (id === 'combat') renderCombat();
     else if (id === 'table') renderTable();
     else if (id === 'audio') renderAudio();
+    else if (id === 'handouts') renderHandouts();
   }
 
   // =============== Chat ===============
@@ -750,6 +826,12 @@
       if (b) S().undoAction(b.dataset.undo);
     });
     p.append(log, h('div', { class: 'chat-input' }, input, secretBtn, h('button', { class: 'btn primary', title: 'Enviar (Enter)', onclick: () => { send(); input.focus(); } }, ic('send'))));
+    p.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-handout]');
+      if (!el) return;
+      const m = S().state.chat.find((x) => x.id === el.dataset.handout);
+      if (m) openHandout(m);
+    });
     $('#roll-feed').addEventListener('click', (e) => {
       const b = e.target.closest('[data-undo]');
       if (b) S().undoAction(b.dataset.undo);
@@ -793,6 +875,11 @@
   function msgHtml(m) {
     if (m.kind === 'system') return `<div class="msg sys${m.secret ? ' secret' : ''}">${U.esc(m.text)}</div>`;
     const head = `<div class="msg-head"><b style="color:${S().playerColor(m.playerId)}">${U.esc(seenName(m.from, m.fromMasked))}</b>${m.secret ? icHtml('lock') + '<span>secreta</span>' : ''}<span class="time">${U.fmtTime(m.ts)}</span></div>`;
+    if (m.kind === 'handout') {
+      const src = m.img && App.Images.src(m.img);
+      const who = Array.isArray(m.to) && S().gmView() ? ` · para ${U.esc(m.to.map((id) => S().playerName(id)).join(', '))}` : '';
+      return `<div class="msg handout" data-handout="${U.esc(m.id)}">${head}<div class="ho-msg">${src ? `<img src="${src}" alt="">` : icHtml('scroll-text')}<div><span class="ho-eyebrow">O mestre mostrou${who}</span><b>${U.esc(m.title || 'Sem título')}</b>${m.text ? `<span class="ho-snip">${U.esc(String(m.text).slice(0, 90))}${String(m.text).length > 90 ? '…' : ''}</span>` : ''}<small>Clique para abrir</small></div></div></div>`;
+    }
     if (m.kind === 'action') return `<div class="msg act m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}">${head}${actionMsgHtml(m)}</div>`;
     if (m.kind === 'roll') {
       const parts = (m.parts || []).map((p) => `<div class="roll-part"><div class="roll-main"><span class="roll-total${p.crit ? ' crit' : ''}${p.fumble ? ' fumble' : ''}">${U.esc(p.total)}</span><div>${p.label ? `<div class="roll-label">${U.esc(p.label)}</div>` : ''}<div class="roll-detail">${U.esc(p.formula)} → ${cleanDetail(p.detail)}</div></div></div></div>`).join('');
@@ -814,6 +901,160 @@
   }
 
   // Com o chat fechado, os resultados novos aparecem por alguns segundos sobre o mapa
+  function checkHandouts() {
+    const st = S().state;
+    if (!st) return;
+    const last = st.chat[st.chat.length - 1];
+    if (UI.hoSeen === undefined) { UI.hoSeen = last ? last.id : ''; return; }
+    const fresh = msgsAfter(st.chat, UI.hoSeen).filter((m) => m.kind === 'handout' && visibleMsg(m) && Date.now() - m.ts < 60000);
+    UI.hoSeen = last ? last.id : '';
+    for (const m of fresh) if (!S().gmView() || m.playerId === S().me.id) openHandout(m);
+  }
+
+  // Janela da entrega: imagem com zoom (roda do mouse, arrastar, dois cliques volta) e o texto
+  function openHandout(m) {
+    const gmPreview = S().gmView();
+    UI.openWindow('handout:' + m.id, m.title || 'Do mestre', (w) => {
+      if (w._view) return w._view;
+      const box = h('div', { class: 'ho-win' });
+      const src = m.img && App.Images.src(m.img);
+      if (gmPreview) box.append(h('p', { class: 'hint', style: { margin: 0 } }, 'Prévia: é assim que os jogadores veem.'));
+      if (src) {
+        const img = h('img', { src, alt: m.title || '', draggable: 'false' });
+        const view = h('div', { class: 'ho-view', title: 'Roda do mouse: zoom · arrastar: mover · dois cliques: voltar' }, img);
+        let k = 1, x = 0, y = 0;
+        const apply = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${k})`; view.classList.toggle('zoomed', k > 1); };
+        view.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const r = view.getBoundingClientRect(), mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
+          const nk = U.clamp(k * Math.exp(-e.deltaY * 0.0015), 1, 6);
+          x = mx - (mx - x) * (nk / k); y = my - (my - y) * (nk / k); k = nk;
+          if (k === 1) { x = 0; y = 0; }
+          apply();
+        }, { passive: false });
+        view.addEventListener('pointerdown', (e) => {
+          if (k <= 1) return;
+          const sx = e.clientX - x, sy = e.clientY - y;
+          view.setPointerCapture(e.pointerId);
+          const mv = (ev) => { x = ev.clientX - sx; y = ev.clientY - sy; apply(); };
+          const up = () => { view.removeEventListener('pointermove', mv); view.removeEventListener('pointerup', up); };
+          view.addEventListener('pointermove', mv); view.addEventListener('pointerup', up);
+        });
+        view.addEventListener('dblclick', () => { k = 1; x = 0; y = 0; apply(); });
+        box.append(view);
+      }
+      if (m.text) box.append(h('div', { class: 'ho-text' }, String(m.text)));
+      box.append(h('div', { class: 'muted small-text' }, 'Mostrado pelo mestre às ' + U.fmtTime(m.ts)));
+      w._view = box;
+      return box;
+    }, { w: m.img ? 560 : 420, icon: 'scroll-text' });
+  }
+  UI.openHandout = openHandout;
+
+  // ---------- Painel "Mostrar aos jogadores" (mestre): entregas preparadas ----------
+  function renderHandouts() {
+    const p = $('#p-handouts');
+    safeRender(p, () => {
+      const st = S().state;
+      if (!st) return;
+      const sig = JSON.stringify([st.handouts, Object.keys(App.Store.assets).length]);
+      if (p._sig === sig) return;
+      p._sig = sig;
+      p.innerHTML = '';
+      p.append(h('p', { class: 'hint', style: { margin: 0 } }, 'Prepare antes da sessão: imagens, textos ou os dois (uma carta, o retrato do vilão, uma pista). Na hora, é só clicar em Mostrar e escolher para quem.'),
+        btnI('plus', 'Nova entrega', { class: 'btn primary block', onclick: () => handoutDialog(null) }));
+      if (!st.handouts.length) p.append(h('p', { class: 'empty' }, 'Nenhuma entrega preparada ainda.'));
+      for (const ho of st.handouts) {
+        const src = ho.img && App.Images.src(ho.img);
+        p.append(h('div', { class: 'ho-item' },
+          h('div', { class: 'ho-thumb' }, src ? h('img', { src, alt: '' }) : ic('scroll-text')),
+          h('div', { class: 'grow ho-info' }, h('b', {}, ho.title || 'Sem título'),
+            h('small', {}, [ho.img ? 'imagem' : '', ho.text ? 'texto' : ''].filter(Boolean).join(' + ') + (ho.text ? ' · ' + String(ho.text).slice(0, 40) + (ho.text.length > 40 ? '…' : '') : ''))),
+          h('div', { class: 'ho-acts' },
+            btnI('eye', 'Mostrar', { class: 'btn primary small', title: 'Mostrar aos jogadores agora', onclick: () => showDialog(ho) }),
+            iconBtn('pencil', 'Editar', () => handoutDialog(ho)),
+            iconBtn('trash-2', 'Apagar', () => { if (confirm('Apagar a entrega "' + (ho.title || 'Sem título') + '"?')) S().dispatch({ type: 'handout.delete', id: ho.id }); }))));
+      }
+    });
+  }
+
+  // Criar ou editar uma entrega: título, imagem (enviar ou da biblioteca) e texto
+  function handoutDialog(ho) {
+    const f = { title: ho ? ho.title : '', img: ho ? ho.img : null, text: ho ? ho.text : '' };
+    const prev = h('div', { class: 'ho-prev' });
+    const lib = h('div', { class: 'img-lib', hidden: true });
+    const drawPrev = () => {
+      prev.innerHTML = '';
+      const src = f.img && App.Images.src(f.img);
+      prev.append(src ? h('img', { src, alt: '' }) : h('span', { class: 'muted small-text' }, 'Sem imagem (só texto)'));
+    };
+    const fillLib = () => {
+      lib.innerHTML = '';
+      const ids = campaignImages();
+      if (!ids.length) lib.append(h('p', { class: 'hint', style: { margin: 0, gridColumn: '1 / -1' } }, 'A biblioteca está vazia: envie uma imagem.'));
+      for (const id of ids) lib.append(h('img', { src: App.Images.src(id), alt: '', title: 'Usar esta imagem', onclick: () => { f.img = id; lib.hidden = true; drawPrev(); } }));
+    };
+    drawPrev();
+    const body = h('div', { class: 'col', style: { gap: '10px', minWidth: '340px' } },
+      h('label', { class: 'col' }, h('span', { class: 'eyebrow' }, 'Título'), h('input', { value: f.title, placeholder: 'Ex.: Carta do duque', maxlength: 80, oninput: (e) => { f.title = e.target.value; } })),
+      h('span', { class: 'eyebrow' }, 'Imagem (opcional)'), prev,
+      h('div', { class: 'row wrap' },
+        btnI('upload', 'Enviar imagem…', { class: 'btn small', onclick: async () => {
+          const file = await U.pickFile('image/*');
+          if (!file) return;
+          try { const r = await App.Images.add(file, App.Images.PROP); f.img = r.id; if (!f.title) { f.title = String(file.name).replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' '); body.querySelector('input').value = f.title; } drawPrev(); } catch (e) { U.toast(e.message, 'error'); }
+        } }),
+        btnI('image', 'Da biblioteca', { class: 'btn small', onclick: () => { fillLib(); lib.hidden = !lib.hidden; } }),
+        btnI('x', 'Tirar imagem', { class: 'btn small', onclick: () => { f.img = null; drawPrev(); } })),
+      lib,
+      h('label', { class: 'col' }, h('span', { class: 'eyebrow' }, 'Texto (opcional)'), h('textarea', { rows: 5, value: f.text, placeholder: 'Ex.: O selo está quebrado. A letra é apressada…', oninput: (e) => { f.text = e.target.value; } })));
+    UI.modal(ho ? 'Editar entrega' : 'Nova entrega', body, [
+      { label: 'Cancelar' },
+      { label: 'Salvar', primary: true, onclick: () => {
+        const title = f.title.trim(), text = f.text.trim();
+        if (!f.img && !text) { U.toast('Coloque uma imagem, um texto ou os dois.', 'error'); return false; }
+        if (ho) S().dispatch({ type: 'handout.update', id: ho.id, patch: { title, img: f.img, text } });
+        else S().dispatch({ type: 'handout.add', handout: { id: U.uid('ho_'), title, img: f.img, text } });
+      } },
+    ]);
+  }
+
+  // Mostrar agora: para todos ou para jogadores escolhidos
+  function showHandout(ho, to) {
+    S().dispatch({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'handout', from: S().myName(), playerId: S().me.id,
+      hid: ho.id, title: ho.title || '', img: ho.img || null, text: ho.text || '', to } });
+  }
+  UI.showHandout = showHandout;
+  function showDialog(ho) {
+    const st = S().state, online = new Set(S().online), players = Object.entries(st.players);
+    let all = true;
+    const chosen = new Set();
+    const list = h('div', { class: 'move-list', hidden: true });
+    for (const [pid, pl] of players) {
+      list.append(h('label', { class: 'move-row' },
+        h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) chosen.add(pid); else chosen.delete(pid); } }),
+        avatar({ name: pl.name, color: pl.color }, 26),
+        h('span', { class: 'grow' }, h('b', {}, pl.name), h('small', {}, online.has(pid) ? 'conectado' : 'desconectado'))));
+    }
+    const seg = h('div', { class: 'seg' },
+      h('button', { class: 'on', onclick: (e) => { all = true; seg.children[0].classList.add('on'); seg.children[1].classList.remove('on'); list.hidden = true; } }, 'Todos'),
+      h('button', { disabled: !players.length, onclick: () => { all = false; seg.children[1].classList.add('on'); seg.children[0].classList.remove('on'); list.hidden = false; } }, 'Escolher jogadores'));
+    const src = ho.img && App.Images.src(ho.img);
+    const body = h('div', { class: 'col', style: { gap: '10px', minWidth: '320px' } },
+      h('div', { class: 'ho-item' }, h('div', { class: 'ho-thumb' }, src ? h('img', { src, alt: '' }) : ic('scroll-text')),
+        h('div', { class: 'grow ho-info' }, h('b', {}, ho.title || 'Sem título'), h('small', {}, ho.text ? String(ho.text).slice(0, 60) : 'só imagem'))),
+      h('span', { class: 'eyebrow' }, 'Para quem'), seg, list,
+      players.length ? '' : h('p', { class: 'hint', style: { margin: 0 } }, 'Ninguém entrou na mesa ainda. Mostrando para todos, você vê a prévia e quem entrar encontra no chat.'));
+    UI.modal('Mostrar "' + (ho.title || 'Sem título') + '"', body, [
+      { label: 'Cancelar' },
+      { label: 'Mostrar', primary: true, onclick: () => {
+        if (!all && !chosen.size) { U.toast('Escolha pelo menos um jogador.', 'error'); return false; }
+        showHandout(ho, all ? '*' : [...chosen]);
+        U.toast(all ? 'Mostrado para todos.' : 'Mostrado para ' + [...chosen].map((id) => S().playerName(id)).join(', ') + '.');
+      } },
+    ]);
+  }
+
   function renderFeed() {
     const st = S().state, feed = $('#roll-feed');
     if (!st) return;
@@ -984,6 +1225,10 @@
 
   // =============== Janelas flutuantes ===============
   function bringFront(el) { el.style.zIndex = ++UI.z; }
+  // Janela nunca passa da parte de baixo da tela: o corpo rola por dentro
+  function fitWin(el) { el.style.maxHeight = Math.max(200, window.innerHeight - el.offsetTop - 12) + 'px'; }
+  window.addEventListener('resize', () => { for (const w of UI.windows.values()) fitWin(w.el); });
+
   function dragBy(handle, el) {
     handle.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button,input,select')) return;
@@ -991,6 +1236,7 @@
       const move = (ev) => {
         el.style.left = U.clamp(ox + ev.clientX - sx, -el.offsetWidth + 80, window.innerWidth - 80) + 'px';
         el.style.top = U.clamp(oy + ev.clientY - sy, 0, window.innerHeight - 40) + 'px';
+        fitWin(el);
       };
       const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
       window.addEventListener('pointermove', move);
@@ -1011,6 +1257,7 @@
     el.append(head, body);
     el.addEventListener('pointerdown', () => bringFront(el));
     $('#windows').append(el);
+    fitWin(el);
     dragBy(head, el);
     w = { id, el, body, titleEl, build };
     UI.windows.set(id, w);
@@ -1461,6 +1708,9 @@
     const csc = S().currentScene(), B = App.Board;
     const snd = S().gmView() && B.selectedSound && csc && (csc.sounds || []).find((x) => x.id === B.selectedSound);
     if (snd) { soundHud(hud, empty, csc, snd); return; }
+    const prop = S().gmView() && B.selectedProp && csc && (csc.props || []).find((x) => x.id === B.selectedProp);
+    if (prop) { propHud(hud, empty, csc, prop); return; }
+    if (B.selectedProp && !prop) B.selectedProp = null;
     const room = S().gmView() && B.selectedRoom && csc && (csc.rooms || []).find((x) => x.id === B.selectedRoom);
     if (room) { roomHud(hud, empty, csc, room); return; }
     if (B.selectedRoom && !room) B.selectedRoom = null;
@@ -1490,6 +1740,63 @@
     const x = cover(left) < cover(right) ? left : right;
     hud.style.transform = `translate(${x}px, ${y}px)`;
   };
+
+  // Botões de nível: imagens e tokens dividem a mesma ordem (quem está por cima de quem)
+  function orderBtns(sc, kind, id) {
+    const go = (dir) => { S().dispatch({ type: 'order.move', sceneId: sc.id, kind, id, dir }); App.Board.requestRender(); };
+    return h('div', { class: 'order-row' }, h('span', { class: 'eyebrow grow' }, 'Nível'),
+      iconBtn('bring-to-front', 'Trazer para frente (por cima de tudo)', () => go('front')),
+      iconBtn('chevron-up', 'Subir um nível', () => go('up')),
+      iconBtn('chevron-down', 'Descer um nível', () => go('down')),
+      iconBtn('send-to-back', 'Mandar para trás (por baixo de tudo)', () => go('back')));
+  }
+  UI.orderBtns = orderBtns;
+
+  // Imagem solta no mapa: nome, visibilidade, nível, tamanho, giro, opacidade, travar, espelhar
+  function propHud(hud, empty, sc, p) {
+    if (empty) empty.hidden = true;
+    const sig = JSON.stringify(['prop', p, UI.mode, sc.grid]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const upd = (patch) => S().dispatch({ type: 'prop.update', sceneId: sc.id, id: p.id, patch });
+      const g = sc.grid, cells = (v) => Math.round((v / g) * 100) / 100;
+      const opLbl = h('span', {}, Math.round((p.opacity ?? 1) * 100) + '%');
+      // tamanho em quadrados: mudar a largura mantém a proporção; a altura também
+      const setSize = (k, v) => {
+        const n = Math.max(0.1, Number(String(v).replace(',', '.')) || 0) * g;
+        const ratio = p.w / p.h, w = k === 'w' ? n : n * ratio, h2 = k === 'h' ? n : n / ratio;
+        const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+        upd({ w: Math.round(w), h: Math.round(h2), x: Math.round(cx - w / 2), y: Math.round(cy - h2 / 2) });
+      };
+      const thumb = h('div', { class: 'prop-thumb' }, App.Images.src(p.img) ? h('img', { src: App.Images.src(p.img), alt: '' }) : ic('image'));
+      hud.append(
+        h('div', { class: 'hud-top' }, thumb,
+          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: p.name || '', placeholder: 'Nome da imagem', onchange: (e) => upd({ name: e.target.value.trim() || 'Imagem' }) }),
+            h('div', { class: 'hud-sub' }, 'Imagem no mapa' + (p.hidden ? ' · invisível' : '') + (p.locked ? ' · travada' : '')))),
+        h('div', { class: 'hud-section vis-sec' },
+          h('span', { class: 'eyebrow' }, 'Para os jogadores'),
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: p.hidden ? '' : 'on', title: 'Os jogadores veem a imagem', onclick: () => upd({ hidden: false }) }, ic('eye'), 'Visível'),
+            h('button', { class: p.hidden ? 'on' : '', title: 'Só você vê (ótimo para armadilhas)', onclick: () => upd({ hidden: true }) }, ic('eye-off'), 'Invisível')),
+          orderBtns(sc, 'prop', p.id),
+          h('div', { class: 'prop-grid' },
+            h('label', {}, 'Largura', h('input', { type: 'number', class: 'num', min: 0.1, step: 0.5, value: cells(p.w), onchange: (e) => setSize('w', e.target.value) })),
+            h('label', {}, 'Altura', h('input', { type: 'number', class: 'num', min: 0.1, step: 0.5, value: cells(p.h), onchange: (e) => setSize('h', e.target.value) })),
+            h('label', {}, 'Giro (°)', h('input', { type: 'number', class: 'num', step: 15, value: p.rot || 0, onchange: (e) => upd({ rot: ((Math.round(Number(e.target.value) || 0) % 360) + 360) % 360 }) }))),
+          h('p', { class: 'hint', style: { margin: 0 } }, 'Largura e altura em quadrados (mudar uma mantém a proporção).'),
+          h('div', { class: 'snd-row' }, h('span', {}, 'Opacidade'), opLbl),
+          h('input', { type: 'range', min: 0.1, max: 1, step: 0.05, value: p.opacity ?? 1, oninput: (e) => { opLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ opacity: Number(e.target.value) }); e.target.blur(); } }),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.locked, onchange: (e) => upd({ locked: e.target.checked }) }), 'Travar (não move sem querer)')),
+        h('div', { class: 'hud-btns' },
+          btnI('flip-horizontal-2', 'Espelhar', { onclick: () => upd({ flip: !p.flip }) }),
+          btnI('copy-plus', 'Duplicar', { title: 'Duplicar (Ctrl+D)', onclick: () => App.Board.duplicateProp(sc, p.id) }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'prop.delete', sceneId: sc.id, id: p.id }); App.Board.selectedProp = null; App.Board.requestRender(); } })));
+    }
+    hud.hidden = false;
+    hud.style.transform = '';
+  }
 
   // Sala de som: nome, música própria, volume e o que acontece com o ambiente de fora
   function roomHud(hud, empty, sc, room) {
@@ -1711,7 +2018,7 @@
     if (gm) hud.append(visGroupSection(sc, t));
 
     const inCombat = st.combat.entries.some((e) => e.tokenId === t.id);
-    const maxZ = Object.values(sc.tokens).reduce((m, x) => Math.max(m, x.z || 0), 0);
+    const maxZ = App.Board.maxZ(sc);
     const sizes = [0.5, 1, 2, 3, 4, 6, 8];
     const resize = (dir) => {
       const i = Math.max(0, sizes.indexOf(t.size || 1));
@@ -1720,7 +2027,6 @@
     hud.append(h('div', { class: 'hud-btns' },
       a && S().ownsActor(a) && btnI('file-text', 'Ficha', { onclick: () => UI.openActor(a.id) }),
       !inCombat && btnI('hourglass', 'Iniciativa', { title: 'Adicionar ao combate e rolar iniciativa', onclick: () => addToCombat([t], true) }),
-      gm && h('button', { class: 'btn', title: 'Trazer para frente', onclick: () => tokUpd({ z: maxZ + 1 }) }, ic('arrow-up')),
       gm && h('button', { class: 'btn', title: 'Diminuir', onclick: () => resize(-1) }, ic('minus')),
       gm && h('button', { class: 'btn', title: 'Aumentar', onclick: () => resize(1) }, ic('plus')),
       gm && h('button', { class: 'btn', title: 'Duplicar token', onclick: () => {
@@ -1730,6 +2036,7 @@
       gm && h('button', { class: 'btn danger', title: 'Remover do mapa (Delete)', onclick: () => {
         S().dispatch({ type: 'token.delete', sceneId: sc.id, id: t.id }); App.Board.selected = null;
       } }, ic('trash-2'))));
+    if (gm) hud.append(orderBtns(sc, 'token', t.id));
   }
 
   // =============== Combate ===============
@@ -1986,7 +2293,10 @@
         chk('nat1Miss', '1 natural no d20 sempre erra'),
         chk('minZero', 'Barras não ficam negativas'),
         chk('actOnTurn', 'Em combate, jogador só usa ações na própria vez'),
-        chk('hideNumbers', 'Esconder Defesa e PV dos monstros dos jogadores'));
+        chk('hideNumbers', 'Esconder Defesa e PV dos monstros dos jogadores'),
+        h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Depois de mover, o caminho fica no mapa para todos verem por onde o token passou' },
+          h('span', { class: 'grow' }, 'Rastro do movimento (segundos, 0 = não mostra)'),
+          h('input', { type: 'number', class: 'num', min: 0, max: 30, step: 1, value: R.trailSecs ?? 3, onchange: (e) => setR('trailSecs', U.clamp(Math.round(Number(e.target.value) || 0), 0, 30)) })));
 
       // Lista editável em etiquetas: × remove, o campo embaixo adiciona (Enter ou vírgula; dá para colar "A, B, C")
       const tagList = (key, ph) => {

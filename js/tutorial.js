@@ -105,6 +105,14 @@
       spot: tokRect('hero'),
       enter: () => { select('hero'); const t = heroTok(); T.base.pos = t && t.x + ',' + t.y; },
       done: () => { const t = heroTok(); return t && t.x + ',' + t.y !== T.base.pos; } },
+    { ch: 'Primeiros passos', title: 'Andar por um caminho',
+      body: `Para contornar uma parede ou um aliado, marque <b>pontos de passagem</b>:
+        <ul><li>Segure o token com o <b>botão esquerdo</b> e arraste.</li>
+        <li>Sem soltar, clique com o <b>botão direito</b> para fixar um ponto. Continue arrastando e marque quantos quiser.</li>
+        <li>Cada trecho mostra a distância, e a régua mostra o <b>total do caminho</b>. Trecho que atravessa parede fica <b>vermelho</b>.</li>
+        <li><b>Backspace</b> (ainda segurando) desfaz o último ponto. Ao soltar, o token desliza pelo caminho e todos veem o rastro por alguns segundos.</li></ul>
+        <p>A <b>Régua</b> ${k('R')} aceita os mesmos pontos, para medir sem mover ninguém. Sem segurar nada, o botão direito continua movendo a câmera.</p>`,
+      spot: tokRect('hero') },
     { ch: 'Primeiros passos', title: 'O painel do token',
       body: `Com um token selecionado, o painel da direita mostra os detalhes dele:
         <ul><li><b>PV e Mana</b>: digite ${k('-5')} para dano, ${k('+3')} para cura, ${k('12')} para definir, ou até ${k('-2d6')}.</li>
@@ -358,6 +366,27 @@
       enter: () => { App.UI.closeDock && App.UI.closeDock(); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); T.base.rooms = (scene().rooms || []).length; },
       done: () => (scene().rooms || []).length > (T.base.rooms || 0) },
 
+    { ch: 'Cenas', title: 'Imagens no mapa',
+      body: `Baú, fogueira, carroça, árvore, armadilha: a ferramenta <b>Imagem</b> ${k('I')} solta imagens no mapa.
+        <ul><li>Clique em <b>Enviar imagem…</b> ou <b>arraste arquivos</b> do computador direto para o mapa. As imagens já usadas ficam em <b>Imagens da campanha</b>, para usar de novo em qualquer cena.</li>
+        <li>Clique na imagem para mover. Os <b>cantos</b> redimensionam e a <b>bolinha de cima</b> gira (Shift: de 15 em 15°).</li>
+        <li>No painel: <b>Visível</b> ou <b>Invisível</b> para os jogadores, opacidade, travar, espelhar e duplicar.</li>
+        <li><b>Nível:</b> imagens e tokens dividem a mesma ordem. Use os botões de nível para pôr a copa da árvore por cima do goblin ou o tapete por baixo de todos.</li></ul>`,
+      task: 'Escolha a ferramenta Imagem e coloque uma imagem no mapa.',
+      spot: () => el('#tool-opts .btn', 'Enviar imagem')() || el('#toolbar [data-tool="prop"]')(),
+      enter: () => { App.UI.setViewAs(null); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); T.base.props = (scene().props || []).length; },
+      done: () => (scene().props || []).length > (T.base.props || 0) },
+    { ch: 'Cenas', title: 'Mostrar aos jogadores',
+      body: `Uma carta, o retrato do vilão, uma pista: prepare antes e mostre na hora.
+        <ul><li>No dock, abra <b>Mostrar</b> e clique em <b>Nova entrega</b>: título, uma <b>imagem</b>, um <b>texto</b> ou os dois.</li>
+        <li>Na hora do jogo, clique em <b>Mostrar</b> e escolha <b>Todos</b> ou alguns jogadores.</li>
+        <li>Abre uma janela na tela deles, com <b>zoom</b> na imagem (roda do mouse, arrastar, dois cliques volta). Cada um fecha a sua.</li>
+        <li>No chat de quem recebeu fica a entrega com a miniatura: clicar abre de novo.</li></ul>
+        <p>Neste tutorial ninguém está conectado: quem mostra (você) vê a prévia.</p>`,
+      task: 'Abra Mostrar, crie uma entrega e mostre para todos.',
+      spot: () => el('#p-handouts .btn.primary')() || el('#dock [data-dock="handouts"]')(),
+      enter: () => { App.UI.setViewAs(null); T.base.handouts = S().state.chat.filter((m) => m.kind === 'handout').length; },
+      done: () => S().state.chat.filter((m) => m.kind === 'handout').length > (T.base.handouts || 0) },
     { ch: 'Cenas', title: 'Separar jogadores',
       body: `Na aba <b>Cenas</b>, cada cena mostra as <b>bolinhas</b> de quem está nela.
         <ul><li><b>Ativar</b> leva o grupo para a cena.</li>

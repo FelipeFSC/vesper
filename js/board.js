@@ -12,7 +12,9 @@
     pings: [], animating: false, spaceDown: false, needs: false, lastSceneId: null,
     fogCache: { key: null, canvas: null },
     style: { color: '#d9574f', width: 4, fill: 0, snap: true },
-    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true },
+    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true },
+    // Imagens no mapa: selecionada e arraste em andamento ({id, mode: move|resize|rotate, start, cur, moved})
+    selectedProp: null, propDrag: null,
     selectedSound: null, soundDrag: null,
     // Salas de som: modo de desenho, rascunho (retângulo ou polígono) e a sala selecionada
     roomMode: 'rect', roomDraft: null, roomPoly: null, selectedRoom: null,
@@ -39,7 +41,7 @@
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
 
-  const CURSORS = { select: 'default', pan: 'grab', erase: 'cell' };
+  const CURSORS = { select: 'default', pan: 'grab', erase: 'cell', prop: 'default' };
   const LT = () => App.Light;
   const CB = () => App.Combat;
 
@@ -54,9 +56,15 @@
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('dblclick', onDbl);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Botão direito apertado enquanto o esquerdo segura o token (ou a régua): ponto de passagem.
+    // (o navegador não manda pointerdown para o 2º botão; mousedown sim)
+    window.addEventListener('mousedown', (e) => {
+      if (e.button !== 2 || !(B.drag || B.ruler)) return;
+      e.preventDefault(); addWaypoint();
+    });
     canvas.addEventListener('dragover', (e) => {
       const types = [...e.dataTransfer.types];
-      if (types.includes('text/x-actor') || types.includes('text/x-sound')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+      if (types.includes('text/x-actor') || types.includes('text/x-sound') || (S().gmView() && (types.includes('text/x-image') || types.includes('Files')))) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
     });
     canvas.addEventListener('drop', onDrop);
     window.addEventListener('keydown', onKey);
@@ -125,7 +133,7 @@
   };
 
   B.setTool = function (t) {
-    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room') && !S().gmView()) return;
+    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop') && !S().gmView()) return;
     if (t !== 'room') B.roomPoly = null;
     B.tool = t;
     B.canvas.style.cursor = CURSORS[t] || 'crosshair';
@@ -171,8 +179,89 @@
   function posOf(t) {
     const sc = S().currentScene(), s = (t.size || 1) * sc.grid;
     if (B.drag && B.drag.id === t.id) return { x: B.drag.x + s / 2, y: B.drag.y + s / 2 };
+    const a = slidePos(t);
+    if (a) return { x: a.x + s / 2, y: a.y + s / 2 };
     return { x: t.x + s / 2, y: t.y + s / 2 };
   }
+  // ---------- movimento por um caminho ----------
+  // Cada movimento novo (t.lastMove) ganha um início local; o token desliza pelos pontos e o rastro fica trailSecs segundos
+  B.moves = new Map();
+  const SLIDE_PER_CELL = 110, SLIDE_MAX = 1400;
+  function moveInfo(t) {
+    const lm = t.lastMove;
+    if (!lm || !lm.pts || lm.pts.length < 2) return null;
+    const key = lm.at + ':' + lm.pts.length + ':' + lm.pts[lm.pts.length - 1].join(',');
+    let m = B.moves.get(t.id);
+    if (!m || m.key !== key) {
+      // movimento antigo (ex.: campanha recém-carregada) não anima de novo
+      const fresh = Math.abs(Date.now() - lm.at) < 10000;
+      const sc = S().currentScene(), g = sc ? sc.grid : 70;
+      let len = 0;
+      for (let i = 1; i < lm.pts.length; i++) len += Math.hypot(lm.pts[i][0] - lm.pts[i - 1][0], lm.pts[i][1] - lm.pts[i - 1][1]);
+      m = { key, t0: fresh ? performance.now() : -1e9, len, dur: Math.min(SLIDE_MAX, Math.max(250, (len / g) * SLIDE_PER_CELL)) };
+      B.moves.set(t.id, m);
+    }
+    return m;
+  }
+  // Ponto do caminho a uma fração k do comprimento total (canto de cima à esquerda do token)
+  function alongPath(pts, len, k) {
+    let want = len * k;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, ay] = pts[i - 1], [bx, by] = pts[i], d = Math.hypot(bx - ax, by - ay);
+      if (want <= d || i === pts.length - 1) { const f = d ? Math.min(1, want / d) : 1; return { x: ax + (bx - ax) * f, y: ay + (by - ay) * f }; }
+      want -= d;
+    }
+    return { x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] };
+  }
+  function slidePos(t) {
+    const m = moveInfo(t);
+    if (!m || m.len <= 0) return null;
+    const k = (performance.now() - m.t0) / m.dur;
+    if (k >= 1 || k < 0) return null;
+    const e = 1 - Math.pow(1 - k, 2); // desacelera no fim
+    return alongPath(t.lastMove.pts, m.len, e);
+  }
+  // Algum token deslizando ou com rastro na tela? (mantém a animação rodando)
+  function movesActive(sc) {
+    const secs = Number((S().state.rules || {}).trailSecs ?? 3);
+    const now = performance.now();
+    for (const t of Object.values(sc.tokens)) {
+      const m = moveInfo(t);
+      if (m && now - m.t0 < Math.max(m.dur, secs * 1000)) return true;
+    }
+    return false;
+  }
+  // Custo do caminho em quadrados, trecho a trecho, na medida da cena.
+  // Na regra alternada (1-2-1) a contagem das diagonais continua de um trecho para o outro.
+  function pathCost(sc, pts) {
+    const segs = [];
+    let total = 0, diag = 0;
+    const f = (k) => k + Math.floor(k / 2);
+    for (let i = 1; i < pts.length; i++) {
+      const dx = Math.abs(pts[i].x - pts[i - 1].x) / sc.grid, dy = Math.abs(pts[i].y - pts[i - 1].y) / sc.grid;
+      let c;
+      if (sc.measure === 'euclid') c = Math.round(Math.hypot(dx, dy) * 10) / 10;
+      else {
+        const mx = Math.round(Math.max(dx, dy)), mn = Math.round(Math.min(dx, dy));
+        if (sc.measure === 'alt') { c = (mx - mn) + f(diag + mn) - f(diag); diag += mn; } else c = mx;
+      }
+      segs.push(c); total += c;
+    }
+    return { segs, total: Math.round(total * 10) / 10 };
+  }
+  B.pathCost = pathCost;
+  // O trecho a→b atravessa alguma parede ou porta fechada? (só aviso: o movimento é permitido)
+  function crossesWall(sc, a, b) {
+    const cr = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
+    for (const w of sc.walls || []) {
+      if (w.door && w.open) continue;
+      const d1 = cr(w.x1, w.y1, w.x2, w.y2, a.x, a.y), d2 = cr(w.x1, w.y1, w.x2, w.y2, b.x, b.y);
+      const d3 = cr(a.x, a.y, b.x, b.y, w.x1, w.y1), d4 = cr(a.x, a.y, b.x, b.y, w.x2, w.y2);
+      if (((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6))) return true;
+    }
+    return false;
+  }
+  B.crossesWall = crossesWall;
   B.posOf = posOf;
   // Olhos deste cliente quando a iluminação vale para ele (jogador, ou mestre na prévia); null = vê tudo
   function lightViewers(sc) {
@@ -275,7 +364,7 @@
     if (sc.id !== B.lastSceneId) {
       // Jogador levado para outra cena: avisa onde ele está agora
       if (B.lastSceneId && !S().gmView()) U.toast('Você está em "' + sc.name + '"', 'info', 4000);
-      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; fitCam(sc); }
+      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; fitCam(sc); }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
@@ -303,11 +392,32 @@
       if (cur && !B.targeting && S().canControl(sc.tokens[cur])) B.selected = cur;
     }
     const tokens = L.tokens ? visibleTokens(sc) : [];
+    // Rastro do último movimento de cada token visível (o mestre escolhe quantos segundos em Mesa → Regras)
+    const trailMs = Number((S().state.rules || {}).trailSecs ?? 3) * 1000;
+    if (trailMs > 0) {
+      const now = performance.now();
+      for (const t of tokens) {
+        const m = moveInfo(t);
+        if (!m || m.len <= 0 || (B.drag && B.drag.id === t.id)) continue;
+        const age = now - m.t0;
+        if (age < 0 || age > trailMs) continue;
+        const s2 = (t.size || 1) * g / 2;
+        const alpha = Math.min(1, (trailMs - age) / 600);
+        drawPath(ctx, sc, t.lastMove.pts.map(([px, py]) => ({ x: px + s2, y: py + s2 })), { alpha, trail: true });
+      }
+    }
+    if (movesActive(sc)) ensureAnim();
     const viewers = lightViewers(sc);
     const eyes = viewers ? new Set(viewers.map((t) => t.id)) : null;
     const asPlayer = !gm;
     const above = [];
-    for (const t of tokens) {
+    // Imagens e tokens na mesma ordem de nível (empate: a imagem fica embaixo)
+    const props = L.props ? (sc.props || []).filter((p) => gm || !p.hidden) : [];
+    const items = tokens.map((t) => ({ t, z: t.z || 0, k: 1 })).concat(props.map((p) => ({ p, z: p.z || 0, k: 0 })))
+      .sort((a, b) => a.z - b.z || a.k - b.k);
+    for (const it of items) {
+      if (it.p) { drawProp(ctx, it.p); continue; }
+      const t = it.t;
       // Jogador sempre enxerga os próprios tokens (desenhados por cima da névoa e da escuridão)
       if (asPlayer && (eyes ? eyes.has(t.id) : S().canControl(t))) { above.push(t); continue; }
       // Voando por cima de um muro: aparece acima da escuridão (mas nunca por cima da névoa do mestre)
@@ -325,6 +435,7 @@
     if (gm && L.rooms && (App.UI.mode === 'edit' || B.tool === 'room' || B.selectedRoom)) drawRooms(ctx, sc);
     if (gm && L.sounds) drawSounds(ctx, sc);
     drawWalls(ctx, sc, gm && L.walls && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door'), viewers);
+    if (gm && B.selectedProp) { const sp = (sc.props || []).find((p) => p.id === B.selectedProp); if (sp) drawPropFrame(ctx, propNow(sp)); }
 
     if (B.drag && B.drag.moved) {
       const t = sc.tokens[B.drag.id];
@@ -332,11 +443,11 @@
         const s = (t.size || 1) * g;
         const sx = Math.round(B.drag.x / g) * g, sy = Math.round(B.drag.y / g) * g;
         if (B.style.snap) { ctx.fillStyle = 'rgba(139,114,240,.18)'; ctx.fillRect(sx, sy, s, s); }
-        drawRuler(ctx, sc, { x: B.drag.sx + s / 2, y: B.drag.sy + s / 2 },
-          B.style.snap ? { x: sx + s / 2, y: sy + s / 2 } : { x: B.drag.x + s / 2, y: B.drag.y + s / 2 });
+        drawPath(ctx, sc, [{ x: B.drag.sx + s / 2, y: B.drag.sy + s / 2 }].concat(B.drag.points || [],
+          [B.style.snap ? { x: sx + s / 2, y: sy + s / 2 } : { x: B.drag.x + s / 2, y: B.drag.y + s / 2 }]));
       }
     }
-    if (B.ruler) drawRuler(ctx, sc, B.ruler.a, B.ruler.b);
+    if (B.ruler) drawPath(ctx, sc, [B.ruler.a].concat(B.ruler.points || [], [B.ruler.b]));
     if (B.fogDraft) {
       const r = norm(B.fogDraft);
       ctx.save();
@@ -417,6 +528,107 @@
     }
     ctx.restore();
   }
+  // ---------- imagens no mapa ----------
+  // Maior nível entre tokens e imagens (para pôr algo por cima de tudo) e o menor (para pôr por baixo)
+  B.maxZ = (sc) => Object.values(sc.tokens).concat(sc.props || []).reduce((m, o) => Math.max(m, o.z || 0), 0);
+  B.minZ = (sc) => Object.values(sc.tokens).concat(sc.props || []).reduce((m, o) => Math.min(m, o.z || 0), 0);
+  // Estado da imagem agora (com o arraste em andamento aplicado)
+  const propNow = (p) => (B.propDrag && B.propDrag.id === p.id ? Object.assign({}, p, B.propDrag.cur) : p);
+  const pCenter = (q) => ({ x: q.x + q.w / 2, y: q.y + q.h / 2 });
+  function pLocal(q, p) {
+    const c = pCenter(q), a = -((q.rot || 0) * Math.PI) / 180, dx = p.x - c.x, dy = p.y - c.y;
+    return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
+  }
+  function pWorld(q, l) {
+    const c = pCenter(q), a = ((q.rot || 0) * Math.PI) / 180;
+    return { x: c.x + l.x * Math.cos(a) - l.y * Math.sin(a), y: c.y + l.x * Math.sin(a) + l.y * Math.cos(a) };
+  }
+  function drawProp(ctx, p0) {
+    const q = propNow(p0), img = App.Images.get(q.img), gm = S().gmView(), c = pCenter(q);
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(((q.rot || 0) * Math.PI) / 180);
+    if (q.flip) ctx.scale(-1, 1);
+    ctx.globalAlpha = (q.opacity ?? 1) * (q.hidden && gm ? 0.45 : 1);
+    if (img) ctx.drawImage(img, -q.w / 2, -q.h / 2, q.w, q.h);
+    else { ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(-q.w / 2, -q.h / 2, q.w, q.h); }
+    if (q.hidden && gm) {
+      ctx.globalAlpha = 1; ctx.setLineDash([6 / B.cam.z, 4 / B.cam.z]); ctx.lineWidth = 1.5 / B.cam.z; ctx.strokeStyle = 'rgba(10,9,14,.9)';
+      ctx.strokeRect(-q.w / 2, -q.h / 2, q.w, q.h);
+    }
+    ctx.restore();
+  }
+  const ROT_OFF = 26; // distância da alça de giro (px de tela)
+  function drawPropFrame(ctx, q) {
+    const z = B.cam.z, c = pCenter(q), hs = 5 / z;
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(((q.rot || 0) * Math.PI) / 180);
+    ctx.lineWidth = 1.5 / z; ctx.strokeStyle = C.sel; ctx.setLineDash(q.locked ? [6 / z, 4 / z] : []);
+    ctx.strokeRect(-q.w / 2, -q.h / 2, q.w, q.h);
+    ctx.setLineDash([]);
+    if (!q.locked) {
+      ctx.beginPath(); ctx.moveTo(0, -q.h / 2); ctx.lineTo(0, -q.h / 2 - ROT_OFF / z); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) { ctx.fillRect(sx * q.w / 2 - hs, sy * q.h / 2 - hs, hs * 2, hs * 2); ctx.strokeRect(sx * q.w / 2 - hs, sy * q.h / 2 - hs, hs * 2, hs * 2); }
+      ctx.beginPath(); ctx.arc(0, -q.h / 2 - ROT_OFF / z, 6 / z, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // Imagem do topo no ponto (só o mestre mexe em imagens)
+  function propAt(sc, p) {
+    if (!S().gmView() || !B.layers.props) return null;
+    const list = (sc.props || []).slice().sort((a, b) => (b.z || 0) - (a.z || 0));
+    for (const q of list) { const l = pLocal(q, p); if (Math.abs(l.x) <= q.w / 2 && Math.abs(l.y) <= q.h / 2) return q; }
+    return null;
+  }
+  // Alça sob o ponteiro: canto (redimensionar) ou bolinha de cima (girar)
+  function propHandleAt(q, p) {
+    if (q.locked) return null;
+    const z = B.cam.z, tol = 9 / z, l = pLocal(q, p);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) if (Math.abs(l.x - sx * q.w / 2) <= tol && Math.abs(l.y - sy * q.h / 2) <= tol) return { mode: 'resize', sx, sy };
+    if (Math.hypot(l.x, l.y + q.h / 2 + ROT_OFF / z) <= tol * 1.3) return { mode: 'rotate' };
+    return null;
+  }
+  // Coloca uma imagem no mapa: lado maior com 2 quadrados, proporção mantida, encaixada no grid, por baixo dos tokens
+  B.addProp = function (sc, imgId, p, natW, natH, name) {
+    if (!sc || !S().gmView()) return null;
+    const g = sc.grid, half = g / 2, r = natW && natH ? natW / natH : 1, long = 2 * g;
+    let w = r >= 1 ? long : long * r, h = r >= 1 ? long / r : long;
+    w = Math.max(half, Math.round(w / half) * half); h = Math.max(half, Math.round(h / half) * half);
+    const x = Math.round((p.x - w / 2) / g) * g, y = Math.round((p.y - h / 2) / g) * g;
+    const prop = { id: U.uid('pr_'), img: imgId, name: name || 'Imagem', x, y, w, h, rot: 0, flip: false, hidden: false, opacity: 1, locked: false, z: B.minZ(sc) - 1 };
+    S().dispatch({ type: 'prop.add', sceneId: sc.id, prop });
+    B.selectedProp = prop.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null;
+    B.requestRender();
+    return prop;
+  };
+  B.addPropFromFile = async function (file, p) {
+    const sc = S().currentScene();
+    if (!sc) return null;
+    try {
+      const r = await App.Images.add(file, App.Images.PROP);
+      return B.addProp(sc, r.id, p || B.viewCenter(), r.w, r.h, String(file.name || 'Imagem').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').slice(0, 40));
+    } catch (e) { U.toast(e.message, 'error'); return null; }
+  };
+  // Imagem que já está na campanha (biblioteca): descobre o tamanho e coloca
+  B.placeImage = function (imgId, p) {
+    const sc = S().currentScene(), src = App.Images.src(imgId);
+    if (!sc || !src) return;
+    const old = (Object.values(S().state.scenes).flatMap((x) => x.props || [])).find((x) => x.img === imgId);
+    const im = new Image();
+    im.onload = () => B.addProp(S().currentScene(), imgId, p || B.viewCenter(), im.naturalWidth, im.naturalHeight, old && old.name);
+    im.src = src;
+  };
+  B.duplicateProp = function (sc, id) {
+    const q = (sc.props || []).find((x) => x.id === id);
+    if (!q) return;
+    const c = Object.assign({}, q, { id: U.uid('pr_'), x: q.x + sc.grid, y: q.y + sc.grid, z: (q.z || 0) + 0.5 });
+    S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: c });
+    S().dispatch({ type: 'order.move', sceneId: sc.id, kind: 'prop', id: c.id, dir: 'none' });
+    B.selectedProp = c.id;
+  };
+
   // ---------- salas de som ----------
   const ROOM_C = '#5fd0c8';
   function roomPath(ctx, pts) { ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); }
@@ -653,6 +865,7 @@
     const g = sc.grid, s = (t.size || 1) * g, z = B.cam.z;
     let x = t.x, y = t.y;
     if (B.drag && B.drag.id === t.id) { x = B.drag.x; y = B.drag.y; }
+    else { const sp = slidePos(t); if (sp) { x = sp.x; y = sp.y; } }
     const a = S().actorOf(t);
     const img = App.Images.get(t.img || (a && a.img));
     const cx = x + s / 2, cy = y + s / 2, r = s * 0.4;
@@ -816,26 +1029,41 @@
     ctx.restore();
   }
 
-  function drawRuler(ctx, sc, a, b) {
-    const z = B.cam.z, cells = cellsBetween(sc, a, b);
-    const dist = Math.round(cells * sc.cellDist * 10) / 10;
+  // Caminho em vários trechos: linha tracejada (vermelha onde atravessa parede), pontos, distância de cada trecho e total
+  function drawPath(ctx, sc, pts, opts = {}) {
+    if (pts.length < 2) return;
+    const z = B.cam.z, cost = pathCost(sc, pts);
     ctx.save();
-    ctx.strokeStyle = C.gold; ctx.lineWidth = 2.5 / z;
-    ctx.setLineDash([10 / z, 6 / z]);
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.globalAlpha = opts.alpha ?? 1;
+    ctx.lineWidth = (opts.trail ? 2 : 2.5) / z; ctx.setLineDash([10 / z, 6 / z]);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.strokeStyle = crossesWall(sc, pts[i - 1], pts[i]) ? C.danger : C.gold;
+      ctx.beginPath(); ctx.moveTo(pts[i - 1].x, pts[i - 1].y); ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke();
+    }
     ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(a.x, a.y, 4 / z, 0, Math.PI * 2); ctx.fillStyle = C.gold; ctx.fill();
-    const label = `${cells} quad. · ${dist} ${sc.unit}`;
-    ctx.font = '600 ' + 12.5 / z + 'px ' + SANS;
-    const tw = ctx.measureText(label).width;
-    const lx = b.x + 14 / z, ly = b.y - 28 / z;
+    pts.slice(0, -1).forEach((p, i) => { ctx.beginPath(); ctx.arc(p.x, p.y, (i ? 5 : 4) / z, 0, Math.PI * 2); ctx.fillStyle = i ? '#fff' : C.gold; ctx.fill(); if (i) { ctx.lineWidth = 2 / z; ctx.strokeStyle = C.gold; ctx.stroke(); } });
+    // distância de cada trecho, no meio da linha (só quando há mais de um)
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    if (pts.length > 2) {
+      ctx.font = '600 ' + 10.5 / z + 'px ' + SANS;
+      for (let i = 1; i < pts.length; i++) {
+        const mx = (pts[i - 1].x + pts[i].x) / 2, my = (pts[i - 1].y + pts[i].y) / 2, lbl = String(cost.segs[i - 1]).replace('.', ',');
+        const tw = ctx.measureText(lbl).width;
+        roundRect(ctx, mx - tw / 2 - 5 / z, my - 8 / z, tw + 10 / z, 16 / z, 4 / z); ctx.fillStyle = C.plate; ctx.fill();
+        ctx.fillStyle = C.gold; ctx.fillText(lbl, mx, my + 0.5 / z);
+      }
+    }
+    const b = pts[pts.length - 1], dist = Math.round(cost.total * sc.cellDist * 10) / 10;
+    const label = `${String(cost.total).replace('.', ',')} quad. · ${String(dist).replace('.', ',')} ${sc.unit}`;
+    ctx.font = '600 ' + 12.5 / z + 'px ' + SANS; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    const tw = ctx.measureText(label).width, lx = b.x + 14 / z, ly = b.y - 28 / z;
     roundRect(ctx, lx - 8 / z, ly - 6 / z, tw + 16 / z, 25 / z, 6 / z);
     ctx.fillStyle = C.plate; ctx.fill();
     ctx.lineWidth = 1 / z; ctx.strokeStyle = 'rgba(210,162,76,.5)'; ctx.stroke();
-    ctx.fillStyle = C.gold; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-    ctx.fillText(label, lx, ly);
+    ctx.fillStyle = C.gold; ctx.fillText(label, lx, ly);
     ctx.restore();
   }
+  B.drawPath = drawPath;
 
   // Quadrados ao alcance da ação (recalculado só quando o token, o alcance ou as paredes mudam)
   function rangeZone(sc, src, act) {
@@ -1014,7 +1242,7 @@
   }
 
   // ---------- efeitos do resultado: números subindo, golpe, explosão ----------
-  function animActive() { return B.pings.length || B.fx.length || B.targeting; }
+  function animActive() { const sc = S().currentScene(); return B.pings.length || B.fx.length || B.targeting || (sc && movesActive(sc)); }
   function ensureAnim() {
     if (B.animating) return;
     B.animating = true;
@@ -1211,15 +1439,25 @@
         B.roomDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, p0: { x: p.x, y: p.y } };
         break;
       }
-      case 'select': {
+      case 'select': case 'prop': {
         const snd = soundAt(sc, p);
         if (snd) {
-          B.selected = null; B.selectedSound = snd.id;
+          B.selected = null; B.selectedSound = snd.id; B.selectedProp = null;
           B.soundDrag = { id: snd.id, sceneId: sc.id, x: snd.x, y: snd.y, ox: p.x - snd.x, oy: p.y - snd.y, moved: false };
           break;
         }
         B.selectedSound = null;
-        const t = tokenAt(sc, p);
+        const pick = (q, mode, extra) => {
+          B.selectedProp = q.id; B.selected = null; B.selectedRoom = null;
+          if (q.locked || !mode) return;
+          B.propDrag = Object.assign({ id: q.id, sceneId: sc.id, mode, start: { x: q.x, y: q.y, w: q.w, h: q.h, rot: q.rot || 0 }, cur: { x: q.x, y: q.y, w: q.w, h: q.h, rot: q.rot || 0 }, ox: p.x - q.x, oy: p.y - q.y, moved: false }, extra);
+        };
+        const selP = gm && B.selectedProp && (sc.props || []).find((x) => x.id === B.selectedProp);
+        const hdl = selP && propHandleAt(selP, p);
+        if (hdl) { pick(selP, hdl.mode, hdl); break; }
+        const t = tokenAt(sc, p), pr = gm ? propAt(sc, p) : null;
+        if (pr && (!t || (pr.z || 0) > (t.z || 0))) { pick(pr, 'move'); break; }
+        B.selectedProp = null;
         if (!t) { B.selected = null; startPan(e); break; }
         B.selected = t.id;
         if (!S().canControl(t)) break;
@@ -1279,7 +1517,7 @@
       const sc0 = S().currentScene();
       if (sc0) { const w = toWorld(e), q = B.style.snap && !e.altKey ? snapVertex(sc0, w) : w; B.roomPoly.hover = [q.x, q.y]; B.requestRender(); }
     }
-    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft) return;
+    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag) return;
     const sc = S().currentScene();
     if (!sc) return;
     const p = toWorld(e), snap = B.style.snap;
@@ -1300,6 +1538,7 @@
     if (B.fogDraft) { const q = snap ? snapPt(sc, p) : p; B.fogDraft.x2 = q.x; B.fogDraft.y2 = q.y; }
     if (B.wallDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.wallDraft.x2 = q.x; B.wallDraft.y2 = q.y; }
     if (B.roomDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.roomDraft.x2 = q.x; B.roomDraft.y2 = q.y; }
+    if (B.propDrag) dragProp(B.propDrag, p, e);
     if (B.soundDrag) {
       const d = B.soundDrag, nx = p.x - d.ox, ny = p.y - d.oy;
       if (Math.abs(nx - d.x) + Math.abs(ny - d.y) > 2 / B.cam.z) d.moved = true;
@@ -1318,7 +1557,19 @@
       if (d.moved && sc) {
         let x = d.x, y = d.y;
         if (B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
-        S().dispatch({ type: 'token.move', sceneId: d.sceneId, id: d.id, x, y });
+        const t = sc.tokens[d.id], s = ((t && t.size) || 1) * sc.grid / 2;
+        const path = [[d.sx, d.sy]].concat((d.points || []).map((p) => [p.x - s, p.y - s]), [[x, y]]);
+        S().dispatch({ type: 'token.move', sceneId: d.sceneId, id: d.id, x, y, path, at: Date.now() });
+      }
+    }
+    if (B.propDrag) {
+      const d = B.propDrag;
+      B.propDrag = null;
+      if (d.moved && sc) {
+        const c = d.cur;
+        let x = c.x, y = c.y;
+        if (d.mode === 'move' && B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
+        S().dispatch({ type: 'prop.update', sceneId: d.sceneId, id: d.id, patch: { x: Math.round(x), y: Math.round(y), w: Math.round(c.w), h: Math.round(c.h), rot: c.rot } });
       }
     }
     B.ruler = null;
@@ -1369,6 +1620,44 @@
     B.requestRender();
   }
 
+  // Arraste da imagem: mover, redimensionar pelo canto (Shift deforma) ou girar (Shift: 15 em 15 graus)
+  function dragProp(d, p, e) {
+    const s0 = d.start, cur = d.cur, min = 8;
+    if (d.mode === 'move') {
+      cur.x = p.x - d.ox; cur.y = p.y - d.oy;
+    } else if (d.mode === 'resize') {
+      const l = pLocal(s0, p), ax = -d.sx * s0.w / 2, ay = -d.sy * s0.h / 2; // canto oposto fica parado
+      let w = Math.max(min, (l.x - ax) * d.sx), h = Math.max(min, (l.y - ay) * d.sy);
+      if (!e.shiftKey) { const k = Math.max(w / s0.w, h / s0.h); w = Math.max(min, s0.w * k); h = Math.max(min, s0.h * k); }
+      const c = pWorld(s0, { x: ax + d.sx * w / 2, y: ay + d.sy * h / 2 });
+      Object.assign(cur, { w, h, x: c.x - w / 2, y: c.y - h / 2 });
+    } else if (d.mode === 'rotate') {
+      const c = pCenter(s0);
+      let a = (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI + 90;
+      if (e.shiftKey) a = Math.round(a / 15) * 15;
+      cur.rot = ((Math.round(a) % 360) + 360) % 360;
+    }
+    if (Math.abs(cur.x - s0.x) + Math.abs(cur.y - s0.y) + Math.abs(cur.w - s0.w) + Math.abs(cur.h - s0.h) + Math.abs(cur.rot - s0.rot) > 1) d.moved = true;
+  }
+
+  function addWaypoint() {
+    const sc = S().currentScene();
+    if (!sc) return;
+    if (B.drag) {
+      const t = sc.tokens[B.drag.id];
+      if (!t) return;
+      const g = sc.grid, s = (t.size || 1) * g;
+      const x = B.style.snap ? Math.round(B.drag.x / g) * g : B.drag.x, y = B.style.snap ? Math.round(B.drag.y / g) * g : B.drag.y;
+      const pts = (B.drag.points = B.drag.points || []), last = pts[pts.length - 1] || { x: B.drag.sx + s / 2, y: B.drag.sy + s / 2 };
+      if (Math.abs(last.x - (x + s / 2)) + Math.abs(last.y - (y + s / 2)) > 1) pts.push({ x: x + s / 2, y: y + s / 2 });
+      B.drag.moved = true;
+    } else if (B.ruler) {
+      const pts = (B.ruler.points = B.ruler.points || []);
+      pts.push({ x: B.ruler.b.x, y: B.ruler.b.y });
+    }
+    B.requestRender();
+  }
+
   function onWheel(e) {
     e.preventDefault();
     const r = B.canvas.getBoundingClientRect();
@@ -1398,6 +1687,18 @@
   }
 
   function onDrop(e) {
+    // Imagens: arquivos do computador ou miniatura da biblioteca (só o mestre)
+    if (S().gmView()) {
+      const lib = e.dataTransfer.getData('text/x-image');
+      if (lib) { e.preventDefault(); B.placeImage(lib, toWorld(e)); return; }
+      const files = [...(e.dataTransfer.files || [])].filter((f) => /^image\//.test(f.type));
+      if (files.length) {
+        e.preventDefault();
+        const p = toWorld(e), sc = S().currentScene();
+        files.forEach((file, i) => B.addPropFromFile(file, { x: p.x + i * (sc ? sc.grid : 70), y: p.y }));
+        return;
+      }
+    }
     const snd = e.dataTransfer.getData('text/x-sound');
     if (snd) { e.preventDefault(); App.Audio.dropAt(snd, toWorld(e)); return; }
     const id = e.dataTransfer.getData('text/x-actor');
@@ -1419,7 +1720,7 @@
       const n = Object.values(sc.tokens).filter((t) => t.actorId === a.id).length;
       if (n > 0) name = `${a.name} ${n + 1}`;
     }
-    const z = Object.values(sc.tokens).reduce((m, t) => Math.max(m, t.z || 0), 0) + 1;
+    const z = B.maxZ(sc) + 1;
     const token = { id: U.uid('t_'), actorId: a.id, name, size, x, y, z, linked,
       bars: linked ? null : U.clone(a.bars || []), conditions: [], hidden: false };
     S().dispatch({ type: 'token.add', sceneId: sc.id, token });
@@ -1431,6 +1732,10 @@
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
     if (!S().state) return;
     if (e.code === 'Space') { B.spaceDown = true; e.preventDefault(); return; }
+    if (e.key === 'Backspace' && ((B.drag && (B.drag.points || []).length) || (B.ruler && (B.ruler.points || []).length))) {
+      e.preventDefault(); (B.drag || B.ruler).points.pop(); B.requestRender(); return;
+    }
+    if (e.key === 'Backspace' && (B.drag || B.ruler)) { e.preventDefault(); return; }
     const sc = S().currentScene();
     const t = sc && B.selected && sc.tokens[B.selected];
 
@@ -1438,6 +1743,10 @@
       if (e.key === 'Enter') { finishRoomPoly(sc); B.requestRender(); return; }
       if (e.key === 'Escape') { B.roomPoly = null; B.requestRender(); return; }
       if (e.key === 'Backspace') { B.roomPoly.pts.pop(); if (!B.roomPoly.pts.length) B.roomPoly = null; B.requestRender(); return; }
+    }
+    if (B.selectedProp && sc && S().gmView()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { S().dispatch({ type: 'prop.delete', sceneId: sc.id, id: B.selectedProp }); B.selectedProp = null; return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); B.duplicateProp(sc, B.selectedProp); return; }
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && B.selectedRoom && sc && S().gmView()) {
       S().dispatch({ type: 'room.delete', sceneId: sc.id, id: B.selectedRoom });
@@ -1458,13 +1767,14 @@
       if (e.key === 'Escape') { B.cancelTargeting(); return; }
       if (e.key === 'Enter') { B.confirmTargeting(); return; }
     }
-    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.setTool('select'); B.requestRender(); return; }
+    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.selectedProp = null; B.setTool('select'); B.requestRender(); return; }
     const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     if (arrows[e.key] && t && S().canControl(t)) {
       e.preventDefault();
       if (!S().canMoveNow(t)) { U.toast('Aguarde a sua vez para mover.'); return; }
       const [dx, dy] = arrows[e.key];
-      S().dispatch({ type: 'token.move', sceneId: sc.id, id: t.id, x: t.x + dx * sc.grid, y: t.y + dy * sc.grid });
+      const nx = t.x + dx * sc.grid, ny = t.y + dy * sc.grid;
+      S().dispatch({ type: 'token.move', sceneId: sc.id, id: t.id, x: nx, y: ny, path: [[t.x, t.y], [nx, ny]], at: Date.now() });
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1473,7 +1783,7 @@
       if (a && (a.actions || [])[i]) { if (B.targeting) B.cancelTargeting(); App.UI.useAction(a, i, t); }
       return;
     }
-    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room' };
+    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop' };
     const tool = map[e.key.toLowerCase()];
     if (tool) B.setTool(tool);
   }

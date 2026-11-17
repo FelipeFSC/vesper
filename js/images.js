@@ -35,6 +35,7 @@
   const I = {
     MAP: 4096,
     TOKEN: 512,
+    PROP: 2048, // imagens soltas no mapa
 
     async add(file, maxSide) {
       const r = await toWebP(file, maxSide);
