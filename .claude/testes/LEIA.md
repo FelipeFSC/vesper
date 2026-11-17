@@ -16,11 +16,14 @@
 | `props_view.js` | Jogador não consegue mexer em imagens; com `-shot`, foto do mestre (`#` vazio) ou do jogador (`?tutorial#player`) |
 | `menus.js` | Painéis flutuantes cabem na tela (rodar com `-size '1280,620'`) |
 | `toggle.js` | Clicar de novo na ferramenta ativa fecha as opções e volta para Selecionar |
-| `path.js` | Movimento com pontos: trechos e total, deslizar, Backspace, botão direito, 1-2-1, parede, régua, regra do rastro |
+| `path.js` | Movimento com pontos: trechos e total, destino sem deslizar, rastro, Backspace, botão direito, 1-2-1, parede, régua, regra do rastro |
 | `path_shot.js` | Foto do arraste com dois pontos e uma parede no caminho (`-shot`) |
 | `handouts.js` | Mostrar aos jogadores: entregas, para todos e para um jogador, quem vê, zoom, chat, permissão |
 | `handouts_shot.js` | Fotos do painel do mestre (`-shot`) e da janela do jogador (`?tutorial#player`) |
 | `zoom.js` | Zoom, dock e botões de baixo não se encostam (rodar com `-size` em várias larguras) |
+| `lights.js` | Pontos de luz: três níveis no círculo, cone e área, paredes, escuridão (de dia também), visão no escuro, lanterna do token, permissões, ferramenta, alças, painel, Ctrl+D, Delete, exportar |
+| `lights_shot.js` | Fotos das luzes: mestre (`-shot`, fogueira selecionada; `#dark` seleciona a escuridão) e jogador (`?tutorial#player`) |
+| `wallhint.js` | Contorno das paredes no escuro: parede vista e porta aparecem, parede fora da vista não, névoa esconde; com `-shot` e `?tutorial#player`, foto do jogador |
 | `live.js` | Painéis atualizando na hora (botões, listas, caixas de marcar) |
 
 Como rodar e como encerrar os processos: [../docs/testes.md](../docs/testes.md).

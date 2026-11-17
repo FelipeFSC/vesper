@@ -38,6 +38,7 @@
     { id: 'fog-hide', icon: 'cloud-fog', title: 'Névoa: esconder área (G)', gm: true, edit: true },
     { id: 'wall', icon: 'brick-wall', title: 'Parede (W): absoluta, total, três quartos ou meia\nArraste de um canto do grid a outro', gm: true, edit: true },
     { id: 'door', icon: 'door-closed', title: 'Porta (O): parede que abre e fecha\nClique no marcador dourado para abrir', gm: true, edit: true },
+    { id: 'light', icon: 'lightbulb', title: 'Luz (U): pontos de luz e de escuridão no mapa\nCírculo, cone ou área, com cor', gm: true, edit: true },
     { id: 'prop', icon: 'image', title: 'Imagem (I): coloque imagens soltas no mapa\nArraste arquivos do computador para o mapa ou use a biblioteca', gm: true, edit: true },
     { id: 'room', icon: 'music', title: 'Sala de som (M): área à prova de som, com música própria\nArraste um retângulo (ou clique nos cantos no modo polígono)', gm: true, edit: true },
   ];
@@ -329,13 +330,14 @@
   function renderToolOpts() {
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
-    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room' || t.id === 'prop') || UI.mode !== 'edit') { box.hidden = true; return; }
+    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room' || t.id === 'prop' || t.id === 'light') || UI.mode !== 'edit') { box.hidden = true; return; }
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
     fitToolOpts(box);
     const rsc = S().currentScene();
-    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom;
+    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom
+      + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled);
     box.hidden = false;
     if (box._sig === sig) return;
     box._sig = sig;
@@ -357,6 +359,25 @@
           im.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-image', id); e.dataTransfer.effectAllowed = 'copy'; });
           return im;
         })) : h('p', { class: 'hint', style: { margin: 0 } }, 'As imagens que você colocar aparecem aqui para usar de novo em qualquer cena.'));
+      return;
+    }
+    if (t.id === 'light') {
+      const pick = (k, v) => { B[k] = v; if (k !== 'lightKind') B.lightPoly = null; redo(); App.Board.requestRender(); };
+      const shapeHint = { circle: 'Clique para pôr uma luz, ou arraste para escolher o alcance.', cone: 'Clique na origem e arraste para a direção e o alcance.',
+        area: 'Clique em cada canto da área. Feche clicando no primeiro ponto, com dois cliques ou Enter. Backspace desfaz o último ponto e Esc cancela.' };
+      box.append(h('span', { class: 'eyebrow' }, 'Tipo'),
+        h('div', { class: 'seg vis-seg' },
+          h('button', { class: B.lightKind === 'light' ? 'on' : '', onclick: () => pick('lightKind', 'light') }, ic('lightbulb'), 'Luz'),
+          h('button', { class: B.lightKind === 'dark' ? 'on' : '', onclick: () => pick('lightKind', 'dark') }, ic('moon'), 'Escuridão')),
+        h('span', { class: 'eyebrow' }, 'Forma'),
+        h('div', { class: 'seg vis-seg' }, [['circle', 'circle', 'Círculo'], ['cone', 'cone', 'Cone'], ['area', 'square', 'Área']].map(([k, icon, l]) =>
+          h('button', { class: B.lightShape === k ? 'on' : '', onclick: () => pick('lightShape', k) }, ic(icon), l))),
+        h('p', { class: 'hint', style: { margin: 0 } }, shapeHint[B.lightShape]),
+        h('p', { class: 'hint', style: { margin: 0 } }, B.lightKind === 'dark'
+          ? 'A escuridão apaga qualquer luz onde está, até de dia. Quem tem visão no escuro vê lá dentro como meia luz.'
+          : 'Clique num marcador para editar (cor, alcance, tremular); as alças mudam o alcance e a direção. Dois cliques acendem ou apagam.'),
+        rsc && !rsc.light.enabled ? h('div', { class: 'warn-box' }, h('span', {}, 'A iluminação está desligada nesta cena: as luzes não fazem efeito.'),
+          btnI('lightbulb', 'Ligar iluminação', { class: 'btn small primary', onclick: () => S().dispatch({ type: 'scene.update', id: rsc.id, patch: { light: Object.assign({}, rsc.light, { enabled: true, global: false }) } }) })) : '');
       return;
     }
     if (t.id === 'room') {
@@ -680,7 +701,7 @@
     const box = $('#layers'), sc = S().currentScene(), gm = S().gmView(), L = App.Board.layers;
     if (!sc) { box.innerHTML = ''; return; }
     const sig = JSON.stringify([L, gm, Object.keys(sc.tokens).length, sc.drawings.length, sc.fog.enabled, sc.fog.shapes.length, !!sc.bg, UI.rightTab,
-      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, (sc.props || []).length, S().viewAs,
+      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, (sc.props || []).length, (sc.lights || []).length, S().viewAs,
       sc.groups, Object.values(sc.tokens).map((t) => [t.group, t.hidden, t.masked]), App.Board.selected]);
     if (box._sig === sig) return;
     box._sig = sig;
@@ -700,6 +721,7 @@
     if (gm) box.append(row('sounds', 'volume-2', 'Sons no mapa', (sc.sounds || []).length));
     if (gm) box.append(row('rooms', 'music', 'Salas de som', (sc.rooms || []).length));
     box.append(row('props', 'image', 'Imagens', (sc.props || []).filter((p) => gm || !p.hidden).length));
+    if (gm) box.append(row('lights', 'lightbulb', 'Pontos de luz (marcadores)', (sc.lights || []).length));
     if (gm && sc.light.enabled) box.append(row('light', 'moon', 'Escuridão', sc.light.global ? 'dia' : 'noite'));
     if (UI.rightTab === 'layers') box.append(h('p', { class: 'hint' }, 'Esconder uma camada vale só para a sua tela: os outros continuam vendo.'));
     if (gm) box.append(groupsSection(sc));
@@ -731,7 +753,8 @@
           iconBtn('trash-2', 'Apagar todas as paredes', () => { if (confirm('Apagar todas as paredes e portas desta cena?')) S().dispatch({ type: 'wall.clear', sceneId: sc.id }); }, { disabled: !(sc.walls || []).length })),
         h('p', { class: 'hint' }, li.global
           ? 'Dia: tudo iluminado, mas ninguém enxerga através das paredes.'
-          : 'Noite: os jogadores só veem o que uma tocha ou outra luz ilumina. Dê luz aos tokens no painel de propriedades.'));
+          : 'Noite: os jogadores só veem o que uma luz ilumina. Dê luz aos tokens no painel de propriedades ou use a ferramenta Luz (U) para pôr luzes no mapa.'),
+        h('p', { class: 'hint' }, 'Três níveis: luz plena (tudo visível), meia luz (escurecido) e escuridão (preto). A visão no escuro sobe um nível.'));
     } else sec.append(h('p', { class: 'hint' }, 'Ligue para escurecer o mapa, criar paredes que bloqueiam a visão e esconder monstros e armadilhas.'));
     return sec;
   }
@@ -1706,6 +1729,9 @@
     const hud = $('#token-hud'), empty = $('#props-empty');
     if (!hud) return;
     const csc = S().currentScene(), B = App.Board;
+    const lpt = S().gmView() && B.selectedLight && csc && (csc.lights || []).find((x) => x.id === B.selectedLight);
+    if (lpt) { lightHud(hud, empty, csc, lpt); return; }
+    if (B.selectedLight && !lpt) B.selectedLight = null;
     const snd = S().gmView() && B.selectedSound && csc && (csc.sounds || []).find((x) => x.id === B.selectedSound);
     if (snd) { soundHud(hud, empty, csc, snd); return; }
     const prop = S().gmView() && B.selectedProp && csc && (csc.props || []).find((x) => x.id === B.selectedProp);
@@ -1796,6 +1822,97 @@
     }
     hud.hidden = false;
     hud.style.transform = '';
+  }
+
+  // Direção em 8 botões (0° = direita, 90° = baixo, como no mapa)
+  const DIRS = [[270, '↑'], [315, '↗'], [0, '→'], [45, '↘'], [90, '↓'], [135, '↙'], [180, '←'], [225, '↖']];
+  function dirSeg(cur, onPick) {
+    const c = ((Math.round(Number(cur) || 0) % 360) + 360) % 360;
+    return h('div', { class: 'seg dir-seg' }, DIRS.map(([d, l]) => h('button', { class: c === d ? 'on' : '', title: d + '°', onclick: () => onPick(d) }, l)));
+  }
+  function colorRow(cur, onPick) {
+    return h('div', { class: 'light-colors' },
+      App.Light.COLORS.map(([c, l]) => h('button', { class: 'swatch' + (String(cur).toLowerCase() === c ? ' on' : ''), title: l, style: { background: c }, onclick: () => onPick(c) })),
+      h('input', { type: 'color', title: 'Outra cor', value: U.safeColor(cur, App.Light.WARM), onchange: (e) => onPick(e.target.value) }));
+  }
+  const numIn = (v) => Math.max(0, Number(String(v).replace(',', '.')) || 0);
+
+  // Ponto de luz ou de escuridão no mapa: tipo, aceso, forma, alcance, cor, tremular
+  function lightHud(hud, empty, sc, o) {
+    if (empty) empty.hidden = true;
+    const sig = JSON.stringify(['light', o, UI.mode, sc.grid, sc.light.enabled]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const B = App.Board, LT = App.Light, g = sc.grid;
+      const upd = (patch) => S().dispatch({ type: 'lightpt.update', sceneId: sc.id, id: o.id, patch });
+      const dark = o.kind === 'dark', on = o.on !== false, shape = o.shape || 'circle';
+      const center = () => (shape === 'area' && o.pts ? LT.areaCenter(o.pts) : { x: o.x, y: o.y });
+      // Trocar a forma: a área nasce como um quadrado de 4×4 em volta do ponto; o círculo e o cone nascem no centro da área
+      const setShape = (k, extra = {}) => {
+        if (k === shape) { if (Object.keys(extra).length) upd(extra); return; }
+        const c = center();
+        if (k === 'area') { const r = 2 * g; upd(Object.assign({ shape: k, pts: [[c.x - r, c.y - r], [c.x + r, c.y - r], [c.x + r, c.y + r], [c.x - r, c.y + r]].map(([x, y]) => [Math.round(x), Math.round(y)]) }, extra)); }
+        else upd(Object.assign({ shape: k, x: Math.round(c.x), y: Math.round(c.y) }, extra));
+      };
+      const SHAPE = { circle: 'círculo', cone: 'cone', area: 'área' };
+      const tintLbl = h('span', {}, Math.round((o.tint ?? 0.4) * 100) + '%');
+      const field = (label, key, attrs) => h('label', {}, label, h('input', Object.assign({ type: 'number', class: 'num', value: o[key] ?? '', onchange: (e) => upd({ [key]: numIn(e.target.value) }) }, attrs)));
+      const nums = shape === 'area'
+        ? [field(dark ? 'Penumbra (quad.)' : 'Meia luz em volta', 'edge', { min: 0, step: 0.5, title: 'Faixa em volta da área, em quadrados (0 = sem)' })]
+        : [field(dark ? 'Escuridão' : 'Luz plena', 'bright', { min: 0, step: 0.5, title: 'Raio em quadrados' }),
+          field(dark ? 'Penumbra até' : 'Meia luz até', 'dim', { min: 0.5, step: 0.5, title: 'Raio total em quadrados' }),
+          shape === 'cone' ? field('Abertura (°)', 'angle', { min: 10, max: 340, step: 5 }) : ''];
+      hud.append(
+        h('div', { class: 'hud-top' },
+          h('div', { class: 'snd-bubble light' + (on ? ' on' : ''), style: on ? { background: dark ? '#1b1830' : U.safeColor(o.color, LT.WARM), color: dark ? '#9a8cff' : '#1c1712' } : {} }, ic(!on ? 'lightbulb-off' : dark ? 'moon' : 'lightbulb')),
+          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: o.name || '', placeholder: dark ? 'Escuridão' : 'Nome da luz', onchange: (e) => upd({ name: e.target.value.trim() || (dark ? 'Escuridão' : 'Luz') }) }),
+            h('div', { class: 'hud-sub' }, (dark ? 'Escuridão' : 'Luz') + ' no mapa · ' + SHAPE[shape] + (on ? '' : ' · apagada')))),
+        h('div', { class: 'hud-section vis-sec' },
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: dark ? '' : 'on', onclick: () => upd({ kind: 'light' }) }, ic('lightbulb'), 'Luz'),
+            h('button', { class: dark ? 'on' : '', onclick: () => upd({ kind: 'dark' }) }, ic('moon'), 'Escuridão')),
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: on ? 'on' : '', title: 'Dois cliques no marcador também acendem e apagam', onclick: () => upd({ on: true }) }, ic('lightbulb'), dark ? 'Ativa' : 'Acesa'),
+            h('button', { class: on ? '' : 'on', onclick: () => upd({ on: false }) }, ic('lightbulb-off'), dark ? 'Desligada' : 'Apagada')),
+          h('span', { class: 'eyebrow' }, 'Forma'),
+          h('div', { class: 'seg vis-seg' }, [['circle', 'circle', 'Círculo'], ['cone', 'cone', 'Cone'], ['area', 'square', 'Área']].map(([k, icon, l]) =>
+            h('button', { class: shape === k ? 'on' : '', onclick: () => setShape(k) }, ic(icon), l))),
+          dark ? '' : h('select', { value: '', onchange: (e) => {
+            const p = LT.POINT_PRESETS.find((x) => x.id === e.target.value);
+            if (!p) return;
+            const extra = { flicker: !!p.flicker, name: p.label };
+            if (p.shape === 'area') Object.assign(extra, { edge: p.edge || 0 });
+            else Object.assign(extra, { bright: p.bright, dim: p.dim }, p.angle ? { angle: p.angle } : {});
+            setShape(p.shape, extra);
+          } }, h('option', { value: '' }, 'Usar um modelo…'), LT.POINT_PRESETS.map((p) => h('option', { value: p.id }, p.label + (p.dim ? ` (${p.bright}/${p.dim})` : '')))),
+          h('div', { class: 'prop-grid' }, nums),
+          shape === 'cone' ? h('span', { class: 'eyebrow' }, 'Direção') : '',
+          shape === 'cone' ? dirSeg(o.dir, (d) => upd({ dir: d })) : '',
+          h('p', { class: 'hint', style: { margin: 0 } }, dark
+            ? 'No miolo fica escuridão total, e até a borda no máximo meia luz, mesmo de dia ou com tochas. Quem tem visão no escuro enxerga um nível acima. Paredes seguram a escuridão.'
+            : shape === 'area'
+              ? 'Tudo dentro da área fica em luz plena. As paredes seguram a luz: ela não vaza para o outro lado.'
+              : 'Até o raio de luz plena tudo é visto; até a borda fica a meia luz (escurecido). Paredes fazem sombra. Arraste as alças no mapa para mudar o alcance' + (shape === 'cone' ? ' e a direção.' : '.'))),
+        dark ? '' : h('div', { class: 'hud-section' },
+          h('span', { class: 'eyebrow' }, 'Cor da luz'),
+          colorRow(o.color || LT.WARM, (c) => upd({ color: c })),
+          h('div', { class: 'snd-row' }, h('span', {}, 'Intensidade da cor'), tintLbl),
+          h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.tint ?? 0.4, oninput: (e) => { tintLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ tint: Number(e.target.value) }); e.target.blur(); } }),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!o.flicker, onchange: (e) => upd({ flicker: e.target.checked }) }), 'Tremular (vela, tocha, fogueira)')),
+        sc.light.enabled ? '' : h('div', { class: 'warn-box' }, h('span', {}, 'A iluminação está desligada nesta cena: esta luz não faz efeito.'),
+          btnI('lightbulb', 'Ligar iluminação', { class: 'btn small primary', onclick: () => S().dispatch({ type: 'scene.update', id: sc.id, patch: { light: Object.assign({}, sc.light, { enabled: true, global: false }) } }) })),
+        h('div', { class: 'hud-btns' },
+          btnI('copy-plus', 'Duplicar', { title: 'Duplicar (Ctrl+D)', onclick: () => B.duplicateLight(sc, o.id) }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'lightpt.delete', sceneId: sc.id, id: o.id }); B.selectedLight = null; B.requestRender(); } })));
+    }
+    hud.hidden = false;
+    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    const c = o.shape === 'area' && o.pts ? App.Light.areaCenter(o.pts) : o, p = App.Board.toScreen(c.x, c.y);
+    const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
   }
 
   // Sala de som: nome, música própria, volume e o que acontece com o ambiente de fora
@@ -1994,13 +2111,32 @@
     if (sc.light.enabled && gm) {
       const LP = App.Light.PRESETS, li = t.light || { bright: 0, dim: 0 };
       const cur = LP.find((p) => p.bright === (Number(li.bright) || 0) && p.dim === (Number(li.dim) || 0));
-      const lightSel = h('select', { class: 'grow', title: 'Luz que o token carrega (raio em quadrados: forte / fraca)', value: cur ? cur.id : 'custom',
-        onchange: (e) => { const p = LP.find((x) => x.id === e.target.value); if (p) tokUpd({ light: p.dim ? { bright: p.bright, dim: p.dim } : null }); } },
+      const lightSel = h('select', { class: 'grow', title: 'Luz que o token carrega (raio em quadrados: luz plena / meia luz)', value: cur ? cur.id : 'custom',
+        // Trocar o modelo mantém a forma, a cor e a abertura escolhidas
+        onchange: (e) => { const p = LP.find((x) => x.id === e.target.value); if (p) tokUpd({ light: p.dim ? Object.assign({}, t.light || {}, { bright: p.bright, dim: p.dim, flicker: !!p.flicker }) : null }); } },
         LP.map((p) => h('option', { value: p.id }, p.dim ? `${p.label} (${p.bright}/${p.dim})` : p.label)),
         cur ? null : h('option', { value: 'custom' }, `Personalizada (${li.bright}/${li.dim})`));
-      const dvSel = h('select', { title: 'Visão no escuro (quadrados)', value: String(Number(t.darkvision) || 0), onchange: (e) => tokUpd({ darkvision: Number(e.target.value) || 0 }) },
+      const dvSel = h('select', { title: 'Visão no escuro (quadrados): enxerga um nível acima (escuridão vira meia luz, meia luz vira luz plena)', value: String(Number(t.darkvision) || 0), onchange: (e) => tokUpd({ darkvision: Number(e.target.value) || 0 }) },
         App.Light.DARKVISION.map(([v, l]) => h('option', { value: String(v) }, v ? 'Visão no escuro ' + l : 'Sem visão no escuro')));
-      hud.append(h('div', { class: 'hud-section light-row' }, h('span', { class: 'eyebrow' }, 'Luz e visão'), h('div', { class: 'row' }, ic('flame'), lightSel), dvSel));
+      const sec = h('div', { class: 'hud-section light-row' }, h('span', { class: 'eyebrow' }, 'Luz e visão'), h('div', { class: 'row' }, ic('flame'), lightSel));
+      if (Number(li.dim) > 0) {
+        const lUpd = (patch) => tokUpd({ light: Object.assign({}, li, patch) });
+        const cone = li.shape === 'cone';
+        sec.append(
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: cone ? '' : 'on', onclick: () => lUpd({ shape: 'circle' }) }, ic('circle'), 'Em volta'),
+            h('button', { class: cone ? 'on' : '', title: 'Lanterna: ilumina só à frente, para onde o token andou por último', onclick: () => lUpd({ shape: 'cone', angle: li.angle || 60 }) }, ic('cone'), 'Em cone')),
+          cone ? h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Abertura (°)'),
+            h('input', { type: 'number', class: 'num', min: 10, max: 340, step: 5, value: li.angle || 60, onchange: (e) => lUpd({ angle: U.clamp(numIn(e.target.value) || 60, 10, 340) }) })) : '',
+          cone ? dirSeg(t.facing, (d) => tokUpd({ facing: d })) : '',
+          colorRow(li.color || App.Light.WARM, (c) => lUpd({ color: c })),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!li.flicker, onchange: (e) => lUpd({ flicker: e.target.checked }) }), 'Tremular'));
+      }
+      sec.append(dvSel);
+      hud.append(sec);
+    } else if (!gm && t.light && t.light.shape === 'cone' && Number(t.light.dim) > 0 && S().canControl(t)) {
+      // O jogador aponta a própria lanterna (andar também vira o cone para a direção do movimento)
+      hud.append(h('div', { class: 'hud-section light-row' }, h('span', { class: 'eyebrow' }, 'Para onde a lanterna aponta'), dirSeg(t.facing, (d) => tokUpd({ facing: d }))));
     }
 
     // Ações rápidas: clique na ação e depois no alvo

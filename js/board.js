@@ -12,7 +12,9 @@
     pings: [], animating: false, spaceDown: false, needs: false, lastSceneId: null,
     fogCache: { key: null, canvas: null },
     style: { color: '#d9574f', width: 4, fill: 0, snap: true },
-    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true },
+    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true, lights: true },
+    // Pontos de luz: tipo e forma dos próximos (opções da ferramenta), selecionado, arraste e rascunhos
+    lightKind: 'light', lightShape: 'circle', selectedLight: null, lightDrag: null, lightDraft: null, lightPoly: null,
     // Imagens no mapa: selecionada e arraste em andamento ({id, mode: move|resize|rotate, start, cur, moved})
     selectedProp: null, propDrag: null,
     selectedSound: null, soundDrag: null,
@@ -133,8 +135,9 @@
   };
 
   B.setTool = function (t) {
-    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop') && !S().gmView()) return;
+    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light') && !S().gmView()) return;
     if (t !== 'room') B.roomPoly = null;
+    if (t !== 'light') { B.lightPoly = null; B.lightDraft = null; }
     B.tool = t;
     B.canvas.style.cursor = CURSORS[t] || 'crosshair';
     if (App.UI) App.UI.renderToolbar();
@@ -179,55 +182,33 @@
   function posOf(t) {
     const sc = S().currentScene(), s = (t.size || 1) * sc.grid;
     if (B.drag && B.drag.id === t.id) return { x: B.drag.x + s / 2, y: B.drag.y + s / 2 };
-    const a = slidePos(t);
-    if (a) return { x: a.x + s / 2, y: a.y + s / 2 };
     return { x: t.x + s / 2, y: t.y + s / 2 };
   }
   // ---------- movimento por um caminho ----------
-  // Cada movimento novo (t.lastMove) ganha um início local; o token desliza pelos pontos e o rastro fica trailSecs segundos
+  // Cada movimento novo (t.lastMove) ganha um início local; o token vai direto ao destino e o rastro fica trailSecs segundos
   B.moves = new Map();
-  const SLIDE_PER_CELL = 110, SLIDE_MAX = 1400;
   function moveInfo(t) {
     const lm = t.lastMove;
     if (!lm || !lm.pts || lm.pts.length < 2) return null;
     const key = lm.at + ':' + lm.pts.length + ':' + lm.pts[lm.pts.length - 1].join(',');
     let m = B.moves.get(t.id);
     if (!m || m.key !== key) {
-      // movimento antigo (ex.: campanha recém-carregada) não anima de novo
+      // movimento antigo (ex.: campanha recém-carregada) não mostra o rastro de novo
       const fresh = Math.abs(Date.now() - lm.at) < 10000;
-      const sc = S().currentScene(), g = sc ? sc.grid : 70;
       let len = 0;
       for (let i = 1; i < lm.pts.length; i++) len += Math.hypot(lm.pts[i][0] - lm.pts[i - 1][0], lm.pts[i][1] - lm.pts[i - 1][1]);
-      m = { key, t0: fresh ? performance.now() : -1e9, len, dur: Math.min(SLIDE_MAX, Math.max(250, (len / g) * SLIDE_PER_CELL)) };
+      m = { key, t0: fresh ? performance.now() : -1e9, len };
       B.moves.set(t.id, m);
     }
     return m;
   }
-  // Ponto do caminho a uma fração k do comprimento total (canto de cima à esquerda do token)
-  function alongPath(pts, len, k) {
-    let want = len * k;
-    for (let i = 1; i < pts.length; i++) {
-      const [ax, ay] = pts[i - 1], [bx, by] = pts[i], d = Math.hypot(bx - ax, by - ay);
-      if (want <= d || i === pts.length - 1) { const f = d ? Math.min(1, want / d) : 1; return { x: ax + (bx - ax) * f, y: ay + (by - ay) * f }; }
-      want -= d;
-    }
-    return { x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] };
-  }
-  function slidePos(t) {
-    const m = moveInfo(t);
-    if (!m || m.len <= 0) return null;
-    const k = (performance.now() - m.t0) / m.dur;
-    if (k >= 1 || k < 0) return null;
-    const e = 1 - Math.pow(1 - k, 2); // desacelera no fim
-    return alongPath(t.lastMove.pts, m.len, e);
-  }
-  // Algum token deslizando ou com rastro na tela? (mantém a animação rodando)
+  // Algum token com rastro na tela? (mantém a animação rodando para o rastro sumir aos poucos)
   function movesActive(sc) {
     const secs = Number((S().state.rules || {}).trailSecs ?? 3);
     const now = performance.now();
     for (const t of Object.values(sc.tokens)) {
       const m = moveInfo(t);
-      if (m && now - m.t0 < Math.max(m.dur, secs * 1000)) return true;
+      if (m && now - m.t0 < secs * 1000) return true;
     }
     return false;
   }
@@ -263,6 +244,7 @@
   }
   B.crossesWall = crossesWall;
   B.posOf = posOf;
+  B.movesActive = movesActive;
   // Olhos deste cliente quando a iluminação vale para ele (jogador, ou mestre na prévia); null = vê tudo
   function lightViewers(sc) {
     if (!LT().active(sc) || S().gmView()) return null;
@@ -364,7 +346,7 @@
     if (sc.id !== B.lastSceneId) {
       // Jogador levado para outra cena: avisa onde ele está agora
       if (B.lastSceneId && !S().gmView()) U.toast('Você está em "' + sc.name + '"', 'info', 4000);
-      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; fitCam(sc); }
+      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; fitCam(sc); }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
@@ -426,14 +408,19 @@
     }
     if (L.fog || asPlayer) drawFog(ctx, sc, W, H);
     if (LT().active(sc) && (asPlayer || L.light)) {
+      // Ponto de luz sendo arrastado: a luz acompanha na hora
+      const lsc = B.lightDrag ? Object.assign({}, sc, { lights: (sc.lights || []).map(lightNow) }) : sc;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      LT().render(ctx, sc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf });
+      LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf });
       ctx.restore();
+      if (LT().flickering(sc)) ensureAnim();
+      if (asPlayer) drawWallHints(ctx, sc, viewers);
     }
     for (const t of above) drawToken(ctx, sc, t, t.id === cur);
     if (gm && L.rooms && (App.UI.mode === 'edit' || B.tool === 'room' || B.selectedRoom)) drawRooms(ctx, sc);
     if (gm && L.sounds) drawSounds(ctx, sc);
+    if (gm && L.lights) drawLightPoints(ctx, sc);
     drawWalls(ctx, sc, gm && L.walls && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door'), viewers);
     if (gm && B.selectedProp) { const sp = (sc.props || []).find((p) => p.id === B.selectedProp); if (sp) drawPropFrame(ctx, propNow(sp)); }
 
@@ -723,6 +710,171 @@
   }
   B.soundScreenPos = function (snd) { return toScreen(snd.x, snd.y); };
 
+  // ---------- pontos de luz e de escuridão (marcadores do mestre) ----------
+  const DARK_C = '#9a8cff';
+  // Estado do ponto agora (com o arraste em andamento aplicado)
+  function lightNow(o) { return B.lightDrag && B.lightDrag.id === o.id ? Object.assign({}, o, B.lightDrag.cur) : o; }
+  const lightCenter = (o) => (o.shape === 'area' && o.pts && o.pts.length ? LT().areaCenter(o.pts) : { x: o.x, y: o.y });
+  // Alças: alcance total (dim) e luz plena (bright), na direção do ponto
+  function lightHandles(sc, o) {
+    if (o.shape === 'area') return [];
+    const a = ((Number(o.dir) || 0) * Math.PI) / 180, g = sc.grid, c = lightCenter(o);
+    const at = (r) => ({ x: c.x + Math.cos(a) * r * g, y: c.y + Math.sin(a) * r * g });
+    return [Object.assign(at(Number(o.dim) || 0), { mode: 'dim' }), Object.assign(at(Math.min(Number(o.bright) || 0, Number(o.dim) || 0)), { mode: 'bright' })];
+  }
+  function lightAt(sc, p) {
+    if (!S().gmView() || !B.layers.lights) return null;
+    const r = 15 / B.cam.z, list = sc.lights || [];
+    const sel = B.selectedLight && list.find((o) => o.id === B.selectedLight);
+    if (sel) for (const hd of lightHandles(sc, sel)) if (Math.hypot(p.x - hd.x, p.y - hd.y) <= 9 / B.cam.z) return { o: sel, mode: hd.mode };
+    for (let i = list.length - 1; i >= 0; i--) { const c = lightCenter(list[i]); if (Math.hypot(p.x - c.x, p.y - c.y) <= r) return { o: list[i], mode: 'move' }; }
+    return null;
+  }
+  B.lightAt = lightAt;
+  function lightOutline(ctx, sc, o, col, z) {
+    const g = sc.grid, c = lightCenter(o);
+    ctx.strokeStyle = col;
+    if (o.shape === 'area') { if (o.pts && o.pts.length >= 3) { roomPath(ctx, o.pts); ctx.stroke(); } return; }
+    const R = (Number(o.dim) || 0) * g, r = Math.min(Number(o.bright) || 0, Number(o.dim) || 0) * g;
+    if (o.shape === 'cone') {
+      const a = ((Number(o.dir) || 0) * Math.PI) / 180, hf = ((U.clamp(Number(o.angle) || 60, 10, 340) / 2) * Math.PI) / 180;
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, R, a - hf, a + hf); ctx.closePath(); ctx.stroke();
+      if (r > 0) { ctx.lineWidth /= 1.6; ctx.beginPath(); ctx.arc(c.x, c.y, r, a - hf, a + hf); ctx.stroke(); ctx.lineWidth *= 1.6; }
+      return;
+    }
+    ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.stroke();
+    if (r > 0) { ctx.lineWidth /= 1.6; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth *= 1.6; }
+  }
+  function drawLightPoints(ctx, sc) {
+    const z = B.cam.z, showAll = B.tool === 'light';
+    for (const o0 of sc.lights || []) {
+      const o = lightNow(o0), sel = B.selectedLight === o.id, dark = o.kind === 'dark', on = o.on !== false;
+      const col = dark ? DARK_C : U.safeColor(o.color, LT().WARM), c = lightCenter(o), r = 12 / z;
+      ctx.save();
+      if (sel || showAll) {
+        ctx.setLineDash([8 / z, 6 / z]); ctx.lineWidth = (sel ? 2 : 1.3) / z; ctx.globalAlpha = sel ? 0.95 : 0.55;
+        lightOutline(ctx, sc, o, col, z);
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+      }
+      if (sel) {
+        const hs = lightHandles(sc, o);
+        if (hs.length) {
+          ctx.lineWidth = 1.2 / z; ctx.strokeStyle = 'rgba(255,255,255,.6)';
+          ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(hs[0].x, hs[0].y); ctx.stroke();
+          for (const hd of hs) {
+            const s = (hd.mode === 'dim' ? 6 : 4.5) / z;
+            ctx.fillStyle = hd.mode === 'dim' ? '#fff' : col; ctx.strokeStyle = 'rgba(17,17,20,.9)';
+            ctx.fillRect(hd.x - s, hd.y - s, s * 2, s * 2); ctx.strokeRect(hd.x - s, hd.y - s, s * 2, s * 2);
+          }
+        }
+      }
+      // marcador: lâmpada (luz), lua (escuridão), cinza quando apagado
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = !on ? '#3a3550' : dark ? '#1b1830' : col; ctx.fill();
+      ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : dark ? DARK_C : 'rgba(17,17,20,.9)'; ctx.stroke();
+      const u = r / 12, ink = !on ? '#9b97ad' : dark ? DARK_C : '#1c1712';
+      ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1.5 / z;
+      if (dark) {
+        ctx.beginPath(); ctx.arc(c.x, c.y, 6 * u, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1b1830'; ctx.beginPath(); ctx.arc(c.x + 3 * u, c.y - 2.5 * u, 5.2 * u, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(c.x, c.y - 1.5 * u, 4.6 * u, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(c.x - 2.2 * u, c.y + 3 * u, 4.4 * u, 2.4 * u);
+        if (o.shape === 'cone') { // seta da direção
+          const a = ((Number(o.dir) || 0) * Math.PI) / 180;
+          ctx.strokeStyle = sel ? '#fff' : col; ctx.lineWidth = 2 / z;
+          ctx.beginPath(); ctx.moveTo(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r); ctx.lineTo(c.x + Math.cos(a) * (r + 7 / z), c.y + Math.sin(a) * (r + 7 / z)); ctx.stroke();
+        }
+      }
+      if (!on) { ctx.strokeStyle = '#9b97ad'; ctx.lineWidth = 1.6 / z; ctx.beginPath(); ctx.moveTo(c.x - 7 * u, c.y + 7 * u); ctx.lineTo(c.x + 7 * u, c.y - 7 * u); ctx.stroke(); }
+      if (sel || showAll) {
+        const label = (o.name || (dark ? 'Escuridão' : 'Luz')) + (on ? '' : ' · apagada');
+        ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        const tw = ctx.measureText(label).width;
+        roundRect(ctx, c.x - tw / 2 - 6 / z, c.y + r + 4 / z, tw + 12 / z, 17 / z, 4 / z);
+        ctx.fillStyle = C.plate; ctx.fill();
+        ctx.fillStyle = sel ? '#fff' : '#cfc9e6';
+        ctx.fillText(label, c.x, c.y + r + 7 / z);
+      }
+      ctx.restore();
+    }
+    // rascunhos
+    const d = B.lightDraft, col = B.lightKind === 'dark' ? DARK_C : LT().WARM;
+    ctx.save();
+    ctx.setLineDash([8 / z, 6 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = col; ctx.fillStyle = B.lightKind === 'dark' ? 'rgba(20,16,40,.35)' : 'rgba(255,180,90,.12)';
+    if (d && d.moved) lightOutline(ctx, sc, draftLight(sc, d), col, z);
+    if (B.lightPoly && B.lightPoly.pts.length) {
+      const pts = B.lightPoly.pts.concat(B.lightPoly.hover ? [B.lightPoly.hover] : []);
+      ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+      ctx.setLineDash([]);
+      B.lightPoly.pts.forEach(([x, y], i) => { ctx.beginPath(); ctx.arc(x, y, (i ? 4 : 7) / z, 0, Math.PI * 2); ctx.fillStyle = i ? col : '#fff'; ctx.fill(); });
+    }
+    ctx.restore();
+  }
+  // Ponto de luz completo, com os valores padrão
+  B.newLight = function (sc, part) {
+    const dark = part.kind === 'dark', shape = part.shape || 'circle';
+    const name = dark ? 'Escuridão' : shape === 'cone' ? 'Holofote' : shape === 'area' ? 'Área de luz' : 'Luz';
+    const o = Object.assign({ id: U.uid('lt_'), name, kind: dark ? 'dark' : 'light', shape, x: 0, y: 0,
+      bright: dark ? 3 : 4, dim: dark ? 4 : 8, dir: 0, angle: 60, pts: null, edge: 0, color: LT().WARM, tint: 0.4, flicker: false, on: true }, part);
+    if (o.shape === 'area' && o.pts) { const c = LT().areaCenter(o.pts); o.x = Math.round(c.x); o.y = Math.round(c.y); }
+    return o;
+  };
+  B.addLight = function (sc, part) {
+    if (!sc || !S().gmView()) return null;
+    const o = B.newLight(sc, part);
+    S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: o });
+    B.selectedLight = o.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null;
+    if (!LT().active(sc)) U.toast('Ligue "Luz e visão dinâmicas" (Camadas → Iluminação) para a luz fazer efeito.', 'info', 5000);
+    B.requestRender();
+    return o;
+  };
+  B.duplicateLight = function (sc, id) {
+    const o = (sc.lights || []).find((x) => x.id === id);
+    if (!o) return;
+    const g = sc.grid, c = Object.assign(U.clone(o), { id: U.uid('lt_'), x: o.x + g, y: o.y + g });
+    if (c.pts) c.pts = c.pts.map(([x, y]) => [x + g, y + g]);
+    S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: c });
+    B.selectedLight = c.id;
+    B.requestRender();
+  };
+  // Círculo ou cone em criação: arrastar define o alcance (e a direção do cone)
+  function draftLight(sc, d) {
+    const g = sc.grid, dist = Math.hypot(d.p.x - d.x, d.p.y - d.y) / g, dark = B.lightKind === 'dark';
+    const dim = Math.max(0.5, Math.round(dist * 2) / 2);
+    const dir = Math.round((Math.atan2(d.p.y - d.y, d.p.x - d.x) * 180) / Math.PI);
+    if (d.shape === 'cone') return { shape: 'cone', kind: B.lightKind, x: d.x, y: d.y, dim, bright: Math.round(dim * 0.6 * 2) / 2, dir, angle: 60 };
+    return { shape: 'circle', kind: B.lightKind, x: d.x, y: d.y, dim, bright: dark ? Math.max(0, dim - 1) : Math.round(dim / 2 * 2) / 2, dir: 0 };
+  }
+  function finishLightPoly(sc) {
+    const pts = [];
+    for (const p of (B.lightPoly && B.lightPoly.pts) || []) { const l = pts[pts.length - 1]; if (!l || l[0] !== p[0] || l[1] !== p[1]) pts.push(p); }
+    B.lightPoly = null;
+    if (pts.length < 3) { U.toast('Uma área precisa de pelo menos 3 cantos.'); return; }
+    B.addLight(sc, { kind: B.lightKind, shape: 'area', pts: pts.map(([x, y]) => [Math.round(x), Math.round(y)]) });
+  }
+  // Arraste de um ponto: mover, alcance total (dim) ou luz plena (bright)
+  function dragLight(sc, d, p, e) {
+    const s0 = d.start, g = sc.grid, cur = d.cur;
+    if (d.mode === 'move') {
+      let dx = p.x - d.p0.x, dy = p.y - d.p0.y;
+      if (B.style.snap && !e.altKey) {
+        const c0 = lightCenter(s0), half = g / 2;
+        dx = Math.round((c0.x + dx) / half) * half - c0.x; dy = Math.round((c0.y + dy) / half) * half - c0.y;
+      }
+      cur.x = s0.x + dx; cur.y = s0.y + dy;
+      if (s0.pts) cur.pts = s0.pts.map(([x, y]) => [x + dx, y + dy]);
+      d.moved = d.moved || Math.abs(dx) + Math.abs(dy) > 2;
+      return;
+    }
+    const c = lightCenter(s0), r = Math.max(0, Math.round((Math.hypot(p.x - c.x, p.y - c.y) / g) * 2) / 2);
+    let dir = (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
+    if (e.shiftKey) dir = Math.round(dir / 15) * 15;
+    if (d.mode === 'dim') { cur.dim = Math.max(0.5, r); cur.bright = Math.min(Number(s0.bright) || 0, cur.dim); cur.dir = Math.round(dir); }
+    else cur.bright = Math.min(r, Number(s0.dim) || 0);
+    d.moved = true;
+  }
+
   // ---------- paredes e portas ----------
   const WALL_COLOR = { full: '#b07cff', high: '#e07b4f', three: '#e8b44f', half: '#6fc2b0' };
   B.wallType = 'high'; // tipo das próximas paredes (escolhido nas opções da ferramenta)
@@ -772,6 +924,47 @@
       if (!showWalls && viewers && !doorVisible(sc, w, viewers)) continue;
       drawDoorMark(ctx, w);
     }
+  }
+  /*
+   * Contorno das paredes para o jogador no escuro: uma linha clara nas paredes que os tokens dele enxergam
+   * (linha de visão, mesmo sem luz), para ele saber o limite da sala. Portas em dourado; nada aparece debaixo da névoa.
+   */
+  function drawWallHints(ctx, sc, viewers) {
+    const walls = sc.walls || [];
+    if (!walls.length || !viewers || !viewers.length) return;
+    const { dpr, cam } = B, cw = B.canvas.width, ch = B.canvas.height, z = cam.z;
+    const c = B.hintCanvas || (B.hintCanvas = document.createElement('canvas'));
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+    const x = c.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, cw, ch);
+    x.setTransform(dpr * z, 0, 0, dpr * z, -cam.x * z * dpr, -cam.y * z * dpr);
+    const diag = Math.hypot(sc.cols * sc.grid, sc.rows * sc.grid) * 1.5;
+    x.save();
+    x.beginPath();
+    for (const v of viewers) {
+      const p = posOf(v), poly = LT().visibility(sc, p.x, p.y, diag, LT().eyeOf(v));
+      x.moveTo(poly[0], poly[1]);
+      for (let i = 2; i < poly.length; i += 2) x.lineTo(poly[i], poly[i + 1]);
+      x.closePath();
+    }
+    x.clip(); // só o que algum token vê (a linha fica na borda da visão: metade dela aparece)
+    // Bem sutil: o foco é o desenho do mapa, a linha só sugere o limite
+    x.lineCap = 'round'; x.lineWidth = 2.4 / z;
+    for (const w of walls) {
+      x.strokeStyle = w.door ? 'rgba(226,186,110,.38)' : 'rgba(225,223,235,.2)';
+      x.setLineDash(w.door && w.open ? [6 / z, 6 / z] : []);
+      x.beginPath(); x.moveTo(w.x1, w.y1); x.lineTo(w.x2, w.y2); x.stroke();
+    }
+    x.restore();
+    // Debaixo da névoa de guerra não aparece nada
+    if (sc.fog && sc.fog.enabled && B.fogCache.canvas) {
+      x.globalCompositeOperation = 'destination-out';
+      x.drawImage(B.fogCache.canvas, 0, 0, sc.cols * sc.grid, sc.rows * sc.grid);
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(c, 0, 0);
+    ctx.restore();
   }
   function doorVisible(sc, w, viewers) {
     // Testa um ponto um pouco antes da porta, dos dois lados
@@ -865,7 +1058,6 @@
     const g = sc.grid, s = (t.size || 1) * g, z = B.cam.z;
     let x = t.x, y = t.y;
     if (B.drag && B.drag.id === t.id) { x = B.drag.x; y = B.drag.y; }
-    else { const sp = slidePos(t); if (sp) { x = sp.x; y = sp.y; } }
     const a = S().actorOf(t);
     const img = App.Images.get(t.img || (a && a.img));
     const cx = x + s / 2, cy = y + s / 2, r = s * 0.4;
@@ -1242,7 +1434,10 @@
   }
 
   // ---------- efeitos do resultado: números subindo, golpe, explosão ----------
-  function animActive() { const sc = S().currentScene(); return B.pings.length || B.fx.length || B.targeting || (sc && movesActive(sc)); }
+  function animActive() {
+    const sc = S().currentScene();
+    return B.pings.length || B.fx.length || B.targeting || (sc && (movesActive(sc) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
+  }
   function ensureAnim() {
     if (B.animating) return;
     B.animating = true;
@@ -1439,7 +1634,27 @@
         B.roomDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, p0: { x: p.x, y: p.y } };
         break;
       }
+      case 'light': {
+        if (!gm) break;
+        if (grabLight(sc, p)) break;
+        B.selectedLight = null;
+        if (B.lightShape === 'area') {
+          // Área: clique em cada canto (feche no primeiro ponto, com dois cliques ou Enter)
+          const q = st.snap && !e.altKey ? snapVertex(sc, p) : { x: Math.round(p.x), y: Math.round(p.y) };
+          const P = B.lightPoly;
+          if (!P) { B.lightPoly = { pts: [[q.x, q.y]], hover: null }; break; }
+          const [fx, fy] = P.pts[0];
+          if (P.pts.length >= 3 && Math.hypot(q.x - fx, q.y - fy) <= 10 / B.cam.z) { finishLightPoly(sc); break; }
+          P.pts.push([q.x, q.y]);
+          break;
+        }
+        const q = st.snap && !e.altKey ? snapPt(sc, p) : p;
+        B.lightDraft = { shape: B.lightShape, x: Math.round(q.x), y: Math.round(q.y), p: { x: q.x, y: q.y }, moved: false };
+        break;
+      }
       case 'select': case 'prop': {
+        if (gm && grabLight(sc, p)) break;
+        B.selectedLight = null;
         const snd = soundAt(sc, p);
         if (snd) {
           B.selected = null; B.selectedSound = snd.id; B.selectedProp = null;
@@ -1494,6 +1709,16 @@
     B.requestRender();
   }
 
+  // Clique num ponto de luz (marcador ou alça do selecionado): seleciona e começa o arraste
+  function grabLight(sc, p) {
+    const hit = lightAt(sc, p);
+    if (!hit) return false;
+    const o = hit.o;
+    B.selectedLight = o.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null;
+    B.lightDrag = { id: o.id, sceneId: sc.id, mode: hit.mode, start: U.clone(o), cur: {}, p0: { x: p.x, y: p.y }, moved: false };
+    return true;
+  }
+
   function eraseAt(sc, p) {
     const snd = soundAt(sc, p);
     if (snd) { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); if (B.selectedSound === snd.id) B.selectedSound = null; return; }
@@ -1513,11 +1738,12 @@
       return;
     }
     if (B.targeting && e.target === B.canvas) { B.hoverP = toWorld(e); B.requestRender(); }
-    if (B.roomPoly && e.target === B.canvas) {
+    for (const P of [B.roomPoly, B.lightPoly]) {
+      if (!P || e.target !== B.canvas) continue;
       const sc0 = S().currentScene();
-      if (sc0) { const w = toWorld(e), q = B.style.snap && !e.altKey ? snapVertex(sc0, w) : w; B.roomPoly.hover = [q.x, q.y]; B.requestRender(); }
+      if (sc0) { const w = toWorld(e), q = B.style.snap && !e.altKey ? snapVertex(sc0, w) : w; P.hover = [q.x, q.y]; B.requestRender(); }
     }
-    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag) return;
+    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag && !B.lightDrag && !B.lightDraft) return;
     const sc = S().currentScene();
     if (!sc) return;
     const p = toWorld(e), snap = B.style.snap;
@@ -1539,6 +1765,11 @@
     if (B.wallDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.wallDraft.x2 = q.x; B.wallDraft.y2 = q.y; }
     if (B.roomDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.roomDraft.x2 = q.x; B.roomDraft.y2 = q.y; }
     if (B.propDrag) dragProp(B.propDrag, p, e);
+    if (B.lightDrag) dragLight(sc, B.lightDrag, p, e);
+    if (B.lightDraft) {
+      const d = B.lightDraft;
+      d.p = { x: p.x, y: p.y }; if (Math.hypot(p.x - d.x, p.y - d.y) > 6 / B.cam.z) d.moved = true;
+    }
     if (B.soundDrag) {
       const d = B.soundDrag, nx = p.x - d.ox, ny = p.y - d.oy;
       if (Math.abs(nx - d.x) + Math.abs(ny - d.y) > 2 / B.cam.z) d.moved = true;
@@ -1571,6 +1802,22 @@
         if (d.mode === 'move' && B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
         S().dispatch({ type: 'prop.update', sceneId: d.sceneId, id: d.id, patch: { x: Math.round(x), y: Math.round(y), w: Math.round(c.w), h: Math.round(c.h), rot: c.rot } });
       }
+    }
+    if (B.lightDrag) {
+      const d = B.lightDrag;
+      B.lightDrag = null;
+      if (d.moved && sc) {
+        const patch = Object.assign({}, d.cur);
+        if ('x' in patch) { patch.x = Math.round(patch.x); patch.y = Math.round(patch.y); }
+        if (patch.pts) patch.pts = patch.pts.map(([x, y]) => [Math.round(x), Math.round(y)]);
+        S().dispatch({ type: 'lightpt.update', sceneId: d.sceneId, id: d.id, patch });
+      }
+    }
+    if (B.lightDraft && sc) {
+      const d = B.lightDraft;
+      B.lightDraft = null;
+      if (d.moved) B.addLight(sc, draftLight(sc, d));
+      else B.addLight(sc, d.shape === 'cone' ? { kind: B.lightKind, shape: 'cone', x: d.x, y: d.y, bright: 6, dim: 10, dir: 0, angle: 60 } : { kind: B.lightKind, shape: 'circle', x: d.x, y: d.y });
     }
     B.ruler = null;
     if (B.draft && sc) {
@@ -1674,6 +1921,10 @@
     const sc = S().currentScene();
     if (!sc) return;
     if (B.tool === 'room' && B.roomPoly) { finishRoomPoly(sc); B.requestRender(); return; }
+    if (B.tool === 'light' && B.lightPoly) { finishLightPoly(sc); B.requestRender(); return; }
+    // Dois cliques no marcador de luz: acende ou apaga
+    const lh = lightAt(sc, toWorld(e));
+    if (lh && lh.mode === 'move') { S().dispatch({ type: 'lightpt.update', sceneId: sc.id, id: lh.o.id, patch: { on: lh.o.on === false } }); return; }
     const snd = soundAt(sc, toWorld(e));
     if (snd) {
       if (snd.once) App.Audio.trigger(snd);
@@ -1744,6 +1995,15 @@
       if (e.key === 'Escape') { B.roomPoly = null; B.requestRender(); return; }
       if (e.key === 'Backspace') { B.roomPoly.pts.pop(); if (!B.roomPoly.pts.length) B.roomPoly = null; B.requestRender(); return; }
     }
+    if (B.lightPoly && sc) {
+      if (e.key === 'Enter') { finishLightPoly(sc); B.requestRender(); return; }
+      if (e.key === 'Escape') { B.lightPoly = null; B.requestRender(); return; }
+      if (e.key === 'Backspace') { B.lightPoly.pts.pop(); if (!B.lightPoly.pts.length) B.lightPoly = null; B.requestRender(); return; }
+    }
+    if (B.selectedLight && sc && S().gmView()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { S().dispatch({ type: 'lightpt.delete', sceneId: sc.id, id: B.selectedLight }); B.selectedLight = null; return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); B.duplicateLight(sc, B.selectedLight); return; }
+    }
     if (B.selectedProp && sc && S().gmView()) {
       if (e.key === 'Delete' || e.key === 'Backspace') { S().dispatch({ type: 'prop.delete', sceneId: sc.id, id: B.selectedProp }); B.selectedProp = null; return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); B.duplicateProp(sc, B.selectedProp); return; }
@@ -1767,7 +2027,7 @@
       if (e.key === 'Escape') { B.cancelTargeting(); return; }
       if (e.key === 'Enter') { B.confirmTargeting(); return; }
     }
-    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.selectedProp = null; B.setTool('select'); B.requestRender(); return; }
+    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.setTool('select'); B.requestRender(); return; }
     const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     if (arrows[e.key] && t && S().canControl(t)) {
       e.preventDefault();
@@ -1783,7 +2043,7 @@
       if (a && (a.actions || [])[i]) { if (B.targeting) B.cancelTargeting(); App.UI.useAction(a, i, t); }
       return;
     }
-    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop' };
+    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop', u: 'light' };
     const tool = map[e.key.toLowerCase()];
     if (tool) B.setTool(tool);
   }

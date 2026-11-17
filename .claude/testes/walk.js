@@ -75,10 +75,11 @@ window.addEventListener('load', () => setTimeout(async () => {
       31: async () => { S.dispatch({ type: 'wall.update', sceneId: sc().id, id: 'wt', patch: { cover: 'full' } }); click('#btn-preview'); },
       33: async () => { await W(300); const b = [...document.querySelectorAll('#token-hud .vis-seg button')].find((x) => /Vulto/.test(x.textContent)); if (b) b.click(); },
       34: async () => { await W(300); const c = document.querySelector('#token-hud .fly-row input[type=checkbox]'); if (c) c.click(); },
-      35: () => click('#dock .dock-btn', 'Som'),
-      38: async () => { click('#toolbar [data-tool="room"]'); await W(200); const s = sc(), g = s.grid; B.addRoom(s, [[g, g], [5 * g, g], [5 * g, 4 * g], [g, 4 * g]]); },
-      39: async () => { click('#toolbar [data-tool="prop"]'); await W(200); const cv = document.createElement('canvas'); cv.width = 120; cv.height = 60; cv.getContext('2d').fillRect(0, 0, 120, 60); const blob = await new Promise((r) => cv.toBlob(r, 'image/png')); await B.addPropFromFile(new File([blob], 'bau.png', { type: 'image/png' }), B.viewCenter()); },
-      40: async () => { click('#dock .dock-btn', 'Mostrar'); await W(200); S.dispatch({ type: 'handout.add', handout: { id: 'hw', title: 'Carta', img: null, text: 'Uma pista.' } }); App.UI.showHandout(S.state.handouts.find((h) => h.id === 'hw'), '*'); },
+      35: async () => { click('#toolbar [data-tool="light"]'); await W(200); const s = sc(), g = s.grid; B.addLight(s, { shape: 'circle', x: 4.5 * g, y: 4.5 * g }); },
+      36: () => click('#dock .dock-btn', 'Som'),
+      39: async () => { click('#toolbar [data-tool="room"]'); await W(200); const s = sc(), g = s.grid; B.addRoom(s, [[g, g], [5 * g, g], [5 * g, 4 * g], [g, 4 * g]]); },
+      40: async () => { click('#toolbar [data-tool="prop"]'); await W(200); const cv = document.createElement('canvas'); cv.width = 120; cv.height = 60; cv.getContext('2d').fillRect(0, 0, 120, 60); const blob = await new Promise((r) => cv.toBlob(r, 'image/png')); await B.addPropFromFile(new File([blob], 'bau.png', { type: 'image/png' }), B.viewCenter()); },
+      41: async () => { click('#dock .dock-btn', 'Mostrar'); await W(200); S.dispatch({ type: 'handout.add', handout: { id: 'hw', title: 'Carta', img: null, text: 'Uma pista.' } }); App.UI.showHandout(S.state.handouts.find((h) => h.id === 'hw'), '*'); },
     };
     for (let guard = 0; guard < 60 && T.i < T.steps.length - 1; guard++) {
       const i = T.i, st = T.steps[i]; await W(300);

@@ -19,7 +19,7 @@
 | `js/store.js` | Estado, reducer `R`, `dispatch`, `permit()`, `migrate()`, `useAction` (combate), consultas (`currentScene`, `sceneIdOf`, `actorOf`, `statOf`, `vars`) |
 | `js/storage.js` | IndexedDB, exportar/importar campanha, cena e ficha |
 | `js/images.js` | Converte imagens para WebP (mapas até 4096 px, tokens até 512 px), deduplica por hash, `toWebP` |
-| `js/light.js` | Luz e visão: paredes que bloqueiam (`wallsFor(eyeH)`), polígono de visibilidade, `pointVisible`, escuridão |
+| `js/light.js` | Luz e visão: paredes que bloqueiam (`wallsFor(eyeH)`), polígono de visibilidade, fontes (tokens e `sc.lights`), níveis (`levelAt`, `levelFor`), `pointVisible`, desenho da luz, cor e tremor |
 | `js/combat.js` | Alcance, lados, alvos válidos, área, chance de acerto, **cobertura**, sombra, voo (`flyOf`, `topOf`, `sightH`) |
 | `js/audio.js` | Pasta de músicas, canais música/ambiente/efeito, sons no mapa, **salas de som**, envio das faixas aos jogadores |
 | `js/net.js` | PeerJS: host, join, envio de ações e estado |
@@ -45,7 +45,7 @@ campanha
 
 cena
   name, cols, rows, grid (px por quadrado), cellDist, unit, measure (cheb|alt|euclid), bg, showGrid…
-  tokens {id: {actorId, name, x, y, size, linked, bars, conditions, light, darkvision,
+  tokens {id: {actorId, name, x, y, size, linked, bars, conditions, light {bright, dim, shape, angle, color, tint, flicker}, facing, darkvision,
                hidden, masked, group, fly, lastFly, owner, z}}
   drawings [], fog {enabled, shapes, v}
   walls [{id, x1, y1, x2, y2, cover: full|high|three|half, door, open}], wallsV
@@ -55,6 +55,7 @@ cena
   rooms [{id, name, pts [[x,y]…], music {name,size}, at, vol, ambient stop|muffle|keep}]
   groups [{id, name}]
   props [{id, img, name, x, y, w, h, rot, flip, hidden, opacity, locked, z}]   (z compartilhado com tokens.z)
+  lights [{id, name, kind light|dark, shape circle|cone|area, x, y, bright, dim, dir, angle, pts, edge, color, tint, flicker, on}]
 ```
 
 `migrate()` completa campos que faltam em campanhas antigas. **Todo campo novo precisa de valor padrão no `newScene`/`newCampaign` e no `migrate`.**

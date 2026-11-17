@@ -110,7 +110,7 @@
         <ul><li>Segure o token com o <b>botão esquerdo</b> e arraste.</li>
         <li>Sem soltar, clique com o <b>botão direito</b> para fixar um ponto. Continue arrastando e marque quantos quiser.</li>
         <li>Cada trecho mostra a distância, e a régua mostra o <b>total do caminho</b>. Trecho que atravessa parede fica <b>vermelho</b>.</li>
-        <li><b>Backspace</b> (ainda segurando) desfaz o último ponto. Ao soltar, o token desliza pelo caminho e todos veem o rastro por alguns segundos.</li></ul>
+        <li><b>Backspace</b> (ainda segurando) desfaz o último ponto. Ao soltar, o token vai para o destino e todos veem o rastro do caminho por alguns segundos.</li></ul>
         <p>A <b>Régua</b> ${k('R')} aceita os mesmos pontos, para medir sem mover ninguém. Sem segurar nada, o botão direito continua movendo a câmera.</p>`,
       spot: tokRect('hero') },
     { ch: 'Primeiros passos', title: 'O painel do token',
@@ -276,13 +276,13 @@
       enter: () => { App.UI.rightTab = 'props'; B().selected = null; App.UI.setViewAs(null); App.UI.refresh(); B().requestRender(); },
       done: () => { const l = scene().light; return l.enabled && !l.global; } },
     { ch: 'Luz e paredes', title: 'Acenda uma tocha',
-      body: 'Como mestre, você continua vendo tudo: a escuridão aparece translúcida. Mas a Lyra precisa de luz.<p>A <b>tocha</b> ilumina 4 quadrados com luz forte e mais 4 com luz fraca. A <b>visão no escuro</b> deixa o token enxergar sem luz até a distância escolhida.</p>',
+      body: 'Como mestre, você continua vendo tudo: a escuridão aparece translúcida. Mas a Lyra precisa de luz.<p>A luz tem três níveis: <b>luz plena</b> (tudo visível), <b>meia luz</b> (escurecido) e <b>escuridão</b> (preto). A <b>tocha</b> dá luz plena até 4 quadrados e meia luz até 8. A <b>visão no escuro</b> enxerga um nível acima até a distância escolhida: escuridão vira meia luz, e meia luz vira luz plena.</p>',
       task: 'Selecione a Lyra e, em Luz e visão, escolha Tocha.',
       spot: () => el('#token-hud .light-row')() || tokRect('hero')(),
       enter: () => select('hero'),
       done: () => { const t = heroTok(); return !!(t && t.light && t.light.dim > 0); } },
     { ch: 'Luz e paredes', title: 'Erga uma parede',
-      body: 'As paredes não aparecem para os jogadores: elas só bloqueiam a luz e a visão. Quem mostra a parede é o desenho do mapa.<p>Use a ferramenta <b>Parede</b> ' + k('W') + ' na barra da esquerda e arraste de um canto do grid a outro. A <b>Porta</b> ' + k('O') + ' funciona igual, e qualquer um abre ou fecha clicando no marcador dourado.</p><p>Dica: <b>Paredes dos desenhos</b> transforma as linhas e retângulos já desenhados em paredes de uma vez.</p>',
+      body: 'As paredes bloqueiam a luz e a visão. Quem mostra a parede é o desenho do mapa, mas no escuro o jogador vê uma <b>linha clara</b> nas paredes que o personagem enxerga (e as portas em dourado), para saber o limite da sala.<p>Use a ferramenta <b>Parede</b> ' + k('W') + ' na barra da esquerda e arraste de um canto do grid a outro. A <b>Porta</b> ' + k('O') + ' funciona igual, e qualquer um abre ou fecha clicando no marcador dourado.</p><p>Dica: <b>Paredes dos desenhos</b> transforma as linhas e retângulos já desenhados em paredes de uma vez.</p>',
       task: 'Desenhe uma parede entre a Lyra e os goblins.',
       spot: el('#toolbar [data-tool="wall"]'),
       enter: () => { T.base.walls = (scene().walls || []).length; },
@@ -329,6 +329,17 @@
       spot: () => el('#token-hud .fly-row')() || tokRect('g2')(),
       enter: () => { App.UI.setViewAs(null); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); select('g2'); },
       done: () => Object.values(scene().tokens).some((t) => Number(t.fly) > 0) },
+    { ch: 'Luz e paredes', title: 'Pontos de luz',
+      body: `Nem toda luz vem de um personagem. Com a ferramenta <b>Luz</b> ${k('U')} você põe luzes presas ao mapa:
+        <ul><li><b>Círculo</b>: um lustre ou uma fogueira. Clique para pôr, ou arraste para escolher o alcance.</li>
+        <li><b>Cone</b>: um holofote ou a luz entrando pela janela. Arraste para a direção.</li>
+        <li><b>Área</b>: a sala inteira acesa por igual. As paredes seguram a luz.</li></ul>
+        <p>No painel da luz ficam a <b>cor</b>, a intensidade da cor, <b>tremular</b> e acesa ou apagada (dois cliques no marcador também). O tipo <b>Escuridão</b> faz o contrário: apaga qualquer luz onde está, até de dia.</p>
+        <p>A luz dos tokens também tem cor, tremor e <b>cone</b>: a lanterna aponta para onde o personagem andou.</p>`,
+      task: 'Escolha a ferramenta Luz e clique no mapa para pôr uma luz.',
+      spot: el('#toolbar [data-tool="light"]'),
+      enter: () => { App.UI.setViewAs(null); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); B().selected = null; T.base.lights = (scene().lights || []).length; },
+      done: () => (scene().lights || []).length > (T.base.lights || 0) },
 
     // ---------- 10. Música e sons ----------
     { ch: 'Música e sons', title: 'O som da mesa',

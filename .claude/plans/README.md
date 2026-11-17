@@ -30,3 +30,7 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 4 | [Fechar o menu da ferramenta com outro clique](4-fechar-menu-da-ferramenta.md) | Concluído |
 | 5 | [Movimento com pontos de passagem](5-movimento-com-pontos.md) | Concluído |
 | 6 | [Limite de deslocamento](6-limite-de-deslocamento.md) | Proposto (ideia) |
+| 7 | [Rastro sem o token deslizar](7-rastro-sem-deslizar.md) | Concluído |
+| 8 | [Pontos de luz e de escuridão](8-pontos-de-luz.md) | Concluído |
+| 9 | [Área de luz só por pontos](9-area-so-por-pontos.md) | Concluído |
+| 10 | [Contorno das paredes no escuro](10-contorno-das-paredes.md) | Concluído |

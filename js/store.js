@@ -35,6 +35,10 @@
       // Imagens soltas no mapa: {id, img, name, x, y, w, h, rot (graus), flip, hidden, opacity, locked, z}
       // O nível (z) é compartilhado com os tokens: quem tem z maior é desenhado por cima.
       props: [],
+      // Pontos de luz e de escuridão presos ao mapa (só o mestre mexe):
+      // {id, name, kind: 'light'|'dark', shape: 'circle'|'cone'|'area', x, y, bright, dim (quadrados), dir, angle (graus),
+      //  pts [[x,y]…] (área), edge (penumbra em volta da área, quadrados), color, tint (0–1), flicker, on}
+      lights: [],
     };
   }
 
@@ -131,6 +135,7 @@
       sc.rooms = Array.isArray(sc.rooms) ? sc.rooms : [];
       sc.groups = Array.isArray(sc.groups) ? sc.groups : [];
       sc.props = Array.isArray(sc.props) ? sc.props : [];
+      sc.lights = Array.isArray(sc.lights) ? sc.lights : [];
       st.scenes[id] = sc;
       if (!st.sceneOrder.includes(id)) st.sceneOrder.push(id);
     }
@@ -290,6 +295,9 @@
       if (Array.isArray(a.path) && a.path.length >= 2 && a.path.length <= 64) {
         const pts = a.path.map((p) => [Math.round(Number(p[0]) || 0), Math.round(Number(p[1]) || 0)]);
         t.lastMove = { pts, at: Number(a.at) || Date.now() };
+        // Lanterna em cone: o token passa a olhar para onde andou por último
+        const [p0, p1] = [pts[pts.length - 2], pts[pts.length - 1]];
+        if (t.light && t.light.shape === 'cone' && (p1[0] !== p0[0] || p1[1] !== p0[1])) t.facing = Math.round((Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) * 180) / Math.PI);
       }
     },
     'token.update': (s, a) => { Object.assign(tok(s, a), a.patch); },
@@ -343,6 +351,10 @@
     'prop.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = sc.props || []; sc.props.push(a.prop); },
     'prop.update': (s, a) => { const x = (sceneOf(s, a.sceneId).props || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
     'prop.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = (sc.props || []).filter((y) => y.id !== a.id); },
+    // Pontos de luz e de escuridão no mapa
+    'lightpt.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = sc.lights || []; if (a.light && a.light.id) sc.lights.push(a.light); },
+    'lightpt.update': (s, a) => { const x = (sceneOf(s, a.sceneId).lights || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
+    'lightpt.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = (sc.lights || []).filter((y) => y.id !== a.id); },
     // Níveis: imagens e tokens numa só ordem. dir = front | up | down | back (none = só renumera). Renumera tudo de 0 a n.
     'order.move': (s, a) => {
       const sc = sceneOf(s, a.sceneId);
@@ -764,7 +776,8 @@
       }
       case 'token.update': {
         const t = tokenOk(a.sceneId, a.id);
-        return !!t && !!a.patch && Object.keys(a.patch).every((k) => k === 'bars' || k === 'conditions'); // luz e visão: só o mestre
+        // luz e visão: só o mestre; para onde o token olha (lanterna em cone), o dono também
+        return !!t && !!a.patch && Object.keys(a.patch).every((k) => k === 'bars' || k === 'conditions' || (k === 'facing' && Number.isFinite(Number(a.patch.facing))));
       }
       case 'token.add': {
         const ac = a.token && s.actors[a.token.actorId];

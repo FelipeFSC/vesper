@@ -51,7 +51,7 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 ## Movimento por caminho (Plano 5)
 - Arrastando um token (ou a Régua), o botão direito marca pontos de passagem (via `mousedown`, porque o 2º botão não gera `pointerdown`); Backspace desfaz. Sem segurar nada, o direito move a câmera.
 - `drawPath`: trechos com distância, total, vermelho onde atravessa parede (só aviso). `pathCost` soma na medida da cena; na 1-2-1 as diagonais acumulam entre trechos.
-- `token.move` leva `path` e `at` → `t.lastMove`; o token desliza pelo caminho e todos veem o rastro por `rules.trailSecs` segundos (Mesa → Regras; 0 desliga).
+- `token.move` leva `path` e `at` → `t.lastMove`; o token vai direto ao destino (sem deslizar, Plano 7) e todos veem o rastro por `rules.trailSecs` segundos (Mesa → Regras; 0 desliga).
 
 ## Visibilidade dos tokens
 - **Visível / Vulto / Invisível** (`t.hidden`, `t.masked`). Vulto: jogadores veem um círculo escuro com "?", sem imagem, nome, vida nem condições; podem atacá-lo; o nome aparece como "Vulto" no chat, na mira e no combate. O mestre vê o token com um aro tracejado.
@@ -76,8 +76,13 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Chat, dados, combate e música geral continuam compartilhados.
 
 ## Luz e visão (`js/light.js`)
-- Escuro: jogador vê o que está iluminado **e** na linha de visão de um token dele. Claro: tudo iluminado, paredes ainda escondem.
-- Luz do token (vela, tocha 4/8, lanterna, fogueira) e visão no escuro. Ver como os jogadores (todos ou um).
+- **Três níveis** (decisão do usuário, Plano 8): 2 luz plena (vê tudo), 1 meia luz (vê escurecido), 0 escuridão (preto). **Visão no escuro sobe um nível** no alcance dela. Visível = nível ≥ 1 e na linha de visão (`levelAt`, `levelFor`, `pointVisible`).
+- Escuro: jogador vê o que está em meia luz ou mais **e** na linha de visão de um token dele. Claro: tudo em luz plena (menos onde há escuridão), paredes ainda escondem.
+- Luz do token (vela, tocha 4/8, lanterna, fogueira): bright = raio de luz plena, dim = raio de meia luz. Opções `t.light.shape` (circle|cone), `angle`, `color`, `tint`, `flicker`. O cone aponta para `t.facing` (graus, 0 = direita, 90 = baixo), que o `token.move` atualiza pela direção do último trecho; o dono do token pode mudar `facing` (`permit`).
+- **Pontos de luz** (`sc.lights`, ferramenta Luz `U`, só o mestre): círculo e cone (bright/dim em quadrados, `dir`, `angle`; borda lateral do cone de 10° em meia luz), área (`pts`, `edge` = faixa de meia luz em volta). A área ilumina a partir de até 25 pontos de dentro dela (`areaSamples`), então paredes fazem sombra e a luz não vaza. `kind: 'dark'` = escuridão: miolo vira nível 0 e borda no máximo 1, vale de dia e sobre tochas; visão no escuro sobe um nível dentro dela. `on` acende e apaga (dois cliques no marcador).
+- Desenho: máscara em cinza (branco/cinza/preto) com `lighten` para luzes e `darken` para escuridão, multiplicada sobre o mapa. A cor (`soft-light` + `lighter`) é só visual. Tremor: raio e intensidade oscilam; o tabuleiro anima enquanto houver luz tremulando (`flickering`).
+- **Contorno das paredes no escuro** (Plano 10, `drawWallHints` em `js/board.js`): só para jogadores (e "ver como"), com a iluminação ligada. Linha clara nas paredes dentro da linha de visão dos tokens dele, mesmo sem luz; portas em dourado (tracejado se aberta). Recortado pelo polígono de visão (metade da linha aparece na borda) e apagado debaixo da névoa de guerra.
+- Ver como os jogadores (todos ou um).
 - Névoa de guerra manual (revelar/esconder retângulos).
 
 ## Som (`js/audio.js`)
@@ -91,4 +96,4 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Painel Mesa: conexão, salvar/exportar, regras, listas da campanha (atributos, barras, condições) como etiquetas.
 
 ## Atalhos
-`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `M` sala de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.
+`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `M` sala de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.

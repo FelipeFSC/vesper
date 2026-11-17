@@ -155,6 +155,7 @@ td:first-child { white-space: nowrap; }
     <a href="#voo">Criaturas que voam</a>
     <a href="#desenho">Desenho, névoa e régua</a>
     <a href="#luz">Luz, paredes e portas</a>
+<a href="#pontos-luz">Pontos de luz e de escuridão</a>
     <a href="#cobertura">Muros baixos e cobertura</a>
     <h3>Jogar</h3>
     <a href="#acoes">Ações: ataques, magias e curas</a>
@@ -424,7 +425,7 @@ td:first-child { white-space: nowrap; }
     <li>Segure o token com o <b>botão esquerdo</b> e arraste.</li>
     <li>Sem soltar, clique com o <b>botão direito</b>: fica um ponto no centro do quadrado. Continue arrastando e marque quantos pontos quiser.</li>
     <li>Cada trecho mostra a sua distância, e a régua perto do token mostra o <b>total</b>.</li>
-    <li>Solte o botão esquerdo: o token <b>desliza pelo caminho</b> até o destino.</li>
+    <li>Solte o botão esquerdo: o token vai para o destino e fica o <b>rastro do caminho</b>.</li>
   </ol>
   <ul>
     <li><kbd>Backspace</kbd> (ainda segurando) desfaz o último ponto.</li>
@@ -501,15 +502,50 @@ td:first-child { white-space: nowrap; }
   <ol>
     <li>Sem nenhum token selecionado, ligue <b>Luz e visão dinâmicas</b> na lateral direita e escolha <b>Claro</b> ou <b>Escuro</b>.</li>
     <li>Use <b>Parede</b> <kbd>W</kbd> e <b>Porta</b> <kbd>O</kbd>: arraste de um canto do grid até outro.</li>
-    <li>Selecione o token e escolha a luz dele em <b>Luz e visão</b>: vela, <b>Tocha (4/8)</b>, lanterna ou fogueira. Ali também fica a <b>visão no escuro</b>.</li>
+    <li>Selecione o token e escolha a luz dele em <b>Luz e visão</b>: vela, <b>Tocha (4/8)</b>, lanterna ou fogueira. Ali também ficam a cor, <b>Tremular</b>, a luz <b>em cone</b> e a <b>visão no escuro</b>.</li>
+    <li>Para luzes presas ao mapa (lustre, janela, sala acesa) e para escuridão, use a ferramenta <b>Luz</b> <kbd>U</kbd>. Veja <a href="#pontos-luz">Pontos de luz e de escuridão</a>.</li>
   </ol>
+  <h4 id="niveis-luz">Os três níveis de luz</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Nível</th><th>O que o jogador vê</th><th>Com visão no escuro</th></tr></thead>
+    <tbody>
+      <tr><td><b>Luz plena</b></td><td>Tudo, normalmente</td><td>Luz plena</td></tr>
+      <tr><td><b>Meia luz</b></td><td>Vê, mas escurecido</td><td>Luz plena</td></tr>
+      <tr><td><b>Escuridão</b></td><td>Preto: nada aparece</td><td>Meia luz</td></tr>
+    </tbody>
+  </table></div>
+  <p>A <b>visão no escuro</b> enxerga <b>um nível acima</b> até a distância dela. Quem está em meia luz ou em luz plena pode ser visto e atacado; quem está na escuridão, não.</p>
   <ul>
     <li><b>Escuro</b>: os jogadores só veem o que uma luz ilumina. <b>Claro</b>: tudo é visível, mas as paredes ainda escondem o outro lado.</li>
     <li>Portas abrem e fecham com um clique no marcador dourado. Os jogadores também podem abrir.</li>
+    <li><b>Contorno no escuro:</b> o jogador vê uma linha clara nas paredes que o personagem enxerga, mesmo sem luz, e as portas em dourado. Assim ele sabe o limite da sala. Paredes fora da vista e debaixo da névoa de guerra continuam escondidas.</li>
     <li>Já desenhou as salas com linhas e retângulos? <b>Configurar cena → Paredes dos desenhos</b> transforma os desenhos em paredes.</li>
     <li>Monstros que o jogador não vê também não podem ser clicados nem atacados por ele.</li>
   </ul>
-  <div class="note ex"><b>Exemplo</b><p>"Tocha (4/8)" ilumina forte até 4 quadrados e fraco até 8.</p></div>
+  <div class="note ex"><b>Exemplo</b><p>"Tocha (4/8)" dá luz plena até 4 quadrados e meia luz até 8.</p></div>
+
+  <h4 id="pontos-luz">Pontos de luz e de escuridão <span class="who gm">Mestre</span></h4>
+  <p>Luzes presas ao mapa, sem precisar de um token: o lustre do salão, a luz da janela, o altar que brilha. E o contrário: um ponto de <b>escuridão</b>.</p>
+  <figure><img src="img/pontos-luz.jpg" alt="Mapa escuro visto pelo jogador: uma fogueira quente com meia luz em volta e um círculo de escuridão preto, a lanterna em cone da Lyra, a luz azul de uma janela cortada por uma parede e um altar verde aceso" width="1116" height="650" loading="lazy"><figcaption>Como o jogador vê: fogueira com meia luz em volta e um círculo de escuridão, a lanterna em cone da Lyra, a luz azul da janela (a parede segura uma parte) e o altar verde.</figcaption></figure>
+  <ol>
+    <li>Escolha a ferramenta <b>Luz</b> <kbd>U</kbd>. No quadro ao lado, escolha <b>Luz</b> ou <b>Escuridão</b> e a forma.</li>
+    <li><b>Círculo</b>: clique para pôr (tocha, 4/8) ou arraste para escolher o alcance.</li>
+    <li><b>Cone</b>: clique na origem e arraste para a direção e o alcance (holofote, janela).</li>
+    <li><b>Área</b>: clique em cada canto e feche clicando no primeiro ponto, com dois cliques ou <kbd>Enter</kbd> (<kbd>Backspace</kbd> desfaz o último ponto). Tudo dentro fica em luz plena por igual.</li>
+  </ol>
+  <figure><img src="img/painel-luz.jpg" alt="Painel da luz Fogueira: Luz ou Escuridão, Acesa ou Apagada, forma Círculo, modelo, raios de luz plena e meia luz, cor da luz, intensidade e Tremular" width="254" height="552" loading="lazy"><figcaption>O painel de uma luz.</figcaption></figure>
+  <ul>
+    <li>Clique no marcador para abrir o <b>painel</b>: nome, luz ou escuridão, <b>acesa ou apagada</b>, forma, um modelo pronto (vela, tocha, lanterna, fogueira, holofote, sala acesa), os raios, a direção do cone, a <b>cor</b>, a intensidade da cor e <b>Tremular</b>.</li>
+    <li>No mapa: arraste o marcador para mover. A alça branca muda o alcance (no cone, também a direção; <kbd>Shift</kbd> gira de 15 em 15°), e a alça colorida muda o raio da luz plena.</li>
+    <li><b>Dois cliques</b> no marcador acendem ou apagam. <kbd>Delete</kbd> apaga e <kbd>Ctrl</kbd>+<kbd>D</kbd> duplica.</li>
+    <li><b>Paredes</b>: o círculo e o cone fazem sombra como a tocha de um token. A área também respeita as paredes: a luz não vaza para o outro lado.</li>
+    <li><b>Escuridão</b>: no miolo nada se vê, nem com tochas, nem de dia. Na borda fica no máximo meia luz. Quem tem visão no escuro vê o miolo como meia luz.</li>
+    <li>A <b>cor</b> é só visual: não muda quem vê o quê.</li>
+    <li>Os jogadores veem só o efeito. Os marcadores e contornos são seus, e a camada <b>Pontos de luz</b> esconde os marcadores só na sua tela.</li>
+    <li>As luzes só fazem efeito com <b>Luz e visão dinâmicas</b> ligada na cena.</li>
+  </ul>
+  <h4 id="lanterna">Lanterna em cone no token</h4>
+  <p>No painel do token, com uma luz escolhida, marque <b>Em cone</b>: a luz ilumina só à frente. O cone vira sozinho para onde o token <b>andou por último</b>, e as setas do painel apontam para outra direção. O jogador dono do token também pode virar a própria lanterna, mas só o mestre dá ou tira a luz.</p>
 
   <h4 id="cobertura">Muros baixos e cobertura</h4>
   <p>São quatro tipos. Com a ferramenta <b>Parede</b> ativa, escolha o tipo no quadro ao lado da barra. Ele vale para as próximas paredes. Clicar numa parede já desenhada troca o tipo dela.</p>
@@ -886,7 +922,7 @@ td:first-child { white-space: nowrap; }
       <tr><td><kbd>Delete</kbd></td><td>Remove o token selecionado (mestre).</td></tr>
       <tr><td><kbd>V</kbd> <kbd>H</kbd> <kbd>R</kbd> <kbd>P</kbd></td><td>Selecionar, mover câmera, régua, ping.</td></tr>
       <tr><td><kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>E</kbd> <kbd>X</kbd></td><td>Desenho livre, linha, retângulo, círculo, borracha.</td></tr>
-      <tr><td><kbd>F</kbd> <kbd>G</kbd> <kbd>W</kbd> <kbd>O</kbd> <kbd>M</kbd> <kbd>I</kbd></td><td>Revelar névoa, esconder névoa, parede, porta, sala de som, imagem.</td></tr>
+      <tr><td><kbd>F</kbd> <kbd>G</kbd> <kbd>W</kbd> <kbd>O</kbd> <kbd>U</kbd> <kbd>M</kbd> <kbd>I</kbd></td><td>Revelar névoa, esconder névoa, parede, porta, luz, sala de som, imagem.</td></tr>
     </tbody>
   </table></div>
   <a class="top" href="#">Voltar ao topo</a>

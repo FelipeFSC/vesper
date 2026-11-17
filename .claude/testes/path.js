@@ -26,10 +26,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     const t = () => sc().tokens[hero.id];
     log.push(`soltou: token em (${t().x / g}, ${t().y / g}) · caminho guardado com ${t().lastMove.pts.length} pontos: ${t().lastMove.pts.map((p) => '(' + p[0] / g + ',' + p[1] / g + ')').join(' → ')}`);
     const mid = B.posOf(t());
-    log.push(`logo depois de soltar, o token ainda está deslizando: posição desenhada (${Math.round((mid.x - g / 2) / g * 10) / 10}, ${Math.round((mid.y - g / 2) / g * 10) / 10}) ≠ destino`);
-    await W(1600);
-    const end = B.posOf(t());
-    log.push(`depois de 1,6 s chegou: (${(end.x - g / 2) / g}, ${(end.y - g / 2) / g})`);
+    log.push(`logo depois de soltar, o token já está desenhado no destino (sem deslizar): (${(mid.x - g / 2) / g}, ${(mid.y - g / 2) / g})`);
+    log.push('rastro na tela logo depois de soltar: ' + B.movesActive(sc()));
 
     // Backspace tira o último ponto
     pd(...c(5, 3)); pm(...c(6, 3)); right(...c(6, 3)); pm(...c(7, 3)); right(...c(7, 3)); pm(...c(7, 4));
