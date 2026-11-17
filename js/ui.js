@@ -1,0 +1,2131 @@
+'use strict';
+/* Interface: barra superior, laterais (fichas/cenas · propriedades/camadas), ferramentas do mapa,
+ * dock inferior (chat, dados, combate, mesa), janelas de ficha, painel do token e modais. */
+(function (App) {
+  const { U } = App;
+  const h = U.h;
+  const $ = (s) => document.querySelector(s);
+  const S = () => App.Store;
+
+  const UI = {
+    tab: null, leftTab: 'actors', rightTab: 'props', mode: 'edit',
+    secret: false, filter: '', windows: new Map(), started: false, z: 10,
+    chatSig: '', seenChatId: null, feedId: null, turnKey: '', openActs: new Set(),
+    dice: { pool: {}, mod: 0 },
+  };
+
+  // Ícones (Lucide, embutidos em icons.js)
+  const icHtml = (n, cls) => App.Icons.svg(n, cls);
+  const ic = (n, cls) => { const t = document.createElement('template'); t.innerHTML = icHtml(n, cls); return t.content.firstChild; };
+  const fillIcons = (root) => root.querySelectorAll('[data-icon]').forEach((el) => { if (!el.firstChild) el.innerHTML = icHtml(el.dataset.icon); });
+  const btnI = (icon, label, attrs = {}) => h('button', Object.assign({ class: 'btn' }, attrs), ic(icon), label);
+  const iconBtn = (icon, title, onclick, attrs = {}) => h('button', Object.assign({ class: 'icon-btn', title, onclick }, attrs), ic(icon));
+  UI.icon = ic;
+
+  const TOOLS = [
+    { id: 'select', icon: 'mouse-pointer-2', title: 'Selecionar e mover (V)\nArrastar no vazio move a câmera' },
+    { id: 'pan', icon: 'hand', title: 'Mover a câmera (H)\nOu: botão direito/meio, ou segurar Espaço' },
+    { id: 'ruler', icon: 'ruler', title: 'Régua (R)' },
+    { id: 'ping', icon: 'map-pin', title: 'Ping: chamar a atenção de todos (P)' },
+    { sep: true, edit: true },
+    { id: 'path', icon: 'pencil', title: 'Desenho livre (D)', edit: true, draw: true },
+    { id: 'line', icon: 'slash', title: 'Linha / parede (L)', edit: true, draw: true },
+    { id: 'rect', icon: 'square', title: 'Retângulo / sala (B)', edit: true, draw: true },
+    { id: 'ellipse', icon: 'circle', title: 'Círculo / área de efeito (E)', edit: true, draw: true },
+    { id: 'erase', icon: 'eraser', title: 'Apagar desenho (X)', edit: true },
+    { sep: true, gm: true, edit: true },
+    { id: 'fog-reveal', icon: 'sun', title: 'Névoa: revelar área (F)', gm: true, edit: true },
+    { id: 'fog-hide', icon: 'cloud-fog', title: 'Névoa: esconder área (G)', gm: true, edit: true },
+    { id: 'wall', icon: 'brick-wall', title: 'Parede (W): absoluta, total, três quartos ou meia\nArraste de um canto do grid a outro', gm: true, edit: true },
+    { id: 'door', icon: 'door-closed', title: 'Porta (O): parede que abre e fecha\nClique no marcador dourado para abrir', gm: true, edit: true },
+    { id: 'room', icon: 'music', title: 'Sala de som (M): área à prova de som, com música própria\nArraste um retângulo (ou clique nos cantos no modo polígono)', gm: true, edit: true },
+  ];
+  const DOCK = [
+    { id: 'chat', icon: 'message-square', label: 'Chat' },
+    { id: 'dice', icon: 'dices', label: 'Dados' },
+    { id: 'combat', icon: 'swords', label: 'Combate' },
+    { id: 'audio', icon: 'music', label: 'Som', gm: true },
+  ];
+  const PANEL_TITLE = { chat: 'Chat', dice: 'Dados', combat: 'Combate', table: 'Mesa', audio: 'Som' };
+  const KIND = { pc: 'Personagem', npc: 'NPC', monster: 'Criatura' };
+  const KIND_GROUP = { pc: 'Personagens', npc: 'NPCs', monster: 'Criaturas' };
+  const DRAW_COLORS = ['#e8e6ef', '#8f8d9a', '#1c1c21', '#d9574f', '#e07b4f', '#d2a24c', '#4fb27a', '#3f8f86', '#5b8be0', '#8b72f0'];
+
+  // =============== Início / ciclo de render ===============
+  UI.start = function () {
+    if (UI.started) return;
+    UI.started = true;
+    $('#lobby').hidden = true;
+    $('#app').hidden = false;
+    UI.mode = S().role === 'player' ? 'play' : 'edit';
+    fillIcons(document.body);
+    buildStatic();
+    buildChatPanel();
+    App.Board.init($('#board'));
+    App.Audio.init();
+    App.Audio.on(() => { if (UI.tab === 'audio') renderAudio(true); });
+    S().on((kind) => UI.schedule(kind));
+    UI.schedule('reset');
+    window.addEventListener('beforeunload', () => { if (S().gmView()) App.Storage.save(); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => App.Board.requestRender());
+  };
+
+  function buildStatic() {
+    $('#btn-invite').onclick = () => U.copy(App.Net.inviteLink());
+    $('#btn-home').onclick = () => UI.backToMenu();
+    $('#btn-mode').onclick = () => UI.setMode(UI.mode === 'edit' ? 'play' : 'edit');
+    $('#crumb-campaign').onclick = () => UI.showTab('table');
+    $('#crumb-scene').onclick = () => {
+      if (!S().gmView()) return;
+      if (UI.mode !== 'edit') UI.setMode('edit');
+      UI.leftTab = 'scenes'; renderLeft();
+    };
+    $('#dock-close').onclick = () => UI.closeDock();
+    const menu = $('#main-menu');
+    $('#btn-menu').onclick = (e) => { e.stopPropagation(); if (menu.hidden) { renderMenu(); menu.hidden = false; } else menu.hidden = true; };
+    document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.menu-wrap')) menu.hidden = true; });
+    for (const b of document.querySelectorAll('#zoom [data-z]')) {
+      b.onclick = () => { const z = b.dataset.z; if (z === 'fit') App.Board.fit(); else App.Board.zoomBy(z === 'in' ? 1.25 : 0.8); };
+    }
+    const dock = $('#dock');
+    dock.className = 'float-group';
+    for (const d of DOCK) {
+      if (d.gm && !S().isGM()) continue;
+      dock.append(h('button', { class: 'dock-btn', 'data-dock': d.id, onclick: () => (UI.tab === d.id ? UI.closeDock() : UI.showTab(d.id)) },
+        ic(d.icon), d.label, d.id === 'chat' ? h('span', { class: 'count', hidden: true }) : null));
+    }
+    // HUD flutuante perde o foco: redesenha (atualiza valores)
+    $('#token-hud').addEventListener('focusout', () => setTimeout(() => App.Board.requestRender(), 0));
+    $('#props-slot').prepend(h('div', { id: 'props-empty', class: 'empty-state' },
+      h('div', { class: 'bubble' }, ic('mouse-pointer-2')), h('b', {}, 'Nada selecionado'),
+      h('p', {}, 'Selecione um token no mapa para ver barras, condições e ações.')));
+    UI.setMode(UI.mode, true);
+  }
+
+  // Modo de edição (laterais abertas) × apresentação (só o mapa)
+  UI.setMode = function (mode, silent) {
+    UI.mode = mode;
+    $('#app').classList.toggle('play', mode === 'play');
+    const b = $('#btn-mode');
+    b.innerHTML = '';
+    if (mode === 'edit') { b.className = 'btn primary'; b.append(ic('play'), 'Apresentar'); b.title = 'Esconde os painéis e mostra só a mesa de jogo'; }
+    else { b.className = 'btn'; b.append(ic('pen-line'), S().gmView() ? 'Editar' : 'Painéis'); b.title = 'Mostra os painéis laterais (fichas, propriedades)'; }
+    const hud = $('#token-hud');
+    hud.classList.toggle('floating', mode === 'play');
+    if (mode === 'play') $('#board-wrap').append(hud); else $('#props-slot').append(hud);
+    hud._sig = null;
+    if (mode === 'play' && ['path', 'line', 'rect', 'ellipse', 'erase', 'fog-reveal', 'fog-hide'].includes(App.Board.tool)) App.Board.tool = 'select';
+    toolbarKey = null;
+    if (!silent) { UI.refresh(); setTimeout(() => { App.Board.resize(); App.Board.fit(); }, 0); }
+  };
+
+  // Mestre vendo a mesa exatamente como um jogador (null = voltar a ser mestre)
+  UI.setViewAs = function (pid) {
+    const S_ = S();
+    if (!S_.isGM() || (!pid && !S_.viewAs)) return;
+    if (pid && !S_.viewAs) UI.modeBefore = UI.mode;
+    S_.viewAs = pid || null;
+    const B = App.Board;
+    B.selected = null; B.selectedSound = null;
+    if (B.targeting) B.cancelTargeting();
+    toolbarKey = null;
+    for (const sel of ['#left-tabs', '#left-body', '#left-foot', '#avatars', '#board-actions', '#layers', '#right-tabs', '#init-strip', '#scene-label']) {
+      const e = $(sel); if (e) { e._sig = null; e._tab = null; }
+    }
+    UI.chatSig = '';
+    if (pid && (UI.tab === 'audio' || UI.tab === 'table')) UI.closeDock();
+    renderViewAsBar();
+    UI.setMode(pid ? 'play' : (UI.modeBefore || 'edit'));
+    App.Audio.sync();
+  };
+  function viewAsName(pid) {
+    if (pid === '*') return 'todos os jogadores';
+    const p = S().state && S().state.players[pid];
+    return p ? p.name : 'jogador';
+  }
+  function renderViewAsBar() {
+    const bar = $('#viewas-bar'), v = S().viewAs;
+    bar.hidden = !v;
+    bar.innerHTML = '';
+    if (!v) return;
+    bar.append(ic('scan-eye'), h('span', {}, 'Vendo como ', h('b', {}, viewAsName(v))),
+      h('button', { class: 'btn primary small', onclick: () => UI.setViewAs(null) }, 'Voltar a ser mestre'));
+  }
+
+  // rAF + setTimeout de reserva: o navegador pausa rAF em abas de segundo plano
+  let pendingRefresh = false;
+  UI.schedule = function () {
+    if (pendingRefresh) return;
+    pendingRefresh = true;
+    const run = () => { if (!pendingRefresh) return; pendingRefresh = false; UI.refresh(); };
+    requestAnimationFrame(run);
+    setTimeout(run, 150);
+  };
+
+  UI.refresh = function () {
+    renderTopbar();
+    UI.renderToolbar();
+    renderSceneLabel();
+    renderInitStrip();
+    renderBoardActions();
+    renderLeft();
+    renderRight();
+    renderDock();
+    if (UI.tab) renderPanel(UI.tab);
+    renderChat();
+    renderFeed();
+    for (const w of UI.windows.values()) renderWindow(w);
+    checkMyTurn();
+  };
+
+  // Alguém está digitando dentro de el? (campo de texto ou número com foco)
+  // Botões, listas, caixas de marcar e controles deslizantes não contam: o painel atualiza na hora.
+  function isTyping(el) {
+    const ae = document.activeElement;
+    if (!ae || !el || !el.contains(ae)) return false;
+    if (ae.tagName === 'TEXTAREA' || ae.isContentEditable) return true;
+    return ae.tagName === 'INPUT' && !/^(checkbox|radio|range|color|button|submit|reset|file|image)$/i.test(ae.type);
+  }
+  UI.isTyping = isTyping;
+
+  // Não reconstrói um painel enquanto o usuário digita nele
+  function safeRender(el, fn) {
+    if (isTyping(el)) {
+      el._stale = fn;
+      if (!el._foBound) {
+        el._foBound = true;
+        el.addEventListener('focusout', () => setTimeout(() => {
+          if (el._stale && !isTyping(el)) { const f = el._stale; el._stale = null; f(); }
+        }, 0));
+      }
+      return;
+    }
+    el._stale = null;
+    fn();
+  }
+
+  UI.setNetStatus = function (kind, text) {
+    const el = $('#net-status');
+    if (!el) return;
+    el.className = 'net ' + kind;
+    el.textContent = text;
+    $('#btn-invite').hidden = kind !== 'host';
+    if (UI.tab === 'table' && UI.started) renderPanel('table');
+  };
+  UI.onSaved = function () { const el = $('#saved-at'); if (el) el.textContent = 'Salvo às ' + U.fmtTime(App.Storage.lastSaved); };
+
+  // =============== Barra superior ===============
+  function renderTopbar() {
+    const st = S().state, gm = S().gmView();
+    $('#campaign-name').textContent = st ? st.name : '—';
+    const sc = S().currentScene();
+    $('#scene-title').textContent = sc ? sc.name : '—';
+    $('#crumb-scene').style.cursor = gm ? '' : 'default';
+    const warn = $('#scene-warn');
+    const away = sc && gm && st.activeSceneId !== sc.id;
+    const apart = gm ? Object.keys(st.playerScenes || {}).filter((pid) => st.players[pid]).length : 0;
+    warn.hidden = !away && !apart;
+    warn.textContent = away ? 'Grupo está em "' + ((st.scenes[st.activeSceneId] || {}).name || '—') + '"' : '';
+    if (apart) warn.textContent += (away ? ' · ' : '') + apart + (apart === 1 ? ' jogador separado' : ' jogadores separados');
+
+    const av = $('#avatars');
+    if (!st) { av.innerHTML = ''; return; }
+    const online = new Set(S().online);
+    const people = [];
+    if (st.gm) people.push({ name: st.gm.name, color: st.gm.color, on: true, gm: true });
+    for (const [pid, p] of Object.entries(st.players)) people.push({ name: p.name, color: p.color, on: online.has(pid) || pid === S().me.id });
+    const sig = JSON.stringify(people);
+    if (av._sig === sig) return;
+    av._sig = sig;
+    av.innerHTML = '';
+    people.slice(0, 4).forEach((p) => av.append(h('span', { class: p.on ? '' : 'off', title: p.name + (p.gm ? ' (mestre)' : p.on ? '' : ' (offline)'),
+      style: { background: U.safeColor(p.color, '#5f5e6a') } }, (p.name || '?').trim().slice(0, 1).toUpperCase())));
+    if (people.length > 4) av.append(h('span', { class: 'more', title: people.slice(4).map((p) => p.name).join(', ') }, '+' + (people.length - 4)));
+  }
+
+  function renderMenu() {
+    const m = $('#main-menu'), gm = S().gmView(), close = () => { m.hidden = true; };
+    const item = (icon, label, fn) => h('button', { onclick: () => { close(); fn(); } }, ic(icon), label);
+    m.innerHTML = '';
+    m.append(item('settings-2', 'Configurações da mesa', () => UI.showTab('table')));
+    if (App.Net.isOnline() && S().role === 'gm') m.append(item('link', 'Copiar convite', () => U.copy(App.Net.inviteLink())));
+    m.append(h('hr'));
+    if (gm) {
+      m.append(item('download', 'Exportar campanha (.json)', () => App.Storage.downloadJSON(App.Storage.campaignBundle(true), S().state.name)));
+      m.append(item('copy', 'Gerar código de texto', () => codeDialog()));
+    }
+    m.append(item('upload', gm ? 'Importar campanha, cena ou ficha' : 'Importar ficha', () => UI.importDialog()));
+    if (S().isGM() && S().state) {
+      m.append(h('hr'));
+      if (S().viewAs) m.append(item('scan-eye', 'Voltar a ser mestre', () => UI.setViewAs(null)));
+      else {
+        m.append(h('span', { class: 'menu-label' }, 'Ver a mesa como'));
+        m.append(item('users', 'Todos os jogadores', () => UI.setViewAs('*')));
+        for (const [pid, p] of Object.entries(S().state.players)) m.append(item('user-round', p.name, () => UI.setViewAs(pid)));
+      }
+    }
+    m.append(h('hr'));
+    m.append(h('a', { href: 'wiki/index.html', target: '_blank', onclick: close }, ic('scroll-text'), 'Manual'));
+    m.append(h('a', { href: '?tutorial', target: '_blank', onclick: close }, ic('book-open'), 'Tutorial interativo'));
+    m.append(h('hr'));
+    m.append(item('house', 'Voltar ao menu inicial', () => UI.backToMenu()));
+  }
+
+  // Volta para a tela inicial. O mestre salva antes; quem está online é avisado do que acontece.
+  UI.backToMenu = async function () {
+    const online = App.Net.isOnline(), role = S().role;
+    let msg = null;
+    if (new URLSearchParams(location.search).has('tutorial')) msg = 'Sair do tutorial e voltar ao menu? Nada do tutorial é salvo.';
+    else if (role === 'gm' && online) msg = 'Voltar ao menu fecha a mesa: os jogadores serão desconectados. A campanha fica salva.';
+    else if (role === 'player') msg = 'Sair da mesa e voltar ao menu? Você pode entrar de novo com o mesmo código.';
+    if (msg && !confirm(msg)) return;
+    if (S().isGM() && S().state) { try { await App.Storage.save(); } catch { /* */ } }
+    location.href = location.pathname;
+  };
+
+  // =============== Ferramentas ===============
+  let toolbarKey = null;
+  UI.renderToolbar = function () {
+    const bar = $('#toolbar'), gm = S().gmView(), B = App.Board, edit = UI.mode === 'edit';
+    const key = gm + ':' + edit;
+    if (toolbarKey !== key) {
+      toolbarKey = key;
+      bar.innerHTML = '';
+      for (const t of TOOLS) {
+        if ((t.gm && !gm) || (t.edit && !edit)) continue;
+        if (t.sep) { bar.append(h('div', { class: 'tool-sep' })); continue; }
+        bar.append(h('button', { class: 'tool', 'data-tool': t.id, title: t.title, onclick: () => B.setTool(t.id) }, ic(t.icon)));
+      }
+    }
+    for (const el of bar.querySelectorAll('[data-tool]')) el.classList.toggle('on', el.dataset.tool === B.tool);
+    renderToolOpts();
+  };
+
+  const fmtM = (n) => String(Math.round(Number(n) * 100) / 100).replace('.', ',') + ' m';
+  function renderToolOpts() {
+    const box = $('#tool-opts'), B = App.Board;
+    const t = TOOLS.find((x) => x.id === B.tool);
+    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room') || UI.mode !== 'edit') { box.hidden = true; return; }
+    const btn = $('#toolbar [data-tool="' + t.id + '"]');
+    box.style.top = (btn ? btn.offsetTop + 14 - 5 : 14) + 'px';
+    const rsc = S().currentScene();
+    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom;
+    box.hidden = false;
+    if (box._sig === sig) return;
+    box._sig = sig;
+    box.innerHTML = '';
+    const redo = () => { box._sig = null; renderToolOpts(); };
+    if (t.id === 'room') {
+      const rooms = (rsc && rsc.rooms) || [];
+      box.append(h('span', { class: 'eyebrow' }, 'Desenhar sala'),
+        h('div', { class: 'seg' },
+          h('button', { class: B.roomMode === 'rect' ? 'on' : '', onclick: () => { B.roomMode = 'rect'; B.roomPoly = null; redo(); } }, 'Retângulo'),
+          h('button', { class: B.roomMode === 'poly' ? 'on' : '', onclick: () => { B.roomMode = 'poly'; redo(); } }, 'Polígono')),
+        h('p', { class: 'hint', style: { margin: 0 } }, B.roomMode === 'rect'
+          ? 'Arraste de um canto a outro. Clique numa sala para editar.'
+          : 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter. Esc cancela.'),
+        h('span', { class: 'eyebrow' }, 'Salas desta cena'),
+        rooms.length ? h('div', { class: 'room-list' }, rooms.map((r) => h('button', { class: 'room-item' + (B.selectedRoom === r.id ? ' on' : ''), onclick: () => { B.selectedRoom = r.id; B.selected = null; B.selectedSound = null; App.Board.requestRender(); UI.refresh(); redo(); } },
+          h('b', {}, r.name || 'Sala'), h('small', {}, r.music ? App.Audio.label(r.music.name) : 'sem música'))))
+          : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhuma ainda.'));
+      return;
+    }
+    if (t.id === 'wall') {
+      // Tipo de parede: vale para as próximas; clicar numa parede pronta aplica o tipo nela
+      const sc = S().currentScene(), cfg = App.Combat.coverCfg(sc);
+      const info = { full: 'casa com telhado · nunca deixa ver', high: `${fmtM(cfg.heights.high)} · tapa a luz e quem é mais baixo`, three: `${fmtM(cfg.heights.three)} · altura do ombro`, half: `${fmtM(cfg.heights.half)} · altura da cintura` };
+      box.append(h('span', { class: 'eyebrow' }, 'Tipo de parede'),
+        h('div', { class: 'wall-types' }, App.Combat.COVER_TYPES.map(([k, label]) => h('button', { class: 'wall-type' + (B.wallType === k ? ' on' : ''), onclick: () => { B.wallType = k; redo(); } },
+          h('i', { class: 'wt-line wt-' + k }), h('span', {}, h('b', {}, label), h('small', {}, info[k]))))),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura.'));
+      return;
+    }
+    box.append(h('span', { class: 'eyebrow' }, 'Cor'),
+      h('div', { class: 'swatches' }, DRAW_COLORS.map((c) => h('button', { class: 'swatch' + (B.style.color === c ? ' on' : ''), title: c, style: { background: c },
+        onclick: () => { B.style.color = c; redo(); } }))),
+      h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Outra cor'),
+        h('input', { type: 'color', value: B.style.color, oninput: (e) => { B.style.color = e.target.value; } })),
+      h('span', { class: 'eyebrow' }, 'Espessura'),
+      h('div', { class: 'seg' }, [2, 4, 8, 14].map((n) => h('button', { class: B.style.width === n ? 'on' : '', onclick: () => { B.style.width = n; redo(); } }, String(n)))));
+    if (t.id === 'rect' || t.id === 'ellipse') {
+      box.append(h('span', { class: 'eyebrow' }, 'Preenchimento'),
+        h('div', { class: 'seg' }, [[0, 'Vazio'], [0.35, 'Transl.'], [1, 'Sólido']].map(([v, l]) => h('button', { class: B.style.fill === v ? 'on' : '', onclick: () => { B.style.fill = v; redo(); } }, l))));
+    }
+  }
+
+  function renderSceneLabel() {
+    const el = $('#scene-label'), sc = S().currentScene();
+    const sig = sc ? [sc.name, sc.cols, sc.rows, sc.cellDist, sc.unit].join('|') : '';
+    if (el._sig === sig) return;
+    el._sig = sig;
+    el.innerHTML = '';
+    if (sc) el.append(h('b', {}, sc.name), h('span', {}, `${sc.cols}×${sc.rows} · 1 quadrado = ${String(sc.cellDist).replace('.', ',')} ${sc.unit}`));
+  }
+
+  function renderBoardActions() {
+    const box = $('#board-actions'), gm = S().gmView(), B = App.Board, sc = S().currentScene();
+    const sig = [gm, B.style.snap, !!sc].join();
+    if (box._sig === sig) return;
+    box._sig = sig;
+    box.innerHTML = '';
+    if (gm && sc) box.append(btnI('image', 'Trocar mapa', { title: 'Enviar imagem de mapa e configurar a cena', onclick: () => sceneSettings(S().currentScene().id) }));
+    box.append(btnI('grid-3x3', B.style.snap ? 'Encaixe ativo' : 'Encaixe desligado', {
+      class: 'btn' + (B.style.snap ? ' on' : ''), title: 'Encaixar tokens e desenhos no grid (segure Alt ao soltar para ignorar)',
+      onclick: () => { B.style.snap = !B.style.snap; box._sig = null; renderBoardActions(); },
+    }));
+  }
+
+  // =============== Faixa de iniciativa ===============
+  function renderInitStrip() {
+    const el = $('#init-strip'), st = S().state;
+    if (!st || !st.combat.active) { el.hidden = true; el._sig = null; return; }
+    const c = st.combat, gm = S().gmView();
+    const sig = JSON.stringify([c.round, c.turn, c.entries, gm, Object.keys(st.scenes).map((k) => Object.values(st.scenes[k].tokens).map((t) => [t.id, t.name, t.hidden, t.masked, t.color]))]);
+    el.hidden = false;
+    if (el._sig === sig) return;
+    el._sig = sig;
+    el.innerHTML = '';
+    const ord = h('div', { class: 'ord' });
+    c.entries.forEach((e, i) => {
+      const t = entryToken(e);
+      if (!t || (t.hidden && !gm)) return;
+      const a = S().actorOf(t), veil = t.masked && !gm && !S().canControl(t);
+      const av = veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 30);
+      av.classList.toggle('now', i === c.turn);
+      av.title = (veil ? 'Vulto' : t.name) + (e.init != null ? ' · ' + e.init : '');
+      av.onclick = () => focusToken(e, t);
+      ord.append(av);
+    });
+    const cur = c.entries[c.turn], curTok = cur && entryToken(cur);
+    el.append(h('span', { class: 'rd' }, 'Rodada ' + c.round), ord);
+    if (gm) el.append(iconBtn('skip-back', 'Turno anterior', () => S().dispatch({ type: 'combat.prev' })),
+      btnI('skip-forward', 'Próximo', { class: 'btn primary small', onclick: () => S().dispatch({ type: 'combat.next' }) }));
+    else if (curTok && S().canControl(curTok)) el.append(btnI('flag', 'Encerrar turno', { class: 'btn primary small', onclick: () => S().dispatch({ type: 'combat.next' }) }));
+  }
+
+  function focusToken(e, t) {
+    const sc = S().currentScene();
+    if (sc && sc.id === e.sceneId) {
+      App.Board.selected = t.id;
+      const g = sc.grid * (t.size || 1);
+      App.Board.centerOn(t.x + g / 2, t.y + g / 2);
+    }
+  }
+
+  // =============== Lateral esquerda: fichas e cenas ===============
+  function renderLeft() {
+    const tabs = $('#left-tabs'), gm = S().gmView();
+    if (!gm && UI.leftTab === 'scenes') UI.leftTab = 'actors';
+    const list = [{ id: 'actors', icon: 'users', label: 'Fichas' }];
+    if (gm) list.push({ id: 'scenes', icon: 'map', label: 'Cenas' });
+    const sig = gm + UI.leftTab;
+    if (tabs._sig !== sig) {
+      tabs._sig = sig;
+      tabs.innerHTML = '';
+      for (const t of list) tabs.append(h('button', { class: 'side-tab' + (UI.leftTab === t.id ? ' on' : ''), onclick: () => { UI.leftTab = t.id; renderLeft(); } }, ic(t.icon), t.label));
+    }
+    if (UI.leftTab === 'scenes') renderScenes(); else renderActors();
+  }
+
+  function avatar(a, size) {
+    const src = App.Images.src(a && a.img);
+    const col = U.safeColor(a && a.color, '#5f5e6a');
+    return h('div', { class: 'avatar', style: {
+      width: size + 'px', height: size + 'px', fontSize: size * 0.4 + 'px',
+      background: src ? `center/cover url(${src})` : `radial-gradient(circle at 35% 30%, ${U.hexA(col, 1)}, ${shade(col, -0.35)})`,
+    } }, src ? '' : initials(a && a.name, size < 34 ? 1 : 2));
+  }
+  function initials(name, n) {
+    const w = String(name || '?').trim().split(/\s+/).filter(Boolean);
+    if (n > 1 && w.length > 1) return (w[0][0] + w[1][0]).toUpperCase();
+    return (w[0] || '?').slice(0, 1).toUpperCase();
+  }
+  function shade(hex, k) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    if (!m) return hex;
+    const f = (x) => Math.round(U.clamp(parseInt(x, 16) * (1 + k), 0, 255));
+    return `rgb(${f(m[1])},${f(m[2])},${f(m[3])})`;
+  }
+  UI.shade = shade;
+  function ownerLabel(a) {
+    if (a.owner === 'all') return 'Todos os jogadores';
+    if (!a.owner) return 'Só o mestre';
+    return S().playerName(a.owner);
+  }
+  function actorSub(a, gm) {
+    const bar = (a.bars || [])[0];
+    const parts = [KIND[a.kind] || ''];
+    if (gm) parts.push(ownerLabel(a));
+    else if (bar) parts.push(`${bar.name} ${bar.value}/${bar.max}`);
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  function renderActors() {
+    const body = $('#left-body'), foot = $('#left-foot');
+    safeRender(body, () => {
+      const st = S().state;
+      if (!st) { body.innerHTML = ''; return; }
+      const gm = S().gmView();
+      const sig = JSON.stringify([UI.filter, gm, Object.values(st.actors).map((a) => [a.id, a.name, a.kind, a.owner, a.color, a.img, gm ? 0 : a.bars && a.bars[0]]), st.players]);
+      if (body._sig === sig && body._tab === 'actors') return;
+      body._sig = sig; body._tab = 'actors';
+      body.innerHTML = '';
+      const search = h('input', { placeholder: 'Buscar ficha…', value: UI.filter, oninput: (e) => { UI.filter = e.target.value; body._sig = null; renderActors(); } });
+      body.append(h('div', { class: 'search-box' }, ic('search'), search));
+      const q = U.slug(UI.filter);
+      const actors = Object.values(st.actors).filter((a) => S().ownsActor(a) && (!q || U.slug(a.name).includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+      for (const kind of ['pc', 'npc', 'monster']) {
+        const group = actors.filter((a) => a.kind === kind);
+        const canAdd = gm || kind === 'pc';
+        if (!group.length && !canAdd) continue;
+        if (!group.length && q) continue;
+        body.append(h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, KIND_GROUP[kind]),
+          canAdd && iconBtn('plus', 'Nova ficha: ' + KIND[kind], () => newActor(kind))));
+        if (!group.length) body.append(h('div', { class: 'empty' }, kind === 'pc' && !gm ? 'Você ainda não tem ficha.' : 'Nenhuma ainda.'));
+        for (const a of group) {
+          body.append(h('div', {
+            class: 'actor-item', draggable: true, title: 'Clique para abrir · arraste para o mapa',
+            ondragstart: (e) => { e.dataTransfer.setData('text/x-actor', a.id); e.dataTransfer.effectAllowed = 'copy'; },
+            onclick: () => UI.openActor(a.id),
+          },
+          avatar(a, 34),
+          h('div', { class: 'grow' }, h('div', { class: 'name' }, a.name), h('div', { class: 'sub' }, actorSub(a, gm))),
+          iconBtn('plus', 'Colocar no mapa', (e) => { e.stopPropagation(); App.Board.placeActor(a.id); })));
+        }
+      }
+      body.append(h('p', { class: 'hint' }, 'Arraste uma ficha para o mapa para criar um token. Duplo clique no token abre a ficha.'));
+    });
+    if (foot._tab !== 'actors') {
+      foot._tab = 'actors';
+      foot.innerHTML = '';
+      foot.append(btnI('folder-open', 'Importar ficha', { class: 'btn block', onclick: () => UI.importDialog() }));
+    }
+  }
+
+  UI.newActor = newActor;
+  function newActor(kind) {
+    const gm = S().gmView();
+    const a = {
+      id: U.uid('ac_'), kind, img: null, color: U.randColor(), size: 1,
+      name: kind === 'pc' ? (gm ? 'Novo personagem' : S().me.name) : kind === 'npc' ? 'Novo NPC' : 'Nova criatura',
+      owner: gm ? (kind === 'pc' ? 'all' : '') : S().me.id,
+      bars: campBars().slice(0, kind === 'pc' ? undefined : 1).map((n) => ({ name: n, value: 10, max: 10 })),
+      stats: campAttrs().map((n) => ({ name: n, value: U.slug(n) === 'defesa' ? 10 : 0 })), actions: [],
+      testFormula: '1d20+@valor', initFormula: '1d20', notes: '',
+    };
+    S().dispatch({ type: 'actor.add', actor: a });
+    UI.openActor(a.id);
+  }
+
+  function renderScenes() {
+    const body = $('#left-body'), foot = $('#left-foot');
+    safeRender(body, () => {
+      const st = S().state;
+      if (!st) return;
+      const viewing = S().currentScene();
+      const sig = JSON.stringify([st.sceneOrder, st.activeSceneId, viewing && viewing.id, st.sceneOrder.map((id) => { const s = st.scenes[id]; return [s.name, s.cols, s.rows, Object.keys(s.tokens).length]; }),
+        st.playerScenes, st.players, S().online]);
+      const online = new Set(S().online);
+      // Bolinhas de quem está em cada cena
+      const whoIn = (id) => Object.entries(st.players).filter(([pid]) => S().sceneIdOf(pid) === id);
+      const bubbles = (id) => {
+        const list = whoIn(id);
+        if (!list.length) return null;
+        return h('div', { class: 'scene-people' }, list.map(([pid, p]) => {
+          const av = avatar({ name: p.name, color: p.color }, 22);
+          av.title = p.name + (online.has(pid) ? '' : ' (desconectado)') + ((st.playerScenes || {})[pid] ? ' · separado do grupo' : '');
+          av.classList.toggle('off', !online.has(pid));
+          av.classList.toggle('apart', !!(st.playerScenes || {})[pid]);
+          return av;
+        }));
+      };
+      if (body._sig === sig && body._tab === 'scenes') return;
+      body._sig = sig; body._tab = 'scenes';
+      body.innerHTML = '';
+      body.append(h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Cenas da campanha'),
+        iconBtn('plus', 'Nova cena', () => {
+          const sc = S().newScene('Cena ' + (st.sceneOrder.length + 1));
+          S().dispatch({ type: 'scene.add', scene: sc });
+          S().viewSceneId = sc.id;
+          sceneSettings(sc.id);
+        })));
+      st.sceneOrder.forEach((id, i) => {
+        const sc = st.scenes[id], active = st.activeSceneId === id;
+        body.append(h('div', { class: 'scene-item' + (viewing && viewing.id === id ? ' viewing' : ''), title: 'Clique para ver e editar (os jogadores não mudam de cena)',
+          onclick: () => { S().viewSceneId = id; S().emit('local'); } },
+        h('div', { class: 'grow' },
+          h('div', { class: 'name' }, sc.name),
+          h('div', { class: 'sub' }, `${sc.cols}×${sc.rows} · ${Object.keys(sc.tokens).length} tokens`),
+          bubbles(id),
+          h('div', { class: 'row wrap', style: { marginTop: '6px', gap: '6px' }, onclick: (e) => e.stopPropagation() },
+            active ? h('span', { class: 'badge gold' }, 'Cena do grupo')
+              : h('button', { class: 'btn small', title: 'Levar o grupo para esta cena (quem foi separado continua onde está)',
+                onclick: () => { S().dispatch({ type: 'scene.activate', id }); S().viewSceneId = id; App.Audio.onSceneActivated(S().state.scenes[id]); } }, ic('play'), 'Ativar'),
+            h('button', { class: 'btn small', title: 'Escolher quais jogadores ficam nesta cena', onclick: () => movePlayersDialog(id) }, ic('users'), 'Mover jogadores'))),
+        h('div', { class: 'acts', onclick: (e) => e.stopPropagation() },
+          iconBtn('arrow-up', 'Subir', () => S().dispatch({ type: 'scene.move', id, dir: -1 }), { disabled: i === 0 }),
+          iconBtn('settings-2', 'Configurar', () => sceneSettings(id)),
+          iconBtn('download', 'Exportar cena', () => App.Storage.downloadJSON(App.Storage.sceneBundle(id), 'cena_' + sc.name)),
+          iconBtn('trash-2', 'Excluir', () => { if (confirm(`Excluir a cena "${sc.name}"?`)) S().dispatch({ type: 'scene.delete', id }); }))));
+      });
+      body.append(h('p', { class: 'hint' }, 'Monte salas com as ferramentas de desenho (retângulo sólido = piso, linha = parede) ou envie uma imagem de mapa em "Trocar mapa".'));
+    });
+    if (foot._tab !== 'scenes') {
+      foot._tab = 'scenes';
+      foot.innerHTML = '';
+      foot.append(btnI('folder-open', 'Importar cena', { class: 'btn block', onclick: () => UI.importDialog() }));
+    }
+  }
+
+  // Escolher quem fica numa cena (um ou vários). Na cena do grupo, marcar traz o jogador de volta.
+  function movePlayersDialog(id) {
+    const st = S().state, sc = st.scenes[id], online = new Set(S().online);
+    if (!sc) return;
+    const isGroup = st.activeSceneId === id;
+    const players = Object.entries(st.players);
+    const chosen = new Set(players.filter(([pid]) => S().sceneIdOf(pid) === id).map(([pid]) => pid));
+    const where = (pid) => { const sid = S().sceneIdOf(pid); return sid === st.activeSceneId ? 'com o grupo' : 'separado em "' + ((st.scenes[sid] || {}).name || '—') + '"'; };
+    const body = h('div', { class: 'col', style: { gap: '10px', minWidth: '320px' } },
+      h('p', { class: 'muted', style: { margin: 0 } }, isGroup
+        ? 'Esta é a cena do grupo. Marque quem estava separado para trazer de volta.'
+        : 'Os marcados vão para esta cena e veem só ela. Desmarcar devolve o jogador ao grupo.'));
+    if (!players.length) body.append(h('p', { class: 'empty' }, 'Nenhum jogador entrou na mesa ainda.'));
+    else {
+      const list = h('div', { class: 'move-list' });
+      const draw = () => {
+        list.innerHTML = '';
+        for (const [pid, p] of players) {
+          const here = S().sceneIdOf(pid) === id, locked = isGroup && here;
+          list.append(h('label', { class: 'move-row' + (locked ? ' locked' : '') },
+            h('input', { type: 'checkbox', checked: chosen.has(pid), disabled: locked, onchange: (e) => { if (e.target.checked) chosen.add(pid); else chosen.delete(pid); } }),
+            avatar({ name: p.name, color: p.color }, 26),
+            h('span', { class: 'grow' }, h('b', {}, p.name), h('small', {}, (online.has(pid) ? '' : 'desconectado · ') + where(pid)))));
+        }
+      };
+      draw();
+      body.append(list, h('div', { class: 'row' },
+        h('button', { class: 'btn small', onclick: () => { for (const [pid] of players) chosen.add(pid); draw(); } }, 'Marcar todos'),
+        isGroup ? '' : h('button', { class: 'btn small', onclick: () => { chosen.clear(); draw(); } }, 'Desmarcar todos')));
+    }
+    UI.modal('Mover jogadores para "' + sc.name + '"', body, [
+      { label: 'Cancelar' },
+      { label: 'Mover', primary: true, onclick: () => {
+        S().dispatch({ type: 'scene.movePlayers', id, players: [...chosen] });
+        U.toast(isGroup ? 'Jogadores de volta ao grupo.' : chosen.size ? chosen.size + (chosen.size === 1 ? ' jogador em ' : ' jogadores em ') + '"' + sc.name + '".' : 'Ninguém separado nesta cena.');
+      } },
+    ]);
+  }
+  UI.movePlayersDialog = movePlayersDialog;
+
+  // =============== Lateral direita: propriedades e camadas ===============
+  function renderRight() {
+    const tabs = $('#right-tabs');
+    if (tabs._sig !== UI.rightTab) {
+      tabs._sig = UI.rightTab;
+      tabs.innerHTML = '';
+      for (const t of [{ id: 'props', icon: 'sliders-horizontal', label: 'Propriedades' }, { id: 'layers', icon: 'layers', label: 'Camadas' }]) {
+        tabs.append(h('button', { class: 'side-tab' + (UI.rightTab === t.id ? ' on' : ''), onclick: () => { UI.rightTab = t.id; renderRight(); } }, ic(t.icon), t.label));
+      }
+    }
+    $('#props-slot').hidden = UI.rightTab !== 'props';
+    renderLayers();
+  }
+
+  function renderLayers() {
+    const box = $('#layers'), sc = S().currentScene(), gm = S().gmView(), L = App.Board.layers;
+    if (!sc) { box.innerHTML = ''; return; }
+    const sig = JSON.stringify([L, gm, Object.keys(sc.tokens).length, sc.drawings.length, sc.fog.enabled, sc.fog.shapes.length, !!sc.bg, UI.rightTab,
+      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, S().viewAs,
+      sc.groups, Object.values(sc.tokens).map((t) => [t.group, t.hidden, t.masked]), App.Board.selected]);
+    if (box._sig === sig) return;
+    box._sig = sig;
+    box.innerHTML = '';
+    box.style.borderTop = UI.rightTab === 'layers' ? '0' : '';
+    box.style.marginTop = UI.rightTab === 'layers' ? '-14px' : '';
+    box.append(h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Camadas da cena'),
+      gm && iconBtn('settings-2', 'Configurar cena', () => sceneSettings(sc.id))));
+    const row = (key, icon, label, n, canToggle = true) => h('div', { class: 'layer' + (L[key] ? '' : ' off') }, ic(icon), h('span', { class: 'grow' }, label), h('span', { class: 'n' }, n),
+      canToggle && iconBtn(L[key] ? 'eye' : 'eye-off', L[key] ? 'Esconder (só para você)' : 'Mostrar', () => { L[key] = !L[key]; App.Board.requestRender(); box._sig = null; renderLayers(); }));
+    box.append(
+      row('tokens', 'users', 'Tokens', Object.keys(sc.tokens).length),
+      row('drawings', 'pencil', 'Desenhos', sc.drawings.length),
+      row('fog', 'cloud-fog', sc.fog.enabled ? 'Névoa de guerra' : 'Névoa (desligada)', sc.fog.shapes.length, gm),
+      row('map', 'image', 'Mapa base', sc.bg ? 1 : 0));
+    if (gm) box.append(row('walls', 'brick-wall', 'Paredes e portas', (sc.walls || []).length));
+    if (gm) box.append(row('sounds', 'volume-2', 'Sons no mapa', (sc.sounds || []).length));
+    if (gm) box.append(row('rooms', 'music', 'Salas de som', (sc.rooms || []).length));
+    if (gm && sc.light.enabled) box.append(row('light', 'moon', 'Escuridão', sc.light.global ? 'dia' : 'noite'));
+    if (UI.rightTab === 'layers') box.append(h('p', { class: 'hint' }, 'Esconder uma camada vale só para a sua tela: os outros continuam vendo.'));
+    if (gm) box.append(groupsSection(sc));
+    if (gm) box.append(lightSection(sc));
+  }
+
+  // Iluminação da cena (mestre)
+  function lightSection(sc) {
+    const B = App.Board, li = sc.light;
+    const setLight = (patch) => S().dispatch({ type: 'scene.update', id: sc.id, patch: { light: Object.assign({}, sc.light, patch) } });
+    const sec = h('div', { id: 'light-sec', class: 'light-sec' },
+      h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Iluminação')),
+      h('label', { class: 'switch-row' }, ic('lightbulb'), h('span', { class: 'grow' }, 'Luz e visão dinâmicas'),
+        h('input', { type: 'checkbox', id: 'light-on', checked: li.enabled, onchange: (e) => setLight({ enabled: e.target.checked }) })));
+    if (li.enabled) {
+      sec.append(
+        h('div', { class: 'seg seg-lg' },
+          h('button', { class: li.global ? 'on' : '', title: 'Tudo iluminado; as paredes ainda bloqueiam a visão', onclick: () => setLight({ global: true }) }, ic('sun'), 'Claro'),
+          h('button', { class: li.global ? '' : 'on', title: 'Só se vê o que alguma luz ilumina', onclick: () => setLight({ global: false }) }, ic('moon'), 'Escuro')),
+        h('button', { class: 'btn small block', id: 'btn-preview', title: 'Mostra a mesa exatamente como os jogadores veem e ouvem', onclick: () => UI.setViewAs('*') },
+          ic('scan-eye'), 'Ver como os jogadores'),
+        h('div', { class: 'row' },
+          btnI('brick-wall', 'Paredes dos desenhos', { class: 'btn small grow', title: 'Transforma linhas, retângulos e círculos desenhados em paredes', onclick: () => {
+            const walls = App.Light.wallsFromDrawings(sc);
+            if (!walls.length) { U.toast('Não há desenhos nesta cena.'); return; }
+            S().dispatch({ type: 'wall.add', sceneId: sc.id, walls });
+            U.toast(walls.length + ' paredes criadas');
+          } }),
+          iconBtn('trash-2', 'Apagar todas as paredes', () => { if (confirm('Apagar todas as paredes e portas desta cena?')) S().dispatch({ type: 'wall.clear', sceneId: sc.id }); }, { disabled: !(sc.walls || []).length })),
+        h('p', { class: 'hint' }, li.global
+          ? 'Dia: tudo iluminado, mas ninguém enxerga através das paredes.'
+          : 'Noite: os jogadores só veem o que uma tocha ou outra luz ilumina. Dê luz aos tokens no painel de propriedades.'));
+    } else sec.append(h('p', { class: 'hint' }, 'Ligue para escurecer o mapa, criar paredes que bloqueiam a visão e esconder monstros e armadilhas.'));
+    return sec;
+  }
+
+  // =============== Dock inferior ===============
+  function renderDock() {
+    for (const b of document.querySelectorAll('#dock [data-dock]')) {
+      b.classList.toggle('on', b.dataset.dock === UI.tab);
+      if (b.dataset.dock === 'audio') b.hidden = !S().gmView();
+    }
+    const st = S().state, count = $('#dock [data-dock="chat"] .count');
+    if (!st || !count) return;
+    if (UI.tab === 'chat') { const l = st.chat[st.chat.length - 1]; UI.seenChatId = l ? l.id : null; }
+    const unread = UI.tab === 'chat' ? 0 : msgsAfter(st.chat, UI.seenChatId).filter((m) => m.kind !== 'system' && visibleMsg(m)).length;
+    count.hidden = !unread;
+    count.textContent = unread > 9 ? '9+' : String(unread);
+  }
+  function msgsAfter(list, id) {
+    if (!id) return list;
+    const i = list.findIndex((m) => m.id === id);
+    return i < 0 ? list : list.slice(i + 1);
+  }
+  const visibleMsg = (m) => !m.secret || S().gmView() || m.playerId === S().me.id;
+
+  UI.showTab = function (id) {
+    UI.tab = id;
+    $('#dock-panel').hidden = false;
+    $('#dock-panel').classList.toggle('auto', id !== 'chat');
+    $('#dock-title').textContent = PANEL_TITLE[id] || '';
+    for (const k of Object.keys(PANEL_TITLE)) { const p = $('#p-' + k); if (p) p.hidden = k !== id; }
+    if (id === 'chat') { $('#roll-feed').innerHTML = ''; UI.chatSig = ''; }
+    renderDock();
+    renderPanel(id);
+    if (id === 'chat') { const log = $('#chat-log'); log.scrollTop = log.scrollHeight; }
+  };
+  UI.closeDock = function () {
+    UI.tab = null;
+    $('#dock-panel').hidden = true;
+    renderDock();
+  };
+  function renderPanel(id) {
+    if (id === 'chat') renderChat();
+    else if (id === 'dice') renderDice();
+    else if (id === 'combat') renderCombat();
+    else if (id === 'table') renderTable();
+    else if (id === 'audio') renderAudio();
+  }
+
+  // =============== Chat ===============
+  function buildChatPanel() {
+    const p = $('#p-chat');
+    const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: 'Mensagem ou /r 1d20+@forca' });
+    const send = () => { const v = input.value; input.value = ''; sendChat(v); };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+      else if (e.key === 'ArrowUp' && !input.value && UI.lastChat) { e.preventDefault(); input.value = UI.lastChat; }
+    });
+    const secretBtn = h('button', { class: 'btn', id: 'secret-btn', title: 'Rolagens secretas: só você e o mestre veem', onclick: () => setSecret(!UI.secret) }, ic('lock-open'));
+    const log = h('div', { id: 'chat-log' });
+    log.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-undo]');
+      if (b) S().undoAction(b.dataset.undo);
+    });
+    p.append(log, h('div', { class: 'chat-input' }, input, secretBtn, h('button', { class: 'btn primary', title: 'Enviar (Enter)', onclick: () => { send(); input.focus(); } }, ic('send'))));
+    $('#roll-feed').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-undo]');
+      if (b) S().undoAction(b.dataset.undo);
+      else if (e.target.closest('.msg')) UI.showTab('chat');
+    });
+  }
+  function setSecret(v) {
+    UI.secret = v;
+    for (const b of document.querySelectorAll('#secret-btn, #dice-secret')) {
+      b.classList.toggle('on', v);
+      b.innerHTML = '';
+      b.append(ic(v ? 'lock' : 'lock-open'));
+      if (b.id === 'dice-secret') b.append(v ? 'Secreta' : 'Pública');
+    }
+  }
+
+  function sendChat(text) {
+    text = String(text || '').trim();
+    if (!text || !S().state) return;
+    UI.lastChat = text;
+    const m = text.match(/^\/(r|roll|gr)\s+(.+)$/i);
+    // @atributos vêm do token selecionado (se você o controla)
+    const sc = S().currentScene(), selT = sc && App.Board.selected && sc.tokens[App.Board.selected];
+    const who = selT && S().canControl(selT) ? { actor: S().actorOf(selT) || undefined, token: selT } : {};
+    if (m) { S().rollPost(m[2], Object.assign({ secret: m[1].toLowerCase() === 'gr' || UI.secret }, who)); return; }
+    if (/^\/limpar$/i.test(text)) {
+      if (S().gmView() && confirm('Limpar todo o chat?')) S().dispatch({ type: 'chat.clear' });
+      return;
+    }
+    if (/^\d*d[\d%f]/i.test(text) && App.Dice.isFormula(text)) { S().rollPost(text, Object.assign({ secret: UI.secret }, who)); return; }
+    S().dispatch({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'text', from: S().myName(), playerId: S().me.id, text: text.slice(0, 2000) } });
+  }
+
+  // Detalhe vem pela rede: só deixa passar <span class="...">
+  const cleanDetail = (s) => String(s || '').replace(/<(?!\/?span(\s+class="[a-z ]*")?>)[^>]*>/gi, '');
+
+  // Vulto: o mestre vê o nome; os jogadores, "Vulto"
+  const seenName = (name, masked) => (masked && !S().gmView() ? 'Vulto' : name);
+  UI.seenName = seenName;
+
+  function msgHtml(m) {
+    if (m.kind === 'system') return `<div class="msg sys${m.secret ? ' secret' : ''}">${U.esc(m.text)}</div>`;
+    const head = `<div class="msg-head"><b style="color:${S().playerColor(m.playerId)}">${U.esc(seenName(m.from, m.fromMasked))}</b>${m.secret ? icHtml('lock') + '<span>secreta</span>' : ''}<span class="time">${U.fmtTime(m.ts)}</span></div>`;
+    if (m.kind === 'action') return `<div class="msg act m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}">${head}${actionMsgHtml(m)}</div>`;
+    if (m.kind === 'roll') {
+      const parts = (m.parts || []).map((p) => `<div class="roll-part"><div class="roll-main"><span class="roll-total${p.crit ? ' crit' : ''}${p.fumble ? ' fumble' : ''}">${U.esc(p.total)}</span><div>${p.label ? `<div class="roll-label">${U.esc(p.label)}</div>` : ''}<div class="roll-detail">${U.esc(p.formula)} → ${cleanDetail(p.detail)}</div></div></div></div>`).join('');
+      return `<div class="msg roll">${head}${m.label ? `<div class="roll-title">${U.esc(String(m.label).replace(/^[^\p{L}\p{N}]+\s*/u, ''))}</div>` : ''}${parts}</div>`;
+    }
+    return `<div class="msg">${head}<div class="msg-text">${U.esc(m.text)}</div></div>`;
+  }
+
+  function renderChat() {
+    const st = S().state, log = $('#chat-log');
+    if (!st || !log || UI.tab !== 'chat') return;
+    const last = st.chat[st.chat.length - 1];
+    const sig = st.chat.length + ':' + (last ? last.id : '') + ':' + st.chat.filter((m) => m.undone).length + ':' + (st.rules && st.rules.hideNumbers) + ':' + S().gmView();
+    if (sig === UI.chatSig) return;
+    UI.chatSig = sig;
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    log.innerHTML = st.chat.filter(visibleMsg).slice(-200).map(msgHtml).join('');
+    if (atBottom || (last && last.playerId === S().me.id)) log.scrollTop = log.scrollHeight;
+  }
+
+  // Com o chat fechado, os resultados novos aparecem por alguns segundos sobre o mapa
+  function renderFeed() {
+    const st = S().state, feed = $('#roll-feed');
+    if (!st) return;
+    const last = st.chat[st.chat.length - 1];
+    if (UI.feedId === null) { UI.feedId = last ? last.id : ''; return; }
+    const fresh = msgsAfter(st.chat, UI.feedId).filter((m) => (m.kind === 'roll' || m.kind === 'action') && visibleMsg(m));
+    // Atualiza cartões já na tela (ex.: desfeito)
+    for (const el of feed.querySelectorAll('[data-mid]')) {
+      const m = st.chat.find((x) => x.id === el.dataset.mid);
+      if (m && m.undone && !el.firstElementChild.classList.contains('undone')) el.innerHTML = m.kind === 'action' ? compactActionHtml(m) : msgHtml(m);
+    }
+    UI.feedId = last ? last.id : '';
+    if (UI.tab === 'chat' || !fresh.length) return;
+    for (const m of fresh.slice(-2)) {
+      const el = h('div', { 'data-mid': m.id, html: m.kind === 'action' ? compactActionHtml(m) : msgHtml(m) });
+      feed.append(el);
+      setTimeout(() => { el.firstElementChild && el.firstElementChild.classList.add('out'); setTimeout(() => el.remove(), 400); }, m.kind === 'action' ? 9000 : 6000);
+    }
+    while (feed.children.length > 2) feed.firstElementChild.remove();
+  }
+
+  // =============== Dados ===============
+  const DICE = [4, 6, 8, 10, 12, 20, 100];
+  const DIE_SHAPE = {
+    4: '<path d="M12 3 21.5 19.5h-19z"/>',
+    6: '<rect x="4" y="4" width="16" height="16" rx="2.5"/>',
+    8: '<path d="M12 2.5 21 12l-9 9.5L3 12z"/>',
+    10: '<path d="M12 2.5 21 10.5 12 21.5 3 10.5z"/><path d="M3 10.5 12 14l9-3.5M12 14v7.5" opacity=".5"/>',
+    12: '<path d="M12 2.5 21.2 9.2 17.7 20h-11.4L2.8 9.2z"/>',
+    20: '<path d="M12 2.5 20.5 7.3v9.4L12 21.5l-8.5-4.8V7.3z"/><path d="M12 2.5 7.5 10h9zM7.5 10l-4 6.7M16.5 10l4 6.7M7.5 10 12 17.5l4.5-7.5M12 17.5v4" opacity=".5"/>',
+    100: '<path d="M8 3.5 14 9 8 20.5 2 9z"/><path d="M16 3.5 22 9l-6 11.5" opacity=".6"/>',
+  };
+  const dieSvg = (n) => { const t = document.createElement('template'); t.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">${DIE_SHAPE[n]}</svg>`; return t.content.firstChild; };
+  function diceFormula() {
+    const d = UI.dice, parts = DICE.filter((n) => d.pool[n] > 0).sort((a, b) => b - a).map((n) => d.pool[n] + 'd' + n);
+    let f = parts.join('+');
+    if (d.mod) f += (d.mod > 0 ? '+' : '') + d.mod;
+    return f;
+  }
+  function renderDice() {
+    const p = $('#p-dice');
+    safeRender(p, () => {
+      p.innerHTML = '';
+      const d = UI.dice;
+      const formula = h('input', { id: 'dice-formula', value: diceFormula(), placeholder: 'Clique nos dados ou digite: 2d6+3', onkeydown: (e) => { if (e.key === 'Enter') roll(); } });
+      const roll = () => {
+        const f = formula.value.trim();
+        if (!f) { U.toast('Escolha os dados primeiro.'); return; }
+        S().rollPost(f, { secret: UI.secret });
+        UI.dice = { pool: {}, mod: 0 };
+        renderDice();
+      };
+      p.append(h('div', { class: 'dice-grid' }, DICE.map((n) => h('button', {
+        class: 'die-pick' + (d.pool[n] ? ' on' : ''), title: 'Clique: +1 d' + n + ' · botão direito: −1',
+        onclick: () => { d.pool[n] = (d.pool[n] || 0) + 1; renderDice(); },
+        oncontextmenu: (e) => { e.preventDefault(); d.pool[n] = Math.max(0, (d.pool[n] || 0) - 1); renderDice(); },
+      }, dieSvg(n), 'd' + n, d.pool[n] ? h('span', { class: 'n' }, '×' + d.pool[n]) : null)),
+      h('button', { class: 'die-pick', title: 'Rolar 1d20 agora', onclick: () => S().rollPost('1d20', { secret: UI.secret }) }, ic('zap'), 'Rápido')));
+      p.append(h('div', { class: 'row' },
+        h('span', { class: 'muted small-text grow' }, 'Modificador'),
+        h('div', { class: 'dice-mod' },
+          iconBtn('minus', 'Diminuir', () => { d.mod--; renderDice(); }),
+          h('span', {}, (d.mod > 0 ? '+' : '') + d.mod),
+          iconBtn('plus', 'Aumentar', () => { d.mod++; renderDice(); }))));
+      p.append(h('div', { class: 'dice-formula' }, formula));
+      p.append(h('div', { class: 'row' },
+        h('button', { class: 'btn small', title: '2d20, fica o maior', onclick: () => S().rollPost('2d20kh1', { secret: UI.secret, label: 'Vantagem' }) }, 'Vantagem'),
+        h('button', { class: 'btn small', title: '2d20, fica o menor', onclick: () => S().rollPost('2d20kl1', { secret: UI.secret, label: 'Desvantagem' }) }, 'Desvantagem'),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn small' + (UI.secret ? ' on' : ''), id: 'dice-secret', title: 'Rolagem secreta: só você e o mestre veem', onclick: () => setSecret(!UI.secret) }, ic(UI.secret ? 'lock' : 'lock-open'), UI.secret ? 'Secreta' : 'Pública')));
+      p.append(h('div', { class: 'row' },
+        h('button', { class: 'btn grow', onclick: () => { UI.dice = { pool: {}, mod: 0 }; renderDice(); } }, 'Limpar'),
+        btnI('dices', 'Rolar', { class: 'btn primary grow', onclick: roll })));
+      p.append(h('p', { class: 'hint' }, 'Também funciona no chat: /r 4d6kh3, 1d6! (explode), 4dF, d%. Use /gr para rolar em segredo.'));
+    });
+  }
+
+  // =============== Som (só o mestre) ===============
+  const CAT = { music: 'Música', ambient: 'Ambiente', sfx: 'Efeito' };
+  const fmtDur = (d) => (d > 0 ? Math.floor(d / 60) + ':' + String(Math.floor(d % 60)).padStart(2, '0') : '');
+  function renderAudio(force) {
+    const p = $('#p-audio'), Au = App.Audio, st = S().state;
+    if (!st || !S().gmView()) { p.innerHTML = ''; return; }
+    const sc = S().currentScene(), au = st.audio;
+    const sig = JSON.stringify([au, sc && [sc.id, sc.name, sc.music, sc.ambient, (sc.sounds || []).length], Au.files.size, Au.dirName, Au.needPerm, UI.audioFilter, Object.keys(Au.durations).length]);
+    if (!force && p._sig === sig) return;
+    safeRender(p, () => {
+      p._sig = sig;
+      p.innerHTML = '';
+      // Pasta
+      if (Au.needPerm) {
+        p.append(h('div', { class: 'au-folder' }, ic('folder-open'), h('div', { class: 'grow' }, h('b', {}, Au.dirName), h('span', {}, 'O navegador pede permissão a cada sessão.')),
+          btnI('refresh-cw', 'Reconectar', { class: 'btn primary small', onclick: () => Au.reconnect() })));
+      } else if (!Au.files.size) {
+        p.append(h('div', { class: 'au-empty' },
+          h('div', { class: 'bubble' }, ic('music')),
+          h('b', {}, 'Escolha a pasta de músicas'),
+          h('p', {}, 'Crie uma pasta "musicas" dentro do projeto, coloque seus arquivos (mp3, ogg, m4a, wav) e aponte para ela. Música nova colocada lá aparece aqui.'),
+          Au.canPickFolder()
+            ? btnI('folder-open', 'Escolher pasta', { class: 'btn primary', onclick: () => Au.pickFolder() })
+            : btnI('folder-open', 'Escolher arquivos', { class: 'btn primary', onclick: () => Au.pickFiles() }),
+          Au.canPickFolder() ? null : h('p', { class: 'hint' }, 'Este navegador não abre pastas (só Chrome e Edge). Os arquivos escolhidos valem até fechar a página.')));
+        return;
+      } else {
+        p.append(h('div', { class: 'au-folder' }, ic('folder-open'), h('div', { class: 'grow' }, h('b', {}, Au.dirName), h('span', {}, Au.files.size + ' faixas')),
+          Au.dir ? iconBtn('refresh-cw', 'Procurar músicas novas na pasta', () => Au.scan()) : null,
+          iconBtn('folder-open', 'Trocar de pasta', () => (Au.canPickFolder() ? Au.pickFolder() : Au.pickFiles()))));
+      }
+
+      // Canais
+      const channel = (ch, icon, label) => {
+        const cur = au[ch], playing = cur && cur.playing;
+        return h('div', { class: 'au-ch' + (playing ? ' on' : '') },
+          h('div', { class: 'au-ch-top' }, ic(icon),
+            h('div', { class: 'grow' }, h('span', { class: 'eyebrow' }, label), h('div', { class: 'au-now' }, cur ? Au.label(cur.name) : 'Nada tocando')),
+            cur && iconBtn(playing ? 'pause' : 'play', playing ? 'Pausar para todos' : 'Continuar', () => Au.toggle(ch)),
+            cur && iconBtn('square', 'Parar', () => Au.stop(ch)),
+            cur && iconBtn('repeat', cur.loop !== false ? 'Repetindo (clique para tocar uma vez)' : 'Tocar uma vez (clique para repetir)', () => Au.setLoop(ch, cur.loop === false), { class: 'icon-btn' + (cur.loop !== false ? ' on' : '') })),
+          volume(ch));
+      };
+      const volume = (ch) => h('div', { class: 'au-vol' }, ic(au.vol[ch] > 0 ? 'volume-2' : 'volume-x'),
+        h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: au.vol[ch], title: 'Volume para todos',
+          oninput: (e) => Au.previewVolume(ch, Number(e.target.value)), onchange: (e) => { Au.setVolume(ch, Number(e.target.value)); e.target.blur(); } }),
+        h('span', {}, Math.round(au.vol[ch] * 100) + '%'));
+      p.append(channel('music', 'music', 'Música'), channel('ambient', 'wind', 'Ambiente'),
+        h('div', { class: 'au-ch' }, h('div', { class: 'au-ch-top' }, ic('zap'), h('div', { class: 'grow' }, h('span', { class: 'eyebrow' }, 'Efeitos e sons no mapa'), h('div', { class: 'au-now' }, sc && (sc.sounds || []).length ? sc.sounds.length + (sc.sounds.length === 1 ? ' som' : ' sons') + ' no mapa desta cena' : 'Sons curtos e sons presos ao mapa'))), volume('sfx')));
+
+      // Trilha da cena
+      if (sc) {
+        const slot = (k, label) => h('div', { class: 'au-slot' }, h('span', { class: 'muted' }, label),
+          h('span', { class: 'grow' }, sc[k] ? Au.label(sc[k]) : h('span', { class: 'muted' }, '—')),
+          sc[k] ? iconBtn('x', 'Tirar da cena', () => S().dispatch({ type: 'scene.update', id: sc.id, patch: { [k]: null } })) : null);
+        p.append(h('h4', {}, 'Trilha da cena: ' + sc.name), slot('music', 'Música'), slot('ambient', 'Ambiente'),
+          h('p', { class: 'hint' }, 'Toca sozinha quando você ativa a cena para os jogadores. Use o botão de mapa numa faixa para definir.'));
+      }
+
+      // Biblioteca
+      const all = [...Au.files.keys()].sort((a, b) => a.localeCompare(b));
+      const q = U.slug(UI.audioQ || ''), filt = UI.audioFilter || 'all';
+      const list = all.filter((n) => filt === 'all' || Au.catOf(n) === filt);
+      p.append(h('h4', {}, 'Biblioteca'),
+        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Arraste uma faixa para o mapa: música e ambiente ficam tocando daquele ponto (música solta dentro de uma sala de som vira a música da sala inteira); efeito fica parado esperando o seu play (no painel ou com dois cliques no marcador). Os jogadores ouvem conforme a distância.'),
+        h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar faixa…', value: UI.audioQ || '', oninput: (e) => {
+          UI.audioQ = e.target.value;
+          const qq = U.slug(UI.audioQ);
+          for (const row of document.querySelectorAll('#p-audio .au-trk')) row.hidden = !!qq && !row.dataset.q.includes(qq);
+        } })),
+        h('div', { class: 'seg' }, [['all', 'Todas'], ['music', 'Música'], ['ambient', 'Ambiente'], ['sfx', 'Efeitos']].map(([k, l]) =>
+          h('button', { class: filt === k ? 'on' : '', onclick: () => { UI.audioFilter = k; renderAudio(true); } }, l))));
+      const box = h('div', { class: 'au-list' });
+      for (const name of list) {
+        const cat = Au.catOf(name), dur = Au.durations[name], folder = name.includes('/') ? name.slice(0, name.lastIndexOf('/')) : '';
+        const now = (au.music && au.music.name === name) || (au.ambient && au.ambient.name === name);
+        box.append(h('div', { class: 'au-trk' + (now ? ' on' : ''), 'data-q': U.slug(name), hidden: !!q && !U.slug(name).includes(q),
+          draggable: true, title: 'Arraste para o mapa para o som sair daquele ponto',
+          ondragstart: (e) => { e.dataTransfer.setData('text/x-sound', name); e.dataTransfer.effectAllowed = 'copy'; } },
+          h('button', { class: 'au-play ' + cat, title: cat === 'sfx' ? 'Tocar efeito para todos' : 'Tocar para todos (' + CAT[cat] + ')', onclick: () => (cat === 'sfx' ? Au.playSfx(name) : Au.play(cat, name)) },
+            ic(cat === 'sfx' ? 'zap' : now ? 'volume-2' : 'play')),
+          h('div', { class: 'grow' }, h('div', { class: 'au-name' }, Au.label(name)), h('div', { class: 'au-sub' }, [folder, fmtDur(dur)].filter(Boolean).join(' · '))),
+          h('select', { class: 'au-cat', title: 'Categoria', value: cat, onchange: (e) => S().dispatch({ type: 'audio.lib', name, patch: { cat: e.target.value } }) },
+            Object.entries(CAT).map(([k, l]) => h('option', { value: k }, l))),
+          sc && cat !== 'sfx' ? iconBtn('map', 'Usar como trilha desta cena', () => { S().dispatch({ type: 'scene.update', id: sc.id, patch: { [cat]: name } }); U.toast('Trilha da cena: ' + Au.label(name)); }, { class: 'icon-btn' + (sc[cat] === name ? ' on' : '') }) : h('span', { class: 'au-pad' })));
+      }
+      if (!list.length) box.append(h('p', { class: 'empty' }, 'Nenhuma faixa encontrada.'));
+      p.append(box);
+    });
+  }
+
+  // =============== Janelas flutuantes ===============
+  function bringFront(el) { el.style.zIndex = ++UI.z; }
+  function dragBy(handle, el) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button,input,select')) return;
+      const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
+      const move = (ev) => {
+        el.style.left = U.clamp(ox + ev.clientX - sx, -el.offsetWidth + 80, window.innerWidth - 80) + 'px';
+        el.style.top = U.clamp(oy + ev.clientY - sy, 0, window.innerHeight - 40) + 'px';
+      };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+  }
+  UI.openWindow = function (id, title, build, opts = {}) {
+    let w = UI.windows.get(id);
+    if (w) { bringFront(w.el); return w; }
+    const n = UI.windows.size;
+    const el = h('div', { class: 'win', style: {
+      left: Math.max(8, Math.min(window.innerWidth - (opts.w || 440) - 8, 260 + n * 26)) + 'px',
+      top: 70 + n * 26 + 'px', width: (opts.w || 440) + 'px',
+    } });
+    const titleEl = h('span', { class: 'win-title' }, title);
+    const head = h('div', { class: 'win-head' }, opts.icon ? ic(opts.icon) : null, titleEl, iconBtn('x', 'Fechar', () => UI.closeWindow(id)));
+    const body = h('div', { class: 'win-body' });
+    el.append(head, body);
+    el.addEventListener('pointerdown', () => bringFront(el));
+    $('#windows').append(el);
+    dragBy(head, el);
+    w = { id, el, body, titleEl, build };
+    UI.windows.set(id, w);
+    renderWindow(w);
+    bringFront(el);
+    return w;
+  };
+  UI.closeWindow = function (id) {
+    const w = UI.windows.get(id);
+    if (w) { w.el.remove(); UI.windows.delete(id); }
+  };
+  function renderWindow(w) {
+    safeRender(w.body, () => {
+      if (!UI.windows.has(w.id)) return;
+      const r = w.build(w);
+      if (r === false) { UI.closeWindow(w.id); return; }
+      const scroll = w.body.scrollTop;
+      w.body.innerHTML = '';
+      if (r) w.body.append(r);
+      w.body.scrollTop = scroll;
+    });
+  }
+
+  // =============== Ficha ===============
+  UI.openActor = function (id, tab) {
+    if (tab) { UI.sheetTab = UI.sheetTab || {}; UI.sheetTab[id] = tab; const open = UI.windows.get('actor:' + id); if (open) renderWindow(open); }
+    UI.openWindow('actor:' + id, 'Ficha', (w) => {
+      const a = S().state && S().state.actors[id];
+      if (!a) return w.loaded ? false : h('p', { class: 'muted' }, 'Carregando…');
+      w.loaded = true;
+      w.titleEl.textContent = a.name;
+      return buildSheet(a);
+    }, { w: 480, icon: 'scroll-text' });
+  };
+
+  // Listas da campanha (o mestre edita no painel Mesa)
+  const campAttrs = () => (S().state && S().state.attrs) || [];
+  const campBars = () => (S().state && S().state.barNames) || [];
+  UI.campAttrs = campAttrs; UI.campBars = campBars;
+  // Select de nome: opções da lista; um nome de fora continua aparecendo, marcado
+  function nameSelect(list, value, onPick, attrs = {}) {
+    const hit = list.find((n) => U.slug(n) === U.slug(value || ''));
+    const cur = hit || value || '';
+    return h('select', Object.assign({ value: cur, onchange: (e) => onPick(e.target.value) }, attrs),
+      !hit && value ? h('option', { value }, value + ' (fora da lista)') : null,
+      !value ? h('option', { value: '' }, 'Escolha…') : null,
+      list.map((n) => h('option', { value: n }, n)));
+  }
+  // Select "+ Atributo" com o que ainda falta na ficha
+  function addSelect(label, list, have, onPick) {
+    const missing = list.filter((n) => !have.some((x) => U.slug(x) === U.slug(n)));
+    if (!missing.length) return null;
+    return h('select', { class: 'add-sel', value: '', onchange: (e) => { const v = e.target.value; if (v === '*') onPick(missing); else if (v) onPick([v]); } },
+      h('option', { value: '' }, '+ ' + label),
+      missing.length > 1 ? h('option', { value: '*' }, 'Todos os que faltam (' + missing.length + ')') : null,
+      missing.map((n) => h('option', { value: n }, n)));
+  }
+  // @variáveis que existem numa ficha: atributos, barras e o máximo das barras
+  function knownVars(a, extra = []) {
+    const out = (a.stats || []).map((x) => x.name);
+    for (const b of a.bars || []) out.push(b.name, U.slug(b.name) + '_max');
+    return out.concat(extra);
+  }
+  // Campo de fórmula solto (teste, iniciativa) com o aviso de erro embaixo
+  function formulaInput(label, value, known, onSave, attrs = {}) {
+    const prob = App.Dice.check(value, known);
+    return h('label', {}, label,
+      h('input', Object.assign({ value, class: prob ? 'bad' : '', onchange: (e) => onSave(e.target.value) }, attrs)),
+      prob ? h('small', { class: 'f-err' }, prob) : null);
+  }
+  const editListsBtn = () => (S().gmView() ? h('button', { class: 'btn small ghost', title: 'A lista de atributos e barras fica no painel Mesa', onclick: () => UI.showTab('table') }, ic('settings-2'), 'Editar lista') : null);
+
+  // Aba aberta em cada ficha (Ações por padrão: é o que se usa durante o jogo)
+  UI.sheetTab = UI.sheetTab || {};
+  const SHEET_TABS = [
+    { id: 'acoes', icon: 'swords', label: 'Ações', count: (a) => (a.actions || []).length },
+    { id: 'atributos', icon: 'list-ordered', label: 'Atributos', count: (a) => (a.stats || []).length },
+    { id: 'notas', icon: 'file-text', label: 'Notas' },
+    { id: 'config', icon: 'settings-2', label: 'Configurar' },
+  ];
+
+  function buildSheet(a) {
+    const gm = S().gmView(), can = S().ownsActor(a), ro = !can;
+    const upd = (patch) => S().dispatch({ type: 'actor.update', id: a.id, patch });
+    const listUpd = (key, fn) => { const arr = U.clone(a[key] || []); fn(arr); upd({ [key]: arr }); };
+    const roll = (formula, label) => S().rollPost(formula, { from: a.name, label, actor: a, token: selectedTokenOf(a), secret: UI.secret });
+    const tab = SHEET_TABS.some((t) => t.id === UI.sheetTab[a.id]) ? UI.sheetTab[a.id] : 'acoes';
+    const goTab = (id) => { UI.sheetTab[a.id] = id; const w = UI.windows.get('actor:' + a.id); if (w) { w.body.scrollTop = 0; renderWindow(w); } };
+    const root = h('div', { class: 'sheet' });
+
+    // ---- Cabeçalho: retrato, nome e barras (sempre à vista) ----
+    const av = avatar(a, 64);
+    av.title = can ? 'Clique para trocar a imagem' : '';
+    if (can) av.onclick = async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) upd({ img: r.id }); };
+    const ownerName = !a.owner ? 'Só o mestre' : a.owner === 'all' ? 'Todos os jogadores' : ((S().state.players[a.owner] || {}).name || 'Jogador');
+    const bars = h('div', { class: 'sheet-bars' }, (a.bars || []).map((b, i) => h('div', { class: 'sheet-bar' },
+      h('span', { class: 'sb-name' }, b.name),
+      h('div', { class: 'sb-meter' }, meter(b, i)),
+      h('input', { class: 'num', value: b.value, disabled: ro, title: 'Atual · aceita +5, -3 ou -2d6', onchange: (e) => {
+        const v = applyDelta(b.value, e.target.value);
+        if (v != null) listUpd('bars', (arr) => { arr[i].value = v; });
+      } }),
+      h('span', { class: 'sb-max' }, '/ ' + b.max))));
+    if (!(a.bars || []).length) bars.append(h('p', { class: 'hint' }, 'Sem barras. Adicione em Configurar.'));
+    root.append(h('div', { class: 'sheet-top' },
+      h('div', { class: 'sheet-head' }, av, h('div', { class: 'grow' },
+        h('input', { class: 'sheet-name', value: a.name, disabled: ro, onchange: (e) => upd({ name: e.target.value.trim() || a.name }) }),
+        h('div', { class: 'sheet-sub' }, KIND[a.kind] || '', ' · ', ownerName))),
+      bars));
+
+    // ---- Abas ----
+    root.append(h('div', { class: 'sheet-tabs', role: 'tablist' }, SHEET_TABS.map((t) => {
+      const n = t.count ? t.count(a) : null;
+      return h('button', { class: tab === t.id ? 'on' : '', role: 'tab', 'aria-selected': String(tab === t.id), onclick: () => goTab(t.id) },
+        ic(t.icon), t.label, n ? h('span', { class: 'sb-count' }, String(n)) : null);
+    })));
+    const pane = h('div', { class: 'sheet-pane' });
+    root.append(pane);
+
+    if (tab === 'acoes') {
+      pane.append(h('p', { class: 'hint' }, 'O botão roxo usa a ação: depois clique no alvo no mapa. O lápis edita.'));
+      if (!(a.actions || []).length) pane.append(h('p', { class: 'empty' }, 'Nenhuma ação ainda.'));
+      (a.actions || []).forEach((ac, i) => pane.append(actionCard(a, ac, i, can, listUpd)));
+      if (can) {
+        pane.append(btnI('plus', 'Nova ação', { class: 'btn small', onclick: () => {
+          UI.openActs.add(a.id + ':' + (a.actions || []).length);
+          listUpd('actions', (arr) => arr.push({ name: 'Novo ataque', mode: 'attack', attack: '1d20', defense: 'Defesa', damage: '1d6', bar: (campBars()[0] || 'PV') }));
+        } }));
+      }
+    }
+
+    if (tab === 'atributos') {
+      pane.append(h('p', { class: 'hint' }, 'Escolha da lista da campanha. Nas fórmulas o atributo vira @nome (ex.: @forca). O dado ao lado rola o teste.'));
+      if (!(a.stats || []).length) pane.append(h('p', { class: 'empty' }, 'Nenhum atributo ainda.'));
+      (a.stats || []).forEach((st, i) => {
+        pane.append(h('div', { class: 'list-row' },
+          nameSelect(campAttrs(), st.name, (v) => listUpd('stats', (arr) => { arr[i].name = v; }), { class: 'grow', disabled: ro }),
+          h('span', { class: 'key', title: 'Variável para fórmulas' }, '@' + U.slug(st.name)),
+          h('input', { class: 'num', value: st.value, disabled: ro, onchange: (e) => listUpd('stats', (arr) => { arr[i].value = e.target.value; }) }),
+          can && iconBtn('dices', 'Rolar teste', () => roll((a.testFormula || '1d20+@valor').replace(/@valor/gi, '(' + (Number(st.value) || 0) + ')'), st.name)),
+          can && iconBtn('x', 'Remover', () => listUpd('stats', (arr) => arr.splice(i, 1)))));
+      });
+      if (can) {
+        pane.append(h('div', { class: 'row wrap' },
+          addSelect('Atributo', campAttrs(), (a.stats || []).map((x) => x.name), (names) => listUpd('stats', (arr) => { for (const n of names) arr.push({ name: n, value: U.slug(n) === 'defesa' ? 10 : 0 }); })),
+          editListsBtn()));
+        pane.append(h('h4', {}, 'Rolagens'));
+        pane.append(h('div', { class: 'form' },
+          formulaInput('Teste de atributo', a.testFormula || '1d20+@valor', knownVars(a, ['valor']), (v) => upd({ testFormula: v }), { title: '@valor = valor do atributo. Ex.: 1d20+@valor, 3d6, 1d100' }),
+          formulaInput('Iniciativa', a.initFormula || '1d20', knownVars(a), (v) => upd({ initFormula: v }))));
+        pane.append(h('p', { class: 'hint' }, 'No teste, @valor é o número do atributo rolado. Ex.: 1d20+@valor ou 1d100.'));
+      }
+    }
+
+    if (tab === 'notas') {
+      pane.append(h('textarea', { class: 'sheet-notes', rows: 14, disabled: ro, value: a.notes || '', placeholder: 'Histórico, inventário, magias, anotações…', onchange: (e) => upd({ notes: e.target.value }) }));
+    }
+
+    if (tab === 'config') {
+      const ownerSel = h('select', { disabled: !gm, value: a.owner || '', onchange: (e) => upd({ owner: e.target.value }) },
+        h('option', { value: '' }, 'Só o mestre'), h('option', { value: 'all' }, 'Todos os jogadores'),
+        Object.entries(S().state.players).map(([pid, p]) => h('option', { value: pid }, p.name)));
+      pane.append(h('div', { class: 'form' },
+        h('label', {}, 'Tipo', h('select', { disabled: !gm, value: a.kind, onchange: (e) => upd({ kind: e.target.value }) },
+          Object.entries(KIND).map(([k, v]) => h('option', { value: k }, v)))),
+        h('label', {}, 'Controlado por', ownerSel),
+        h('label', {}, 'Tamanho do token', h('select', { disabled: ro, value: String(a.size || 1), onchange: (e) => upd({ size: Number(e.target.value) }) },
+          [[0.5, 'Minúsculo (½)'], [1, '1 quadrado'], [2, '2×2'], [3, '3×3'], [4, '4×4'], [6, '6×6']].map(([v, l]) => h('option', { value: String(v) }, l)))),
+        h('label', {}, 'Cor', h('input', { type: 'color', disabled: ro, value: U.safeColor(a.color, '#64748b'), onchange: (e) => upd({ color: e.target.value }) })),
+        // Cobertura: o mestre decide a altura e como a ficha aparece atrás de muros baixos
+        h('label', { title: 'Usada na cobertura: muro mais alto que a criatura = cobertura total' }, 'Altura (m)',
+          h('input', { type: 'number', step: 0.1, min: 0, disabled: !gm, value: a.height || '', placeholder: String(App.Combat.defaultHeight(a.size)).replace('.', ',') + ' (pelo tamanho)',
+            onchange: (e) => { const v = Number(String(e.target.value).replace(',', '.')); upd({ height: v > 0 ? v : null }); } })),
+        h('label', {}, 'Atrás de muro baixo', h('select', { disabled: !gm, value: a.coverShow || '', onchange: (e) => upd({ coverShow: e.target.value || null }) },
+          h('option', { value: '' }, 'Regra da cena'), h('option', { value: 'show' }, 'Sempre visível'), h('option', { value: 'silhouette' }, 'Vulto'), h('option', { value: 'hide' }, 'Escondido')))));
+      if (can) pane.append(h('div', { class: 'row wrap', style: { marginTop: '10px' } },
+        btnI('image', a.img ? 'Trocar imagem' : 'Escolher imagem', { class: 'btn small', onclick: async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) upd({ img: r.id }); } }),
+        a.img ? h('button', { class: 'btn small', onclick: () => upd({ img: null }) }, 'Remover imagem') : null));
+      pane.append(h('p', { class: 'hint' }, a.kind === 'pc'
+        ? 'Personagem: todos os tokens compartilham os mesmos valores das barras.'
+        : 'NPC e criatura: cada token criado no mapa ganha uma cópia própria das barras (PV separado).'));
+
+      pane.append(h('h4', {}, 'Barras'));
+      (a.bars || []).forEach((b, i) => {
+        pane.append(h('div', { class: 'list-row' },
+          nameSelect(campBars(), b.name, (v) => listUpd('bars', (arr) => { arr[i].name = v; }), { class: 'grow', disabled: ro }),
+          h('span', { class: 'muted small-text' }, 'máx.'),
+          h('input', { class: 'num', type: 'number', value: b.max, disabled: ro, title: 'Máximo', onchange: (e) => listUpd('bars', (arr) => { arr[i].max = Number(e.target.value) || 0; }) }),
+          can && iconBtn('x', 'Remover', () => listUpd('bars', (arr) => arr.splice(i, 1)))));
+      });
+      if (can) pane.append(h('div', { class: 'row wrap' },
+        addSelect('Barra', campBars(), (a.bars || []).map((x) => x.name), (names) => listUpd('bars', (arr) => { for (const n of names) arr.push({ name: n, value: 10, max: 10 }); })),
+        editListsBtn()));
+
+      pane.append(h('div', { class: 'sheet-footer' },
+        can && btnI('map-pin', 'Colocar no mapa', { onclick: () => App.Board.placeActor(a.id) }),
+        gm && btnI('copy-plus', 'Duplicar', { onclick: () => {
+          const c = U.clone(a); c.id = U.uid('ac_'); c.name = a.name + ' (cópia)';
+          S().dispatch({ type: 'actor.add', actor: c }); UI.openActor(c.id);
+        } }),
+        btnI('download', 'Exportar', { onclick: () => App.Storage.downloadJSON(App.Storage.actorBundle(a.id), 'ficha_' + a.name) }),
+        h('span', { class: 'grow' }),
+        gm && btnI('trash-2', 'Excluir', { class: 'btn danger', onclick: () => {
+          const n = Object.values(S().state.scenes).reduce((k, sc) => k + Object.values(sc.tokens).filter((t) => t.actorId === a.id).length, 0);
+          if (!confirm(`Excluir a ficha "${a.name}"` + (n ? ` e ${n === 1 ? 'o token dela' : 'os ' + n + ' tokens dela'} no mapa? Eles também saem do combate.` : '?'))) return;
+          S().dispatch({ type: 'actor.delete', id: a.id, tokens: true }); UI.closeWindow('actor:' + a.id);
+        } })));
+    }
+    return root;
+  }
+
+  // =============== Ações automáticas ===============
+  const MODES = { attack: 'Ataque (rolagem contra defesa)', save: 'Resistência (alvo rola contra CD)', damage: 'Dano direto', heal: 'Cura', roll: 'Só rolar (sem alvo)' };
+  const MODE_ICON = { attack: 'sword', save: 'shield', damage: 'zap', heal: 'heart-pulse', roll: 'dices' };
+  UI.MODE_ICON = MODE_ICON;
+  const isMulti = (ac) => (ac.multi != null ? !!ac.multi : ac.mode === 'save' || ac.mode === 'damage');
+
+  // Alcance e área, em texto curto
+  function reachText(ac) {
+    if (!ac.mode || ac.mode === 'roll') return '';
+    const CB = App.Combat, ar = CB.areaOf(ac);
+    return CB.rangeLabel(ac) + (ar ? ` · área ${ar} quad.` : '');
+  }
+  UI.reachText = reachText;
+  function actionSummary(ac) {
+    const r = reachText(ac);
+    return actionSummaryCore(ac) + (r ? ' · ' + r : '');
+  }
+  function actionSummaryCore(ac) {
+    switch (ac.mode) {
+      case 'attack': return `${ac.attack || '1d20'} vs ${ac.defense || 'Defesa'} → ${ac.damage || '—'} ${ac.bar || ''}`;
+      case 'save': return `CD ${ac.dc || '10'} ${ac.save || ''} → ${ac.damage || '—'} (${ac.onSave === 'none' ? 'nada' : 'metade'} se passar)`;
+      case 'damage': return `${ac.damage || '0'} de ${ac.bar || 'dano'}${isMulti(ac) ? ' · área' : ''}`;
+      case 'heal': return `+${ac.damage || '0'} ${ac.bar || ''}`;
+      default: return ac.formula || '';
+    }
+  }
+
+  function actionCard(a, ac, i, can, listUpd) {
+    const key = a.id + ':' + i, open = UI.openActs.has(key), mode = ac.mode || 'roll';
+    const toggle = () => { if (open) UI.openActs.delete(key); else UI.openActs.add(key); const w = UI.windows.get('actor:' + a.id); if (w) renderWindow(w); };
+    const set = (k) => (e) => listUpd('actions', (arr) => { arr[i][k] = e.target.value; });
+    const field = (label, k, ph, attrs = {}) => h('label', {}, label,
+      h('input', Object.assign({ value: ac[k] ?? '', placeholder: ph || '', disabled: !can, onchange: set(k) }, attrs)));
+    // Fórmula com um seletor que soma um @atributo da ficha
+    const formula = (label, k, ph, cls) => {
+      const inp = h('input', { value: ac[k] ?? '', placeholder: ph || '', disabled: !can, onchange: set(k) });
+      const names = (a.stats || []).map((x) => x.name).filter((n) => U.slug(n));
+      const ins = can && names.length ? h('select', { class: 'attr-ins', value: '', title: 'Somar um atributo da ficha na fórmula', onchange: (e) => {
+        const v = e.target.value; if (!v) return;
+        const cur = inp.value.trim();
+        listUpd('actions', (arr) => { arr[i][k] = cur ? cur + '+@' + v : '1d20+@' + v; });
+      } }, h('option', { value: '' }, '+ atributo'), names.map((n) => h('option', { value: U.slug(n) }, n))) : null;
+      const prob = App.Dice.check(ac[k], knownVars(a));
+      if (prob) inp.classList.add('bad');
+      return h('label', { class: cls || '' }, label, h('div', { class: 'formula-row' }, inp, ins), prob ? h('small', { class: 'f-err' }, prob) : null);
+    };
+    const pick = (label, k, list, def) => h('label', {}, label,
+      nameSelect(list, ac[k] || def, (v) => listUpd('actions', (arr) => { arr[i][k] = v; }), { disabled: !can }));
+
+    const card = h('div', { class: 'act-card ' + mode }, h('div', { class: 'act-head' },
+      can && h('button', { class: 'btn small primary act-use', title: mode === 'roll' ? 'Rolar' : 'Usar: depois clique no alvo', onclick: () => UI.useAction(a, i) }, ic(mode === 'roll' ? 'dices' : 'play')),
+      h('div', { class: 'grow', style: { cursor: 'pointer' }, onclick: toggle },
+        h('div', { class: 'act-name' }, ic(MODE_ICON[mode]), ac.name, Number(ac.cost) > 0 ? h('span', { class: 'badge' }, `${ac.cost} ${ac.costBar || ''}`) : null),
+        h('div', { class: 'act-sum' }, actionSummary(Object.assign({}, ac, { mode })))),
+      iconBtn(open ? 'chevron-up' : 'pen-line', open ? 'Fechar edição' : 'Editar', toggle, { class: 'icon-btn act-edit' }),
+      can && iconBtn('x', 'Remover', () => listUpd('actions', (arr) => arr.splice(i, 1)))));
+    if (!open) return card;
+
+    const form = h('div', { class: 'form act-form' },
+      field('Nome', 'name'),
+      h('label', {}, 'Tipo', h('select', { value: mode, disabled: !can, onchange: set('mode') }, Object.entries(MODES).map(([k, v]) => h('option', { value: k }, v)))));
+    if (mode === 'roll') {
+      form.append(formula('Fórmula (separe várias com |)', 'formula', 'Ataque: 1d20+@forca | Dano: 1d8+@forca', 'full'));
+    } else if (mode === 'attack') {
+      form.append(formula('Rolagem de ataque', 'attack', '1d20+@forca'), pick('Contra o atributo do alvo', 'defense', campAttrs(), 'Defesa'),
+        formula('Dano', 'damage', '1d8+@forca'), field('Crítico a partir do d20 natural', 'critMin', '20', { type: 'number', min: 2, max: 20 }));
+    } else if (mode === 'save') {
+      form.append(pick('Alvo resiste com o atributo', 'save', campAttrs(), 'Destreza'), formula('Dificuldade (CD)', 'dc', '13 ou 8+@inteligencia'),
+        formula('Dano', 'damage', '8d6'),
+        h('label', {}, 'Se o alvo passar', h('select', { value: ac.onSave || 'half', disabled: !can, onchange: set('onSave') },
+          h('option', { value: 'half' }, 'Metade do dano'), h('option', { value: 'none' }, 'Nenhum dano'))));
+    } else {
+      form.append(formula(mode === 'heal' ? 'Cura' : 'Dano', 'damage', mode === 'heal' ? '2d4+2' : '3d4+3'));
+    }
+    if (mode !== 'roll') {
+      const CB = App.Combat;
+      form.append(field('Alcance (quadrados)', 'range', CB.defaultRange(Object.assign({}, ac, { mode })) + ' · 1 = corpo a corpo · 0 = sem limite', { type: 'number', min: 0 }));
+      if (mode !== 'attack') form.append(field('Área (raio em quadrados)', 'area', '0 = escolhe o alvo', { type: 'number', min: 0 }));
+      form.append(
+        pick('Barra afetada no alvo', 'bar', campBars(), 'PV'),
+        h('label', {}, 'Alvos', h('select', { value: String(isMulti(ac)), disabled: !can, onchange: (e) => listUpd('actions', (arr) => { arr[i].multi = e.target.value === 'true'; }) },
+          h('option', { value: 'false' }, 'Um alvo'), h('option', { value: 'true' }, 'Vários (área)'))),
+        field('Custo (0 = nenhum)', 'cost', '0', { type: 'number', min: 0 }),
+        pick('Gasta da barra', 'costBar', campBars(), 'Mana'));
+    }
+    card.append(form);
+    return card;
+  }
+
+  function actorToken(a, sc) {
+    if (!sc) return null;
+    const sel = App.Board.selected && sc.tokens[App.Board.selected];
+    if (sel && sel.actorId === a.id) return sel;
+    return Object.values(sc.tokens).find((t) => t.actorId === a.id) || null;
+  }
+
+  // Usar uma ação: rolagem simples vai direto ao chat; as outras pedem o alvo no mapa
+  UI.useAction = function (a, i, tok) {
+    const ac = (a.actions || [])[i];
+    if (!ac) return;
+    const sc = S().currentScene(), mode = ac.mode || 'roll';
+    tok = tok || actorToken(a, sc);
+    if (mode === 'roll') {
+      S().rollPost(ac.formula || '1d20', { from: tok ? tok.name : a.name, label: ac.name, actor: a, token: tok, secret: UI.secret });
+      return;
+    }
+    if (!sc) { U.toast('Nenhuma cena aberta.'); return; }
+    if (tok && sc.tokens[tok.id] !== tok) tok = sc.tokens[tok.id] || null;
+    const st = S().state, c = st.combat;
+    if (tok && !S().gmView() && st.rules.actOnTurn && c.active) {
+      const idx = c.entries.findIndex((e) => e.tokenId === tok.id);
+      if (idx >= 0 && idx !== c.turn) { U.toast('Aguarde a sua vez para agir.'); return; }
+    }
+    const area = App.Combat.areaOf(ac);
+    App.Board.startTargeting({
+      label: ac.name, mode, act: ac, area, multi: !area && isMulti(ac), sourceId: tok ? tok.id : null,
+      onDone: (ids, point) => S().dispatch({ type: 'act.use', sceneId: sc.id, actorId: a.id, index: i, attackerId: tok ? tok.id : null, targets: ids, point }),
+    });
+  };
+
+  UI.renderTargetBar = function () {
+    const bar = $('#target-bar'), tg = App.Board.targeting;
+    if (!bar) return;
+    if (!tg) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.innerHTML = '';
+    const reach = tg.act ? reachText(tg.act) : '';
+    const hasSrc = !!tg.sourceId;
+    const none = hasSrc && !tg.area && !App.Board.validTargetCount();
+    bar.classList.toggle('none', none);
+    let msg;
+    if (tg.area) {
+      msg = h('span', {}, 'Escolha onde lançar ', h('b', {}, tg.label), reach ? h('span', { class: 'muted' }, ' · ' + reach) : '');
+    } else if (none) {
+      msg = h('span', {}, h('b', {}, tg.label), ': ninguém ao alcance', h('span', { class: 'muted' }, ` (${reach}). Aproxime-se do alvo.`));
+    } else {
+      msg = h('span', {}, tg.mode === 'heal' ? 'Quem recebe ' : 'Quem você ataca com ', h('b', {}, tg.label), '?',
+        h('span', { class: 'muted' }, (reach ? ' · ' + reach : '') + (tg.multi ? ` · ${tg.ids.length} marcado${tg.ids.length === 1 ? '' : 's'}` : '')));
+    }
+    bar.append(
+      ic(tg.mode === 'heal' ? 'heart-pulse' : tg.area ? 'flame' : 'target'),
+      msg,
+      tg.multi ? h('button', { class: 'btn small primary', disabled: !tg.ids.length, onclick: () => App.Board.confirmTargeting() }, 'Confirmar', h('kbd', {}, 'Enter')) : '',
+      h('button', { class: 'btn small', onclick: () => App.Board.cancelTargeting() }, 'Cancelar', h('kbd', {}, 'Esc')));
+  };
+
+  function actionMsgHtml(m) {
+    const gm = S().gmView(), st = S().state, rules = st.rules || {}, sc = st.scenes[m.sceneId];
+    const canSee = (tid) => {
+      if (gm || !rules.hideNumbers) return true;
+      const t = sc && sc.tokens[tid];
+      return !!t && S().canControl(t);
+    };
+    const tag = (cls, txt) => `<span class="tag ${cls}">${txt}</span>`;
+    const heal = m.mode === 'heal';
+    let html = `<div class="act-title">${icHtml(MODE_ICON[m.mode] || 'dices')}${U.esc(m.label)}${m.cost ? ` <span class="badge">−${U.esc(m.cost.amount)} ${U.esc(m.cost.bar)}</span>` : ''}</div>`;
+    if (m.mode === 'save') html += `<div class="act-line">CD <b>${U.esc(m.dc)}</b>${m.saveStat ? ' · ' + U.esc(m.saveStat) : ''}${m.dmg ? ` · dano ${U.esc(m.dmg.total)}` : ''}</div>`;
+    else if (m.dmg) html += `<div class="act-line">${heal ? 'Cura' : 'Dano'} <b>${U.esc(m.dmg.total)}</b> <span class="roll-detail">${U.esc(m.dmg.formula)} → ${cleanDetail(m.dmg.detail)}</span></div>`;
+    for (const r of m.targets || []) {
+      const see = canSee(r.tokenId);
+      let who = U.esc(seenName(r.name, r.masked)), sub = '', extra = '', amt = '';
+      if (m.mode === 'attack') {
+        who += r.hit ? (r.crit ? tag('crit', 'Crítico') : tag('hit', 'Acertou')) : (r.fumble ? tag('miss', 'Falha crítica') : tag('miss', 'Errou'));
+        sub = `Ataque <b>${U.esc(r.atk.total)}</b>` + (r.noDef ? ' · alvo sem defesa' : ` contra ${see ? U.esc(r.def) : '?'}`);
+        if (r.cover) sub += r.cover.level === 'total' ? ' · <b>cobertura total</b>' : ` (${U.esc(r.cover.label.toLowerCase())} +${U.esc(r.cover.bonus)})`;
+        extra += `<div class="roll-detail">${U.esc(r.atk.formula)} → ${cleanDetail(r.atk.detail)}</div>`;
+        if (r.dmg) extra += `<div class="roll-detail">dano ${U.esc(r.dmg.formula)} → ${cleanDetail(r.dmg.detail)}</div>`;
+      } else if (m.mode === 'save') {
+        who += r.success ? tag('hit', 'Passou') : tag('miss', 'Falhou');
+        sub = `Resistiu com <b>${U.esc(r.save.total)}</b>`;
+        if (r.cover) sub += r.cover.level === 'total' ? ' · <b>cobertura total</b>, sem dano' : ` (${U.esc(r.cover.label.toLowerCase())} +${U.esc(r.cover.bonus)})`;
+        extra += `<div class="roll-detail">${U.esc(r.save.formula)} → ${cleanDetail(r.save.detail)}</div>`;
+      }
+      if (r.amount != null) {
+        const zero = !Number(r.amount);
+        amt = `<div class="amt ${zero ? 'zero' : heal ? 'heal' : 'dmg'}">${heal ? '+' : '−'}${U.esc(r.amount)}<small>${U.esc(r.bar)}${see ? ` ${U.esc(r.after)}${r.max ? '/' + U.esc(r.max) : ''}` : ''}</small></div>`;
+      } else if (m.mode === 'attack' && !r.hit) amt = '<div class="amt zero">—<small>sem dano</small></div>';
+      if (r.noBar) sub += ` · alvo sem a barra "${U.esc(r.noBar)}"`;
+      html += `<div class="act-target"><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}</div>`;
+    }
+    if (m.undone) html += '<div class="act-foot"><span class="undone-note">Desfeito pelo mestre</span></div>';
+    else if (gm && (m.applied || []).length) html += `<div class="act-foot"><button class="undo-btn" data-undo="${U.esc(m.id)}">${icHtml('undo-2')}Desfazer</button></div>`;
+    return html;
+  }
+
+  // Resumo curto de uma ação (cartão que aparece sobre o mapa; o detalhe fica no chat)
+  function compactActionHtml(m) {
+    const heal = m.mode === 'heal';
+    let rows = '';
+    for (const r of m.targets || []) {
+      let tag = '', amt = '';
+      if (m.mode === 'attack') tag = r.hit ? (r.crit ? '<span class="tag crit">Crítico</span>' : '<span class="tag hit">Acertou</span>') : `<span class="tag miss">${r.fumble ? 'Falha crítica' : 'Errou'}</span>`;
+      else if (m.mode === 'save') tag = r.success ? '<span class="tag miss">Resistiu</span>' : '<span class="tag hit">Falhou</span>';
+      if (r.amount != null) amt = `<span class="amt ${!Number(r.amount) ? 'zero' : heal ? 'heal' : 'dmg'}">${heal ? '+' : '−'}${U.esc(r.amount)}<small>${U.esc(r.bar)}</small></span>`;
+      else if (m.mode === 'attack' && !r.hit) amt = '<span class="amt zero">—</span>';
+      rows += `<div class="cmp-row"><span class="who">${U.esc(seenName(r.name, r.masked))}</span>${tag}<span class="grow"></span>${amt}</div>`;
+    }
+    const undo = m.undone ? '<span class="undone-note">Desfeito</span>'
+      : S().gmView() && (m.applied || []).length ? `<button class="undo-btn" data-undo="${U.esc(m.id)}" title="Devolve PV e Mana">${icHtml('undo-2')}Desfazer</button>` : '';
+    return `<div class="msg act compact m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}" title="Clique para ver os dados no chat">
+      <div class="cmp-head">${icHtml(MODE_ICON[m.mode] || 'dices')}<b>${U.esc(seenName(m.from, m.fromMasked))}</b><span class="muted">${U.esc(m.label)}</span>${m.cost ? ` <span class="badge">−${U.esc(m.cost.amount)} ${U.esc(m.cost.bar)}</span>` : ''}<span class="grow"></span>${undo}</div>${rows}</div>`;
+  }
+
+  function meter(b, i) {
+    const pct = b.max > 0 ? U.clamp((Number(b.value) / Number(b.max)) * 100, 0, 100) : 0;
+    const color = i > 0 ? 'var(--mana)' : pct > 50 ? 'var(--ok)' : pct > 25 ? 'var(--warn)' : 'var(--danger)';
+    return h('div', { class: 'meter' }, h('div', { style: { width: pct + '%', background: color } }));
+  }
+
+  function selectedTokenOf(a) {
+    const sc = S().currentScene(), t = sc && App.Board.selected && sc.tokens[App.Board.selected];
+    return t && t.actorId === a.id ? t : null;
+  }
+
+  // "+5", "-3", "-2d6" somam; "12" define
+  function applyDelta(cur, str) {
+    str = String(str).trim();
+    if (!str) return null;
+    const rel = /^[+-]/.test(str);
+    let val;
+    try {
+      if (/d/i.test(str)) {
+        const r = App.Dice.roll(str.replace(/^[+-]/, ''));
+        val = r.total * (str[0] === '-' ? -1 : 1);
+        U.toast(`${str} → ${val}`);
+      } else val = Number(str);
+    } catch { U.toast('Valor inválido', 'error'); return null; }
+    if (!Number.isFinite(val)) { U.toast('Valor inválido', 'error'); return null; }
+    return rel ? (Number(cur) || 0) + val : val;
+  }
+
+  // =============== Painel do token selecionado ===============
+  // Modo edição: fica na lateral direita. Modo apresentação: flutua ao lado do token.
+  UI.updateHud = function (sc, t) {
+    const hud = $('#token-hud'), empty = $('#props-empty');
+    if (!hud) return;
+    const csc = S().currentScene(), B = App.Board;
+    const snd = S().gmView() && B.selectedSound && csc && (csc.sounds || []).find((x) => x.id === B.selectedSound);
+    if (snd) { soundHud(hud, empty, csc, snd); return; }
+    const room = S().gmView() && B.selectedRoom && csc && (csc.rooms || []).find((x) => x.id === B.selectedRoom);
+    if (room) { roomHud(hud, empty, csc, room); return; }
+    if (B.selectedRoom && !room) B.selectedRoom = null;
+    if (B.selectedSound && !snd) B.selectedSound = null;
+    // Na visão de jogo o painel sai da frente enquanto você mira e enquanto o resultado aparece no mapa
+    if (!sc || !t || (UI.mode === 'play' && (App.Board.targeting || App.Board.fx.length))) {
+      if (!hud.hidden) { hud.hidden = true; hud._sig = null; }
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    const a = S().actorOf(t), st = S().state;
+    const sig = JSON.stringify([t, a && a.bars, a && a.name, a && a.actions, st.conditions, st.combat.entries.length, S().gmView(), UI.mode, sc.light.enabled,
+      sc.groups, t.group && Object.values(sc.tokens).filter((x) => x.group === t.group).map((x) => [x.hidden, x.masked])]);
+    if (hud._sig !== sig && !isTyping(hud)) { buildHud(hud, sc, t); hud._sig = sig; }
+    hud.hidden = false;
+    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    const r = App.Board.tokenScreenRect(t, sc);
+    const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    const hw = hud.offsetWidth, hh = hud.offsetHeight;
+    const y = U.clamp(r.y - 10, 66, Math.max(66, H - hh - 70));
+    // Abre do lado (direita ou esquerda) que cobre menos tokens
+    const others = Object.values(sc.tokens).filter((o) => o.id !== t.id && (!o.hidden || S().gmView())).map((o) => App.Board.tokenScreenRect(o, sc));
+    const cover = (x) => others.reduce((s, o) => s + Math.max(0, Math.min(x + hw, o.x + o.w) - Math.max(x, o.x)) * Math.max(0, Math.min(y + hh, o.y + o.h) - Math.max(y, o.y)), 0);
+    const fit = (x) => U.clamp(x, 14, Math.max(14, W - hw - 14));
+    const right = fit(r.x + r.w + 16), left = fit(r.x - hw - 16);
+    const x = cover(left) < cover(right) ? left : right;
+    hud.style.transform = `translate(${x}px, ${y}px)`;
+  };
+
+  // Sala de som: nome, música própria, volume e o que acontece com o ambiente de fora
+  function roomHud(hud, empty, sc, room) {
+    if (empty) empty.hidden = true;
+    const Au = App.Audio;
+    const sig = JSON.stringify(['room', room, UI.mode, Au.files.size]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const upd = (patch) => S().dispatch({ type: 'room.update', sceneId: sc.id, id: room.id, patch });
+      const tracks = [...Au.files.keys()].sort((a, b) => (Au.catOf(a) === 'music' ? 0 : 1) - (Au.catOf(b) === 'music' ? 0 : 1) || a.localeCompare(b));
+      const cur = room.music && room.music.name;
+      if (cur && !tracks.includes(cur)) tracks.unshift(cur);
+      const volLbl = h('span', {}, Math.round((room.vol ?? 1) * 100) + '%');
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble room' + (room.music ? ' on' : '') }, ic('music')),
+          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: room.name || '', placeholder: 'Nome da sala', onchange: (e) => upd({ name: e.target.value.trim() || 'Sala' }) }),
+            h('div', { class: 'hud-sub' }, 'Sala de som · nada entra nem sai'))),
+        h('div', { class: 'hud-section' },
+          h('label', { class: 'col' }, h('span', { class: 'eyebrow' }, 'Música da sala'),
+            h('select', { value: cur || '', onchange: (e) => Au.setRoomMusic(sc, room, e.target.value || null) },
+              h('option', { value: '' }, 'Sem música (só isola o som)'),
+              tracks.map((n) => h('option', { value: n }, Au.label(n) + (Au.catOf(n) === 'music' ? '' : ' · ' + (Au.catOf(n) === 'ambient' ? 'ambiente' : 'efeito')))))),
+          tracks.length ? '' : h('p', { class: 'hint', style: { margin: 0 } }, 'Escolha a pasta de músicas no painel Som para listar as faixas.'),
+          h('div', { class: 'snd-row' }, h('span', {}, 'Volume'), volLbl),
+          h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: room.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } }),
+          h('span', { class: 'eyebrow' }, 'Ambiente de fora (chuva, vento…)'),
+          h('div', { class: 'seg' }, [['stop', 'Para'], ['muffle', 'Abafado'], ['keep', 'Continua']].map(([k, l]) =>
+            h('button', { class: (room.ambient || 'stop') === k ? 'on' : '', onclick: () => upd({ ambient: k }) }, l)))),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem entra na sala ouve só a música dela: a música da cena para, e os efeitos continuam. Sons do mapa dentro da sala só se ouvem aqui dentro, e os de fora não entram. Solte uma música dentro da sala para trocar.'),
+        h('div', { class: 'hud-btns' },
+          room.music ? btnI('refresh-cw', 'Recomeçar', { title: 'Volta a música da sala ao início para todos', onclick: () => upd({ at: Date.now() }) }) : '',
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar sala', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'room.delete', sceneId: sc.id, id: room.id }); App.Board.selectedRoom = null; App.Board.requestRender(); } })));
+    }
+    hud.hidden = false;
+    hud.style.transform = '';
+  }
+
+  function soundHud(hud, empty, sc, snd) {
+    if (empty) empty.hidden = true;
+    const sig = JSON.stringify(['snd', snd, UI.mode]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const upd = (patch) => S().dispatch({ type: 'sound.update', sceneId: sc.id, id: snd.id, patch });
+      const rangeLbl = h('span', {}, snd.r + ' quadrados');
+      const volLbl = h('span', {}, Math.round((snd.vol ?? 1) * 100) + '%');
+      const legend = h('div', { class: 'vol-legend' },
+        h('div', { class: 'vol-bar', style: { background: 'linear-gradient(90deg, ' + App.Board.VOL_COLORS.slice(0, 4).map(([v, c]) => `rgb(${c.join(',')}) ${Math.round(App.Audio.distanceFor(v) * 100)}%`).join(', ') + ', rgba(84,128,240,.15) 100%)' } }),
+        h('div', { class: 'vol-lbls' }, h('span', {}, 'Máximo (no ponto)'), h('span', {}, 'Mínimo (borda)')));
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble' + (snd.once ? ' fx' : snd.on ? ' on' : '') }, ic(snd.once ? 'zap' : snd.on ? 'volume-2' : 'volume-x')),
+          h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, App.Audio.label(snd.name)),
+            h('div', { class: 'hud-sub' }, snd.once ? 'Efeito no mapa · toca quando você mandar' : snd.on ? 'Som no mapa · repetindo' : 'Som no mapa · silenciado'))),
+        snd.once ? btnI('zap', 'Tocar agora', { class: 'btn primary block snd-play', title: 'Toca uma vez para todos que estiverem no alcance (ou dê dois cliques no marcador)', onclick: () => App.Audio.trigger(snd) }) : '',
+        h('div', { class: 'seg' },
+          h('button', { class: snd.once ? '' : 'on', onclick: () => { if (snd.once) App.Audio.setOnce(sc, snd, false); } }, 'Repete'),
+          h('button', { class: snd.once ? 'on' : '', onclick: () => { if (!snd.once) App.Audio.setOnce(sc, snd, true); } }, 'Uma vez')),
+        h('div', { class: 'hud-section' },
+          h('div', { class: 'snd-row' }, h('span', {}, 'Alcance'), rangeLbl),
+          h('input', { type: 'range', min: 1, max: 30, step: 1, value: snd.r, oninput: (e) => { rangeLbl.textContent = e.target.value + ' quadrados'; }, onchange: (e) => { upd({ r: Number(e.target.value) }); e.target.blur(); } }),
+          h('div', { class: 'snd-row' }, h('span', {}, 'Volume'), volLbl),
+          h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: snd.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } })),
+        legend,
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Cada jogador ouve pelo próprio token: mais alto perto do ponto, do lado em que o som está. Atrás de paredes (área apagada no mapa) chega abafado, a ' + Math.round(App.Audio.OCCLUDED * 100) + '%. Arraste o marcador para mudar de lugar.'),
+        h('div', { class: 'hud-btns' },
+          snd.once ? '' : btnI(snd.on ? 'pause' : 'play', snd.on ? 'Silenciar' : 'Tocar', { onclick: () => upd(snd.on ? { on: false } : { on: true, at: Date.now() }) }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Remover', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); App.Board.selectedSound = null; App.Board.requestRender(); } })));
+    }
+    hud.hidden = false;
+    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    const p = App.Board.soundScreenPos(snd), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    let x = p.x + 30;
+    if (x + hud.offsetWidth > W - 14) x = p.x - hud.offsetWidth - 30;
+    x = U.clamp(x, 14, Math.max(14, W - hud.offsetWidth - 14));
+    const y = U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70));
+    hud.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
+  // ---------- Visibilidade e grupos (mestre) ----------
+  const VIS = [['show', 'eye', 'Visível', 'Todos veem normalmente'], ['masked', 'circle-help', 'Vulto', 'Os jogadores veem só uma silhueta escura, sem imagem, nome nem vida'], ['hidden', 'eye-off', 'Invisível', 'Só você vê']];
+  const visOf = (t) => (t.hidden ? 'hidden' : t.masked ? 'masked' : 'show');
+  function visSeg(cur, onPick) {
+    return h('div', { class: 'seg vis-seg' }, VIS.map(([k, icon, label, title]) => h('button', { class: cur === k ? 'on' : '', title, onclick: () => onPick(k) }, ic(icon), label)));
+  }
+  UI.visSeg = visSeg;
+  // Grupo: todos com a mesma visibilidade? ('mixed' se não)
+  const groupVis = (sc, gid) => {
+    const vs = [...new Set(Object.values(sc.tokens).filter((t) => t.group === gid).map(visOf))];
+    return vs.length === 1 ? vs[0] : 'mixed';
+  };
+  function newGroup(sc, tokenIds) {
+    const n = (sc.groups || []).length + 1;
+    const name = prompt('Nome do grupo', 'Grupo ' + n);
+    if (name == null) return null;
+    const g = { id: U.uid('g_'), name: name.trim() || 'Grupo ' + n };
+    S().dispatch({ type: 'group.add', sceneId: sc.id, group: g, tokens: tokenIds });
+    return g;
+  }
+  function visGroupSection(sc, t) {
+    const tokUpd = (patch) => S().dispatch({ type: 'token.update', sceneId: sc.id, id: t.id, patch });
+    const groups = sc.groups || [], g = groups.find((x) => x.id === t.group);
+    const members = g ? Object.values(sc.tokens).filter((x) => x.group === g.id) : [];
+    const fly = App.Combat.flyOf(t);
+    return h('div', { class: 'hud-section vis-sec' },
+      // Voo: o token sobe tantos metros e passa a ver e ser visto por cima dos muros mais baixos
+      h('span', { class: 'eyebrow' }, 'Voo'),
+      h('div', { class: 'fly-row' },
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: fly > 0, onchange: (e) => tokUpd({ fly: e.target.checked ? (t.lastFly || 6) : 0, lastFly: fly || t.lastFly || 6 }) }), 'Voando'),
+        h('input', { type: 'number', class: 'num', min: 0, step: 0.5, value: fly || '', placeholder: '0', disabled: !(fly > 0), title: 'Metros acima do chão',
+          onchange: (e) => { const v = Math.max(0, Number(String(e.target.value).replace(',', '.')) || 0); tokUpd({ fly: v, lastFly: v || t.lastFly }); } }),
+        h('span', { class: 'muted small-text' }, 'm acima do chão')),
+      fly > 0 ? h('p', { class: 'hint', style: { margin: 0 } }, `Vê e é visto por cima de muros com até ${String(Math.round((App.Combat.topOf(t) - 0.01) * 10) / 10).replace('.', ',')} m. A parede absoluta continua bloqueando.`) : '',
+      h('span', { class: 'eyebrow' }, 'Para os jogadores'),
+      visSeg(visOf(t), (k) => tokUpd({ hidden: k === 'hidden', masked: k === 'masked' })),
+      h('div', { class: 'row' }, h('span', { class: 'eyebrow grow' }, 'Grupo'),
+        h('select', { class: 'grow', value: t.group || '', onchange: (e) => {
+          const v = e.target.value;
+          if (v === '__new') { const ng = newGroup(sc, [t.id]); if (!ng) e.target.value = t.group || ''; return; }
+          tokUpd({ group: v || null });
+        } }, h('option', { value: '' }, 'Sem grupo'), groups.map((x) => h('option', { value: x.id }, x.name)), h('option', { value: '__new' }, '+ Novo grupo…'))),
+      g ? h('div', { class: 'grp-box' },
+        h('div', { class: 'grp-head' }, ic('users'), h('b', {}, g.name), h('span', { class: 'muted' }, members.length + (members.length === 1 ? ' token' : ' tokens'))),
+        visSeg(groupVis(sc, g.id), (k) => S().dispatch({ type: 'group.vis', sceneId: sc.id, id: g.id, vis: k })),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Muda o grupo inteiro de uma vez.')) : '');
+  }
+  // Lista de grupos da cena (aba Camadas)
+  function groupsSection(sc) {
+    const groups = sc.groups || [], B = App.Board, selTok = B.selected && sc.tokens[B.selected];
+    const box = h('div', { class: 'groups-sec' }, h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Grupos de tokens'),
+      iconBtn('plus', selTok ? 'Novo grupo com o token selecionado' : 'Novo grupo vazio', () => { newGroup(sc, selTok ? [selTok.id] : []); })));
+    if (!groups.length) box.append(h('p', { class: 'hint' }, 'Junte tokens num grupo (no painel do token, em Grupo) para mostrar, esconder ou virar vulto todos de uma vez. Ex.: a emboscada de 3 goblins aparece com um clique.'));
+    for (const g of groups) {
+      const members = Object.values(sc.tokens).filter((t) => t.group === g.id);
+      box.append(h('div', { class: 'grp-row' },
+        h('div', { class: 'row' },
+          h('input', { class: 'grp-name grow', value: g.name, onchange: (e) => S().dispatch({ type: 'group.update', sceneId: sc.id, id: g.id, patch: { name: e.target.value.trim() || g.name } }) }),
+          h('span', { class: 'n' }, String(members.length)),
+          iconBtn('scan', 'Mostrar no mapa', () => { if (members.length) { B.selected = members[0].id; const m0 = members[0], hs = (m0.size || 1) * sc.grid / 2; B.centerOn(m0.x + hs, m0.y + hs); B.requestRender(); UI.refresh(); } }),
+          iconBtn('trash-2', 'Desfazer o grupo (os tokens continuam no mapa)', () => S().dispatch({ type: 'group.delete', sceneId: sc.id, id: g.id }))),
+        members.length ? visSeg(groupVis(sc, g.id), (k) => S().dispatch({ type: 'group.vis', sceneId: sc.id, id: g.id, vis: k }))
+          : h('p', { class: 'hint', style: { margin: 0 } }, 'Vazio: escolha este grupo no painel de um token.')));
+    }
+    return box;
+  }
+
+  function buildHud(hud, sc, t) {
+    const gm = S().gmView(), a = S().actorOf(t), st = S().state;
+    const tokUpd = (patch) => S().dispatch({ type: 'token.update', sceneId: sc.id, id: t.id, patch });
+    const setBars = (bars) => (t.linked && a ? S().dispatch({ type: 'actor.update', id: a.id, patch: { bars } }) : tokUpd({ bars }));
+    hud.innerHTML = '';
+
+    const sub = [a ? KIND[a.kind] : 'Token', t.hidden ? 'invisível' : t.masked ? 'vulto' : null, App.Combat.flyOf(t) > 0 ? 'voando ' + String(App.Combat.flyOf(t)).replace('.', ',') + ' m' : null, t.size && t.size !== 1 ? `${t.size}×${t.size}` : null].filter(Boolean).join(' · ');
+    hud.append(h('div', { class: 'hud-top' },
+      avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 42),
+      h('div', { class: 'grow' },
+        gm ? h('input', { class: 'hud-name', value: t.name, title: 'Nome do token', onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); }, onchange: (e) => tokUpd({ name: e.target.value }) })
+          : h('div', { class: 'hud-name' }, t.name),
+        h('div', { class: 'hud-sub' }, sub))));
+
+    const bars = U.clone(S().barsOf(t));
+    if (bars.length) {
+      const sec = h('div', { class: 'hud-section' });
+      bars.forEach((b, i) => {
+        sec.append(h('div', { class: 'hud-bar' },
+          h('span', {}, b.name),
+          h('input', { class: 'num', value: b.value, title: 'Digite um valor, ou +5, -7, -2d6',
+            onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+            onchange: (e) => { const v = applyDelta(b.value, e.target.value); if (v == null) return; bars[i].value = v; setBars(bars); } }),
+          h('span', {}, '/ ' + b.max),
+          meter(b, i)));
+      });
+      hud.append(sec);
+    }
+
+    const conds = t.conditions || [];
+    const condSec = h('div', { class: 'hud-section' });
+    if (conds.length) {
+      condSec.append(h('div', { class: 'chips' }, conds.map((c) => h('span', { class: 'chip', title: 'Clique para remover',
+        onclick: () => tokUpd({ conditions: conds.filter((x) => x !== c) }) }, c.name + (c.rounds > 0 ? ` · ${c.rounds}` : '')))));
+    }
+    const rounds = h('input', { class: 'num', type: 'number', min: 0, placeholder: 'rod.', title: 'Duração em rodadas (vazio = até remover)' });
+    const condSel = h('select', { class: 'grow', onchange: () => {
+      let name = condSel.value;
+      if (!name) return;
+      if (name === '__custom') { name = (prompt('Nome da condição:') || '').trim(); if (!name) { condSel.value = ''; return; } }
+      tokUpd({ conditions: [...conds.filter((c) => c.name !== name), { name, rounds: Number(rounds.value) || 0 }] });
+    } }, h('option', { value: '' }, 'Adicionar condição…'), st.conditions.map((c) => h('option', { value: c }, c)), h('option', { value: '__custom' }, 'Outra…'));
+    condSec.append(h('div', { class: 'row' }, condSel, rounds));
+    hud.append(condSec);
+
+    // Luz e visão (com iluminação ligada)
+    if (sc.light.enabled && gm) {
+      const LP = App.Light.PRESETS, li = t.light || { bright: 0, dim: 0 };
+      const cur = LP.find((p) => p.bright === (Number(li.bright) || 0) && p.dim === (Number(li.dim) || 0));
+      const lightSel = h('select', { class: 'grow', title: 'Luz que o token carrega (raio em quadrados: forte / fraca)', value: cur ? cur.id : 'custom',
+        onchange: (e) => { const p = LP.find((x) => x.id === e.target.value); if (p) tokUpd({ light: p.dim ? { bright: p.bright, dim: p.dim } : null }); } },
+        LP.map((p) => h('option', { value: p.id }, p.dim ? `${p.label} (${p.bright}/${p.dim})` : p.label)),
+        cur ? null : h('option', { value: 'custom' }, `Personalizada (${li.bright}/${li.dim})`));
+      const dvSel = h('select', { title: 'Visão no escuro (quadrados)', value: String(Number(t.darkvision) || 0), onchange: (e) => tokUpd({ darkvision: Number(e.target.value) || 0 }) },
+        App.Light.DARKVISION.map(([v, l]) => h('option', { value: String(v) }, v ? 'Visão no escuro ' + l : 'Sem visão no escuro')));
+      hud.append(h('div', { class: 'hud-section light-row' }, h('span', { class: 'eyebrow' }, 'Luz e visão'), h('div', { class: 'row' }, ic('flame'), lightSel), dvSel));
+    }
+
+    // Ações rápidas: clique na ação e depois no alvo
+    if (a && S().canControl(t) && (a.actions || []).length) {
+      hud.append(h('div', { class: 'hud-section' }, h('span', { class: 'eyebrow' }, 'Ações'),
+        h('div', { class: 'hud-acts' }, a.actions.map((ac, i) => {
+          const meta = [reachText(Object.assign({ mode: 'roll' }, ac)), Number(ac.cost) > 0 ? ac.cost + ' ' + (ac.costBar || '') : ''].filter(Boolean).join(' · ');
+          return h('button', {
+            class: 'act-btn ' + (ac.mode || 'roll'), title: ac.name + '\n' + actionSummary(Object.assign({ mode: 'roll' }, ac)) + (i < 9 ? `\nAtalho: ${i + 1}` : ''),
+            onclick: () => UI.useAction(a, i, t),
+          }, ic(MODE_ICON[ac.mode || 'roll']), h('span', {}, ac.name), meta ? h('small', {}, meta) : null, i < 9 ? h('kbd', { class: 'act-key' }, String(i + 1)) : null);
+        }))));
+    }
+
+    if (gm) hud.append(visGroupSection(sc, t));
+
+    const inCombat = st.combat.entries.some((e) => e.tokenId === t.id);
+    const maxZ = Object.values(sc.tokens).reduce((m, x) => Math.max(m, x.z || 0), 0);
+    const sizes = [0.5, 1, 2, 3, 4, 6, 8];
+    const resize = (dir) => {
+      const i = Math.max(0, sizes.indexOf(t.size || 1));
+      tokUpd({ size: sizes[U.clamp(i + dir, 0, sizes.length - 1)] });
+    };
+    hud.append(h('div', { class: 'hud-btns' },
+      a && S().ownsActor(a) && btnI('file-text', 'Ficha', { onclick: () => UI.openActor(a.id) }),
+      !inCombat && btnI('hourglass', 'Iniciativa', { title: 'Adicionar ao combate e rolar iniciativa', onclick: () => addToCombat([t], true) }),
+      gm && h('button', { class: 'btn', title: 'Trazer para frente', onclick: () => tokUpd({ z: maxZ + 1 }) }, ic('arrow-up')),
+      gm && h('button', { class: 'btn', title: 'Diminuir', onclick: () => resize(-1) }, ic('minus')),
+      gm && h('button', { class: 'btn', title: 'Aumentar', onclick: () => resize(1) }, ic('plus')),
+      gm && h('button', { class: 'btn', title: 'Duplicar token', onclick: () => {
+        const c = U.clone(t); c.id = U.uid('t_'); c.x += sc.grid; c.z = maxZ + 1;
+        S().dispatch({ type: 'token.add', sceneId: sc.id, token: c }); App.Board.selected = c.id;
+      } }, ic('copy-plus')),
+      gm && h('button', { class: 'btn danger', title: 'Remover do mapa (Delete)', onclick: () => {
+        S().dispatch({ type: 'token.delete', sceneId: sc.id, id: t.id }); App.Board.selected = null;
+      } }, ic('trash-2'))));
+  }
+
+  // =============== Combate ===============
+  function entryToken(e) { const sc = S().state.scenes[e.sceneId]; return sc ? sc.tokens[e.tokenId] : null; }
+
+  function addToCombat(tokens, roll) {
+    const sc = S().currentScene(), st = S().state;
+    const entries = tokens.filter((t) => !st.combat.entries.some((e) => e.tokenId === t.id))
+      .map((t) => ({ id: U.uid('e_'), sceneId: sc.id, tokenId: t.id, init: null }));
+    if (!entries.length) { U.toast('Nada novo para adicionar.'); return; }
+    S().dispatch({ type: 'combat.add', entries });
+    if (roll) setTimeout(() => rollInitiative(entries.map((e) => e.id)), S().gmView() ? 0 : 400);
+  }
+
+  function rollInitiative(ids) {
+    const st = S().state, values = {}, parts = [];
+    for (const e of st.combat.entries) {
+      if (ids ? !ids.includes(e.id) : e.init != null) continue;
+      const t = entryToken(e);
+      if (!t || !S().canControl(t)) continue;
+      const a = S().actorOf(t);
+      try {
+        const r = App.Dice.roll((a && a.initFormula) || '1d20', a ? S().vars(a, t) : {});
+        values[e.id] = r.total;
+        parts.push(Object.assign({}, r, { label: t.name }));
+      } catch (err) { U.toast(t.name + ': ' + err.message, 'error'); }
+    }
+    if (!parts.length) { U.toast('Nenhuma iniciativa para rolar.'); return; }
+    S().dispatch({ type: 'combat.setInit', values });
+    S().dispatch({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'roll', from: S().myName(), playerId: S().me.id, label: 'Iniciativa', parts, secret: UI.secret } });
+    if (S().gmView() && !st.combat.active) S().dispatch({ type: 'combat.sort' });
+  }
+
+  function renderCombat() {
+    const p = $('#p-combat');
+    safeRender(p, () => {
+      p.innerHTML = '';
+      const st = S().state;
+      if (!st) return;
+      const c = st.combat, gm = S().gmView(), sc = S().currentScene();
+      const D = (type, extra) => S().dispatch(Object.assign({ type }, extra));
+
+      p.append(h('div', { class: 'combat-head' },
+        h('div', { class: 'round' }, c.active ? `Rodada ${c.round}` : 'Fora de combate'),
+        gm && h('div', { class: 'row' },
+          c.active
+            ? [iconBtn('skip-back', 'Turno anterior', () => D('combat.prev')),
+              btnI('skip-forward', 'Próximo turno', { class: 'btn primary small', onclick: () => D('combat.next') }),
+              h('button', { class: 'btn danger small', onclick: () => { if (confirm('Encerrar o combate?')) D('combat.end'); } }, 'Encerrar')]
+            : btnI('swords', 'Iniciar combate', { class: 'btn primary small', disabled: !c.entries.length, onclick: () => D('combat.start') }))));
+
+      const selTok = sc && App.Board.selected && sc.tokens[App.Board.selected];
+      p.append(h('div', { class: 'row wrap' },
+        btnI('plus', 'Token selecionado', { class: 'btn small', disabled: !selTok, title: 'Selecione um token no mapa', onclick: () => addToCombat([selTok], true) }),
+        gm && btnI('users', 'Todos da cena', { class: 'btn small', disabled: !sc, onclick: () => addToCombat(Object.values(sc.tokens), false) }),
+        gm && btnI('dices', 'Rolar faltantes', { class: 'btn small', onclick: () => rollInitiative(null) }),
+        gm && btnI('list-ordered', 'Ordenar', { class: 'btn small', onclick: () => D('combat.sort') })));
+
+      if (!c.entries.length) p.append(h('p', { class: 'empty' }, 'Ninguém no combate. Selecione tokens e adicione aqui, ou use o botão Iniciativa no painel do token.'));
+      c.entries.forEach((e, i) => {
+        const t = entryToken(e);
+        if (!t || (t.hidden && !gm)) return;
+        const mine = S().canControl(t), a = S().actorOf(t), veil = t.masked && !gm && !mine;
+        p.append(h('div', { class: 'init-row' + (c.active && i === c.turn ? ' current' : '') },
+          veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 30),
+          h('span', { class: 'name', title: 'Mostrar no mapa', onclick: () => focusToken(e, t) }, veil ? 'Vulto' : t.name,
+            t.hidden ? h('span', { class: 'badge', style: { marginLeft: '6px' } }, 'invisível') : null,
+            gm && t.masked ? h('span', { class: 'badge', style: { marginLeft: '6px' } }, 'vulto') : null),
+          h('input', { class: 'num', value: e.init ?? '', disabled: !mine, placeholder: '—', title: 'Iniciativa',
+            onchange: (ev) => D('combat.setInit', { values: { [e.id]: ev.target.value === '' ? null : Number(ev.target.value) } }) }),
+          mine && iconBtn('dices', 'Rolar iniciativa', () => rollInitiative([e.id])),
+          gm && iconBtn('x', 'Remover do combate', () => D('combat.remove', { id: e.id }))));
+      });
+
+      const cur = c.active && c.entries[c.turn], curTok = cur && entryToken(cur);
+      if (!gm && curTok && S().canControl(curTok)) {
+        p.append(btnI('flag', 'Encerrar meu turno', { class: 'btn primary big-btn', onclick: () => D('combat.next') }));
+      }
+      p.append(h('p', { class: 'hint' }, 'Em combate, os jogadores só movem seus tokens na própria vez. Condições com duração diminuem no início do turno do token.'));
+    });
+  }
+
+  function checkMyTurn() {
+    const st = S().state;
+    if (!st || S().gmView()) return;
+    const c = st.combat, e = c.active && c.entries[c.turn];
+    const key = e ? c.round + ':' + c.turn + ':' + e.tokenId : '';
+    if (key === UI.turnKey) return;
+    UI.turnKey = key;
+    const t = e && entryToken(e);
+    if (t && S().canControl(t)) U.toast(`Sua vez, ${t.name}`, 'turn', 4000);
+  }
+
+  // =============== Configurar cena (mestre) ===============
+  // Configuração da cobertura da cena (edita o objeto c no lugar; salva junto com a cena)
+  function coverSection(c) {
+    const n = (obj, k, attrs) => h('input', Object.assign({ type: 'number', value: obj[k], oninput: (e) => { obj[k] = Math.max(0, Number(e.target.value) || 0); } }, attrs));
+    const na = (t) => h('span', { class: 'na' }, t);
+    return h('div', { class: 'full col', style: { gap: '10px' } },
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => { c.enabled = e.target.checked; } }), 'Muros dão cobertura pela altura nesta cena (desligado: a total bloqueia tudo e ¾ e meia não fazem nada)'),
+      h('div', { class: 'cover-grid' },
+        h('span', { class: 'ch' }, 'Tipo'), h('span', { class: 'ch' }, 'Altura (m)'), h('span', { class: 'ch' }, 'Sombra (quad.)'), h('span', { class: 'ch' }, 'Cobre a partir de'), h('span', { class: 'ch' }, 'Bônus'),
+        h('span', {}, h('i', { class: 'wt-line wt-full', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Absoluta'),
+        na('telhado'), na('toda'), na('sempre'), na('não é alvo'),
+        h('span', {}, h('i', { class: 'wt-line wt-high', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Total'),
+        n(c.heights, 'high', { step: 0.1, min: 0 }), n(c.shadow, 'high', { min: 0, max: 20 }), na('pela altura'), na('pela altura'),
+        h('span', {}, h('i', { class: 'wt-line wt-three', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Três quartos'),
+        n(c.heights, 'three', { step: 0.1, min: 0 }), n(c.shadow, 'three', { min: 0, max: 20 }), n(c.levels, 'three', { min: 1, max: 99 }), n(c.bonus, 'three', { min: 0, max: 20 }),
+        h('span', {}, h('i', { class: 'wt-line wt-half', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Meia'),
+        n(c.heights, 'half', { step: 0.1, min: 0 }), n(c.shadow, 'half', { min: 0, max: 20 }), n(c.levels, 'half', { min: 1, max: 99 }), n(c.bonus, 'half', { min: 0, max: 20 })),
+      h('p', { class: 'cover-note', style: { margin: 0 } }, 'Parede absoluta é uma casa com telhado: nunca deixa ver nem atacar o outro lado, seja qual for a altura. Nas outras paredes, a proteção é a altura do muro dividida pela altura do alvo (campo Altura na ficha; sem ele, 1,8 m por quadrado de tamanho). Cobrindo 100% ou mais, o alvo não pode ser atacado. O bônus soma na Defesa e nos testes de resistência. Quem não é mais alto que o muro não enxerga nem ataca por cima dele. Ex.: muro de 1,4 m cobre 78% de um humano (1,8 m) e dá o bônus de três quartos; para um gigante de 3,6 m cobre só 39%, nada.'),
+      h('label', {}, 'Quem está na sombra de um muro baixo aparece para os jogadores como', h('select', { value: c.show, onchange: (e) => { c.show = e.target.value; } },
+        h('option', { value: 'show' }, 'Normal (sempre visível)'), h('option', { value: 'silhouette' }, 'Vulto (sem nome nem vida)'), h('option', { value: 'hide' }, 'Escondido'))),
+      h('p', { class: 'cover-note', style: { margin: 0 } }, 'Sombra = quantos quadrados atrás do muro alguém fica fora de vista para quem olha do outro lado. Cada ficha pode ter a própria regra (aba Config da ficha).'),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: c.lean, onchange: (e) => { c.lean = e.target.checked; } }), 'Quem está encostado no muro ataca por cima dele (o muro não protege o alvo)'));
+  }
+
+  function sceneSettings(id) {
+    const sc = S().state.scenes[id];
+    if (!sc) return;
+    const f = U.clone(sc);
+    f.cover = App.Combat.coverCfg(f);
+    let bgInfo = null;
+    const num = (key, attrs = {}) => h('input', Object.assign({ type: 'number', value: f[key], oninput: (e) => { f[key] = Number(e.target.value); } }, attrs));
+    const pxInput = h('input', { type: 'number', value: 70, min: 10 });
+    const bgLabel = h('span', { class: 'muted small-text' }, f.bg ? 'Imagem definida' : 'Sem imagem');
+    const fitRow = h('div', { class: 'full row wrap', hidden: true },
+      h('span', { class: 'small-text muted' }, 'Pixels por quadrado na imagem original:'), pxInput,
+      h('button', { class: 'btn small', onclick: () => {
+        if (!bgInfo) return;
+        const px = Math.max(10, Number(pxInput.value) || 70);
+        f.cols = Math.max(1, Math.round(bgInfo.ow / px)); f.rows = Math.max(1, Math.round(bgInfo.oh / px));
+        colsIn.value = f.cols; rowsIn.value = f.rows;
+      } }, 'Ajustar tamanho da cena'));
+    const colsIn = num('cols', { min: 1, max: 300 }), rowsIn = num('rows', { min: 1, max: 300 });
+
+    const body = h('div', { class: 'form' },
+      h('label', { class: 'full' }, 'Nome', h('input', { value: f.name, oninput: (e) => { f.name = e.target.value; } })),
+      h('div', { class: 'full row wrap' },
+        btnI('image', 'Enviar mapa…', { onclick: async () => {
+          const r = await App.Images.pick(App.Images.MAP);
+          if (!r) return;
+          f.bg = r.id; bgInfo = r;
+          bgLabel.textContent = `Imagem ${r.ow}×${r.oh}px`;
+          fitRow.hidden = false;
+          const px = Number(pxInput.value) || 70;
+          f.cols = Math.max(1, Math.round(r.ow / px)); f.rows = Math.max(1, Math.round(r.oh / px));
+          colsIn.value = f.cols; rowsIn.value = f.rows;
+        } }),
+        h('button', { class: 'btn', onclick: () => { f.bg = null; bgLabel.textContent = 'Sem imagem'; fitRow.hidden = true; } }, 'Remover'),
+        bgLabel),
+      fitRow,
+      h('label', {}, 'Largura (quadrados)', colsIn),
+      h('label', {}, 'Altura (quadrados)', rowsIn),
+      h('label', {}, 'Tamanho do quadrado (px)', num('grid', { min: 20, max: 300 })),
+      h('label', {}, 'Medida da diagonal', h('select', { value: f.measure, onchange: (e) => { f.measure = e.target.value; } },
+        h('option', { value: 'cheb' }, 'Diagonal = 1 (D&D 5e)'), h('option', { value: 'alt' }, 'Alternada 1-2-1 (Pathfinder)'), h('option', { value: 'euclid' }, 'Real (euclidiana)'))),
+      h('label', {}, 'Cada quadrado vale', num('cellDist', { step: 0.5, min: 0 })),
+      h('label', {}, 'Unidade', h('input', { value: f.unit, oninput: (e) => { f.unit = e.target.value; } })),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.showGrid, onchange: (e) => { f.showGrid = e.target.checked; } }), 'Mostrar grid'),
+      h('label', {}, 'Cor e opacidade do grid', h('div', { class: 'row' },
+        h('input', { type: 'color', value: U.safeColor(f.gridColor, '#ffffff'), oninput: (e) => { f.gridColor = e.target.value; } }),
+        h('input', { type: 'range', class: 'grow', min: 0.05, max: 1, step: 0.05, value: f.gridAlpha, oninput: (e) => { f.gridAlpha = Number(e.target.value); } }))),
+      h('label', {}, 'Cor do piso (sem imagem)', h('input', { type: 'color', value: U.safeColor(f.bgColor, '#3a3934'), oninput: (e) => { f.bgColor = e.target.value; } })),
+      h('h4', { class: 'full' }, 'Iluminação'),
+      h('label', { class: 'check full' }, h('input', { type: 'checkbox', checked: f.light.enabled, onchange: (e) => { f.light.enabled = e.target.checked; } }), 'Luz e visão dinâmicas (paredes bloqueiam a visão)'),
+      h('label', {}, 'Ambiente', h('select', { value: f.light.global ? 'day' : 'night', onchange: (e) => { f.light.global = e.target.value === 'day'; } },
+        h('option', { value: 'day' }, 'Claro (dia)'), h('option', { value: 'night' }, 'Escuro (noite, masmorra)'))),
+      h('div', { class: 'row', style: { alignSelf: 'end' } },
+        h('button', { class: 'btn small', onclick: () => { const w = App.Light.wallsFromDrawings(S().state.scenes[id]); if (w.length) { S().dispatch({ type: 'wall.add', sceneId: id, walls: w }); U.toast(w.length + ' paredes criadas'); } else U.toast('Não há desenhos nesta cena.'); } }, 'Paredes dos desenhos'),
+        h('button', { class: 'btn small danger', onclick: () => { if (confirm('Apagar todas as paredes e portas desta cena?')) S().dispatch({ type: 'wall.clear', sceneId: id }); } }, 'Apagar paredes')),
+      h('h4', { class: 'full' }, 'Cobertura e muros'),
+      coverSection(f.cover),
+      h('h4', { class: 'full' }, 'Névoa de guerra'),
+      h('label', { class: 'check full' }, h('input', { type: 'checkbox', checked: f.fog.enabled, onchange: (e) => { f.fog.enabled = e.target.checked; } }), 'Ativar névoa nesta cena (revele e esconda áreas com as ferramentas de sol e nuvem)'),
+      h('div', { class: 'full row wrap' },
+        h('button', { class: 'btn small', onclick: () => { S().dispatch({ type: 'fog.reset', sceneId: id, reveal: false }); U.toast('Cena toda coberta'); } }, 'Cobrir tudo'),
+        h('button', { class: 'btn small', onclick: () => { S().dispatch({ type: 'fog.reset', sceneId: id, reveal: true }); U.toast('Cena toda revelada'); } }, 'Revelar tudo'),
+        h('button', { class: 'btn small danger', onclick: () => { if (confirm('Apagar todos os desenhos desta cena?')) S().dispatch({ type: 'drawing.clear', sceneId: id }); } }, 'Apagar desenhos')),
+    );
+
+    UI.modal('Configurar cena', body, [
+      { label: 'Cancelar' },
+      { label: 'Salvar', primary: true, onclick: () => {
+        const cur = S().state.scenes[id];
+        if (!cur) return;
+        const patch = {
+          name: f.name.trim() || cur.name, cols: U.clamp(Math.round(f.cols) || 1, 1, 300), rows: U.clamp(Math.round(f.rows) || 1, 1, 300),
+          grid: U.clamp(Math.round(f.grid) || 70, 20, 300), measure: f.measure, cellDist: Number(f.cellDist) || 0, unit: f.unit,
+          showGrid: f.showGrid, gridColor: f.gridColor, gridAlpha: f.gridAlpha, bgColor: f.bgColor, bg: f.bg,
+          fog: Object.assign({}, cur.fog, { enabled: f.fog.enabled, v: cur.fog.v + 1 }),
+          light: { enabled: !!f.light.enabled, global: !!f.light.global },
+          cover: App.Combat.coverCfg(f),
+        };
+        S().dispatch({ type: 'scene.update', id, patch });
+      } },
+    ]);
+  }
+
+  // =============== Mesa (conexão, salvar, importar) ===============
+  function renderTable() {
+    const p = $('#p-table');
+    safeRender(p, () => {
+      p.innerHTML = '';
+      const st = S().state, gm = S().gmView(), N = App.Net;
+      if (!st) { p.append(h('p', { class: 'muted' }, 'Conectando à mesa…')); return; }
+
+      p.append(h('h4', { style: { marginTop: 0 } }, 'Conexão'));
+      if (S().role === 'gm' && N.isOnline()) {
+        p.append(h('div', { class: 'row wrap' },
+          h('span', { class: 'muted' }, 'Código'), h('b', { style: { fontSize: '18px', letterSpacing: '.2em', fontFamily: 'var(--mono)' } }, N.code),
+          h('span', { class: 'grow' }),
+          btnI('copy', 'Código', { class: 'btn small', onclick: () => U.copy(N.code) }),
+          btnI('link', 'Link', { class: 'btn small', onclick: () => U.copy(N.inviteLink()) })));
+      } else if (S().role === 'player') {
+        p.append(h('p', { style: { margin: 0 } }, 'Conectado à mesa ', h('b', {}, N.code), ' como ', h('b', {}, S().me.name)));
+      } else {
+        p.append(h('p', { class: 'muted', style: { margin: 0 } }, 'Mesa offline: só você vê. Recarregue a página e escolha "Abrir mesa online" para jogar com os amigos.'));
+      }
+
+      p.append(h('h4', {}, 'Jogadores'));
+      const online = new Set(S().online);
+      if (st.gm) p.append(h('div', { class: 'player-item' }, h('span', { class: 'online-dot on' }), h('b', { style: { color: U.safeColor(st.gm.color) } }, st.gm.name), h('span', { class: 'badge gold' }, 'Mestre')));
+      const players = Object.entries(st.players);
+      for (const [pid, pl] of players) {
+        p.append(h('div', { class: 'player-item' }, h('span', { class: 'online-dot' + (online.has(pid) ? ' on' : '') }),
+          h('span', { style: { color: U.safeColor(pl.color) } }, pl.name), pid === S().me.id ? h('span', { class: 'badge blue' }, 'você') : null));
+      }
+      if (!players.length) p.append(h('p', { class: 'empty' }, 'Nenhum jogador entrou ainda.'));
+
+      if (!gm) {
+        p.append(h('p', { class: 'hint' }, 'Tudo é salvo pelo mestre. Para guardar sua ficha, abra-a e use Configurar → Exportar.'));
+        return;
+      }
+
+      p.append(h('h4', {}, 'Campanha'));
+      p.append(h('label', { class: 'sheet-meta', style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--muted)', marginTop: 0 } }, 'Nome da campanha',
+        h('input', { value: st.name, onchange: (e) => S().dispatch({ type: 'campaign.update', patch: { name: e.target.value } }) })));
+      p.append(h('p', { class: 'hint', id: 'saved-at' }, App.Storage.lastSaved ? 'Salvo às ' + U.fmtTime(App.Storage.lastSaved) : 'Salvamento automático no navegador ativo.'));
+      p.append(h('div', { class: 'row wrap' },
+        btnI('download', 'Exportar .json', { class: 'btn primary small', onclick: () => App.Storage.downloadJSON(App.Storage.campaignBundle(true), st.name) }),
+        btnI('copy', 'Código de texto', { class: 'btn small', onclick: () => codeDialog() }),
+        btnI('upload', 'Importar', { class: 'btn small', onclick: () => UI.importDialog() })));
+      p.append(h('p', { class: 'hint' }, 'O arquivo .json contém tudo (cenas, fichas e imagens em WebP). Guarde como backup ou envie para outra pessoa abrir como mestre.'));
+
+      p.append(h('h4', {}, 'Regras automáticas'));
+      const R = st.rules || {};
+      const setR = (k, v) => S().dispatch({ type: 'campaign.update', patch: { rules: { [k]: v } } });
+      const chk = (k, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!R[k], onchange: (e) => setR(k, e.target.checked) }), label);
+      p.append(
+        h('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--muted)' } }, 'Acerto crítico', h('select', { value: R.critMode, onchange: (e) => setR('critMode', e.target.value) },
+          h('option', { value: 'dice' }, 'Dobra os dados de dano'), h('option', { value: 'double' }, 'Dobra o dano total'), h('option', { value: 'none' }, 'Sem crítico'))),
+        chk('critHits', 'Crítico sempre acerta'),
+        chk('nat1Miss', '1 natural no d20 sempre erra'),
+        chk('minZero', 'Barras não ficam negativas'),
+        chk('actOnTurn', 'Em combate, jogador só usa ações na própria vez'),
+        chk('hideNumbers', 'Esconder Defesa e PV dos monstros dos jogadores'));
+
+      // Lista editável em etiquetas: × remove, o campo embaixo adiciona (Enter ou vírgula; dá para colar "A, B, C")
+      const tagList = (key, ph) => {
+        const cur = () => (S().state[key] || []).slice();
+        const save = (list) => S().dispatch({ type: 'campaign.update', patch: { [key]: list } });
+        const inp = h('input', { class: 'tag-add-in', placeholder: ph, maxlength: 40 });
+        const add = () => {
+          const have = cur(), slugs = new Set(have.map((x) => U.slug(x)));
+          const novos = inp.value.split(',').map((x) => x.trim()).filter((x) => x && !slugs.has(U.slug(x)) && slugs.add(U.slug(x)));
+          inp.value = '';
+          if (novos.length) save(have.concat(novos));
+          setTimeout(() => { const n = document.querySelector(`.tag-edit[data-key="${key}"] .tag-add-in`); if (n) n.focus(); });
+        };
+        inp.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } };
+        return h('div', { class: 'tag-edit', 'data-key': key },
+          h('div', { class: 'tag-list' }, ...cur().map((name, i) => h('span', { class: 'ltag' }, name,
+            h('button', { class: 'tag-x', title: 'Remover ' + name, onclick: () => { const l = cur(); l.splice(i, 1); save(l); } }, ic('x'))))),
+          h('div', { class: 'tag-add' }, inp, h('button', { class: 'btn small', onclick: add }, ic('plus'), 'Adicionar')));
+      };
+      p.append(h('h4', {}, 'Atributos da campanha'));
+      p.append(h('p', { class: 'hint' }, 'As fichas e as ações escolhem desta lista, então todo mundo usa o mesmo nome.'));
+      p.append(tagList('attrs', 'Novo atributo, ex.: Carisma'));
+      p.append(h('h4', {}, 'Barras da campanha'));
+      p.append(h('p', { class: 'hint' }, 'Vida, Mana, Sanidade… Personagens novos ganham todas; criaturas, só a primeira.'));
+      p.append(tagList('barNames', 'Nova barra, ex.: Sanidade'));
+      p.append(h('h4', {}, 'Condições disponíveis'));
+      p.append(tagList('conditions', 'Nova condição, ex.: Atordoado'));
+
+      p.append(h('h4', {}, 'Zona de perigo'));
+      p.append(h('button', { class: 'btn danger small', onclick: () => {
+        if (!confirm('Começar uma campanha nova? A atual será substituída (exporte antes se quiser guardar).')) return;
+        const st2 = S().newCampaign();
+        st2.gm = st.gm; st2.players = st.players;
+        replaceCampaign(st2, {});
+      } }, 'Nova campanha'));
+    });
+  }
+
+  function replaceCampaign(state, assets) {
+    const S_ = S();
+    state = S_.migrate(state);
+    state.gm = { id: S_.me.id, name: S_.me.name, color: S_.me.color };
+    S_.viewSceneId = null;
+    App.Board.selected = null;
+    S_.setState(state, assets);
+    App.Net.broadcastFull();
+    App.Storage.save();
+  }
+
+  async function codeDialog() {
+    const ta = h('textarea', { rows: 8, readonly: true, value: 'Gerando…' });
+    const info = h('p', { class: 'hint' });
+    const withImg = h('input', { type: 'checkbox', checked: true });
+    const gen = async () => {
+      ta.value = 'Gerando…';
+      const code = await App.Storage.toCode(App.Storage.campaignBundle(withImg.checked));
+      ta.value = code;
+      info.textContent = `${U.fmtSize(code.length)} de texto` + (code.length > 2e6 ? '. Grande demais para colar em chat: prefira o arquivo .json.' : '');
+    };
+    withImg.onchange = gen;
+    UI.modal('Código da campanha', h('div', { class: 'col' },
+      h('p', { class: 'muted', style: { margin: 0 } }, 'Copie este texto e guarde num bloco de notas, ou envie para alguém. Para restaurar: menu ⋯ → Importar.'),
+      h('label', { class: 'check' }, withImg, 'Incluir imagens (deixa o código bem maior)'),
+      ta, info), [
+      { label: 'Fechar' },
+      { label: 'Copiar', primary: true, onclick: () => { U.copy(ta.value); return false; } },
+    ]);
+    gen();
+  }
+
+  UI.importDialog = function () {
+    let fileText = null;
+    const ta = h('textarea', { rows: 6, placeholder: 'Cole aqui um código MESARPG1… ou o conteúdo de um .json' });
+    const fname = h('span', { class: 'muted small-text' });
+    UI.modal('Importar', h('div', { class: 'col' },
+      h('p', { class: 'muted', style: { margin: 0 } }, S().gmView() ? 'Campanha completa, cena ou ficha (arquivo .json ou código de texto).' : 'Importe uma ficha exportada (.json).'),
+      h('div', { class: 'row' }, btnI('folder-open', 'Escolher arquivo…', { onclick: async () => {
+        const f = await U.pickFile('.json,application/json,text/plain');
+        if (!f) return;
+        fileText = await f.text();
+        fname.textContent = `${f.name} (${U.fmtSize(f.size)})`;
+        ta.value = ''; ta.disabled = true;
+      } }), fname),
+      ta), [
+      { label: 'Cancelar' },
+      { label: 'Importar', primary: true, onclick: async () => {
+        try { await applyImport(await App.Storage.parse(fileText || ta.value)); }
+        catch (e) { U.toast(e.message, 'error'); return false; }
+      } },
+    ]);
+  };
+
+  async function applyImport(obj) {
+    const S_ = S(), gm = S_.isGM();
+    const addAssets = (assets) => {
+      for (const [id, data] of Object.entries(assets || {})) {
+        if (!/^img_[0-9a-f]{16}$/.test(id) || typeof data !== 'string' || S_.assets[id]) continue;
+        S_.assets[id] = data;
+        App.Net.sendAsset(id, data);
+      }
+    };
+    if (obj.format === 'mesarpg') {
+      if (!gm) throw new Error('Só o mestre pode importar uma campanha.');
+      if (!confirm('Substituir a campanha atual por esta? (exporte antes se quiser guardar a atual)')) throw new Error('Importação cancelada');
+      replaceCampaign(obj.state, obj.assets || {});
+      U.toast('Campanha importada!');
+    } else if (obj.format === 'mesarpg-scene') {
+      if (!gm) throw new Error('Só o mestre pode importar cenas.');
+      addAssets(obj.assets);
+      for (const a of Object.values(obj.actors || {})) if (!S_.state.actors[a.id]) S_.dispatch({ type: 'actor.add', actor: a });
+      const sc = Object.assign(S_.newScene(), U.clone(obj.scene));
+      sc.id = U.uid('s_');
+      S_.dispatch({ type: 'scene.add', scene: sc });
+      S_.viewSceneId = sc.id;
+      U.toast('Cena importada!');
+    } else if (obj.format === 'mesarpg-actor') {
+      addAssets(obj.assets);
+      const a = U.clone(obj.actor);
+      a.id = U.uid('ac_');
+      a.owner = gm ? (a.kind === 'pc' ? 'all' : '') : S_.me.id;
+      S_.dispatch({ type: 'actor.add', actor: a });
+      UI.openActor(a.id);
+      U.toast('Ficha importada!');
+    } else throw new Error('Formato desconhecido: ' + obj.format);
+  }
+
+  // =============== Modal ===============
+  UI.modal = function (title, body, buttons = [{ label: 'OK', primary: true }]) {
+    const back = h('div', { class: 'modal-back' });
+    const close = () => back.remove();
+    const foot = h('div', { class: 'modal-foot' }, buttons.map((b) => h('button', {
+      class: 'btn' + (b.primary ? ' primary' : ''),
+      onclick: async () => { const r = b.onclick ? await b.onclick() : undefined; if (r !== false) close(); },
+    }, b.label)));
+    back.append(h('div', { class: 'modal' }, h('div', { class: 'modal-head' }, title), h('div', { class: 'modal-body' }, body), foot));
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+    $('#modal-root').append(back);
+    return close;
+  };
+
+  App.UI = UI;
+})(window.App);

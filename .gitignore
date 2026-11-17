@@ -1,0 +1,23 @@
+# Arquivos de áudio: cada um coloca os seus na pasta Sons (as subpastas ficam no repositório)
+Sons/**/*
+!Sons/**/
+!Sons/**/.gitkeep
+*.mp3
+*.mp4
+*.ogg
+*.oga
+*.opus
+*.m4a
+*.aac
+*.wav
+*.flac
+*.webm
+
+# Arquivos temporários de teste
+_test.html
+_test.js
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini

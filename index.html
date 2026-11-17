@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vésper · Mesa de RPG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Símbolo da marca (reaproveitado com <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="brand-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M16 3 27 7v8.5c0 6.6-4.6 11.4-11 13.5C9.6 26.9 5 22.1 5 15.5V7z"/>
+      <path d="m11 11 5 11 5-11"/>
+      <path d="M13.5 11h5" opacity=".6"/>
+    </symbol>
+  </svg>
+
+  <!-- Tela inicial -->
+  <div id="lobby">
+    <!-- Fundo: imagem padrão com camadas vivas (estrelas, janelas, névoa) ou a imagem escolhida em "Trocar fundo" -->
+    <div class="mn-bg" id="mn-bg" aria-hidden="true">
+      <div class="mn-stage" id="mn-stage">
+        <img class="mn-photo" src="imagens/imgHomeHD.jpg" alt="" width="2752" height="1536" decoding="async">
+        <div class="mn-stars" id="mn-stars"></div>
+        <div class="mn-moon"></div>
+        <div class="mn-windows" id="mn-windows"></div>
+        <div class="mn-fog f1"></div><div class="mn-fog f2"></div><div class="mn-fog f3"></div><div class="mn-fog f4"></div>
+      </div>
+      <div class="mn-img" id="mn-img"></div>
+      <canvas class="mn-sparks" id="mn-sparks"></canvas>
+    </div>
+    <div class="mn-shade"></div>
+
+    <div class="mn-profile">
+      <span class="mn-avatar" data-icon="user-round"></span>
+      <label>Jogando como<input id="lb-name" maxlength="40" placeholder="Seu nome" autocomplete="off"></label>
+    </div>
+
+    <div class="mn-main">
+      <div class="mn-brand"><svg class="brand-mark"><use href="#brand-mark"/></svg><span>VÉSPER</span></div>
+      <p class="mn-tag">Mesa virtual de RPG, livre para qualquer sistema</p>
+
+      <nav class="mn-list" id="mn-root" aria-label="Menu principal">
+        <button class="mn-item" data-sub="mn-play" data-desc="Abra uma mesa para os seus jogadores ou entre na mesa de alguém."><span data-icon="swords"></span>Jogar</button>
+        <button class="mn-item" id="lb-offline" data-desc="Monte cenas, mapas e fichas sem ninguém conectado. Nada vai para a internet."><span data-icon="map"></span>Preparar tabuleiro</button>
+        <button class="mn-item" id="lb-sheet" data-desc="Cria uma ficha de personagem nova. Dentro da mesa, a aba Fichas faz o mesmo."><span data-icon="user-round"></span>Criar ficha</button>
+        <a class="mn-item" href="?tutorial" data-desc="Uma cena de exemplo mostra onde clicar: ataques, magias e combate. Nada é salvo."><span data-icon="sparkles"></span>Tutorial</a>
+        <a class="mn-item" href="wiki/index.html" data-desc="O manual completo, separado por tópicos, com fotos e exemplos."><span data-icon="book-open"></span>Wiki</a>
+      </nav>
+
+      <nav class="mn-list" id="mn-play" aria-label="Jogar" hidden>
+        <p class="mn-crumb">Jogar</p>
+        <button class="mn-item" id="lb-host" data-desc="Você é o mestre. Abre a campanha salva e gera um código para os jogadores."><span data-icon="crown"></span>Abrir mesa online</button>
+        <button class="mn-item" id="lb-join-open" data-desc="Digite o código de 6 letras que o mestre mandou."><span data-icon="users"></span>Entrar na mesa online</button>
+        <div class="mn-join" id="mn-join" hidden>
+          <input id="lb-code" maxlength="12" placeholder="CÓDIGO" class="code-input" autocomplete="off">
+          <button id="lb-join" class="btn primary">Entrar</button>
+        </div>
+        <button class="mn-item mn-back" data-back data-desc="Volta ao menu principal."><span data-icon="undo-2"></span>Voltar</button>
+      </nav>
+
+      <p class="mn-desc" id="mn-desc" aria-live="polite"></p>
+    </div>
+
+    <div class="mn-foot">
+      <span class="mn-keys"><kbd>↑</kbd><kbd>↓</kbd> escolher <kbd>Enter</kbd> confirmar <kbd>Esc</kbd> voltar</span>
+      <button class="mn-bgbtn" id="mn-bg-pick" title="Use qualquer imagem do seu computador"><span data-icon="image"></span>Trocar fundo</button>
+      <button class="mn-bgbtn" id="mn-bg-clear" hidden><span data-icon="x"></span>Fundo padrão</button>
+    </div>
+  </div>
+
+  <!-- Aplicação -->
+  <div id="app" hidden>
+    <header id="topbar">
+      <button class="brand" id="btn-home" title="Voltar ao menu inicial"><span class="home-ico" data-icon="house"></span><svg class="brand-mark"><use href="#brand-mark"/></svg><span>VÉSPER</span><span class="home-label">Menu</span></button>
+      <div class="crumbs">
+        <button class="crumb" id="crumb-campaign" title="Configurações da mesa"><span class="crumb-label">Campanha</span><b id="campaign-name">—</b><span data-icon="chevron-right"></span></button>
+        <span class="crumb-sep"></span>
+        <button class="crumb" id="crumb-scene" title="Trocar de cena"><span class="crumb-label">Cena</span><b id="scene-title">—</b><span data-icon="chevron-right"></span></button>
+        <span id="scene-warn" class="scene-warn" hidden></span>
+      </div>
+      <div id="viewas-bar" hidden></div>
+      <div class="spacer"></div>
+      <div id="net-status" class="net">Offline</div>
+      <div id="avatars" class="avatars"></div>
+      <button id="btn-invite" class="btn ghost small" hidden><span data-icon="link"></span>Convidar</button>
+      <button id="btn-mode" class="btn primary"></button>
+      <div class="menu-wrap">
+        <button id="btn-menu" class="icon-btn lg" title="Mais opções"><span data-icon="ellipsis"></span></button>
+        <div id="main-menu" class="menu" hidden></div>
+      </div>
+    </header>
+
+    <aside id="left">
+      <div class="side-tabs" id="left-tabs"></div>
+      <div class="side-body" id="left-body"></div>
+      <div class="side-foot" id="left-foot"></div>
+    </aside>
+
+    <main id="board-wrap">
+      <canvas id="board"></canvas>
+      <nav id="toolbar"></nav>
+      <div id="tool-opts" hidden></div>
+      <div id="scene-label"></div>
+      <div id="init-strip" hidden></div>
+      <div id="token-hud" hidden></div>
+      <div id="target-bar" hidden></div>
+      <div id="roll-feed"></div>
+
+      <div id="dock-panel" hidden>
+        <div class="dock-head"><span id="dock-title"></span><button class="icon-btn" id="dock-close" title="Fechar"><span data-icon="x"></span></button></div>
+        <section class="panel" id="p-chat"></section>
+        <section class="panel" id="p-dice" hidden></section>
+        <section class="panel" id="p-combat" hidden></section>
+        <section class="panel" id="p-table" hidden></section>
+        <section class="panel" id="p-audio" hidden></section>
+      </div>
+      <div id="dock"></div>
+      <div id="zoom" class="float-group">
+        <button class="icon-btn" data-z="out" title="Afastar"><span data-icon="minus"></span></button>
+        <span id="zoom-val">100%</span>
+        <button class="icon-btn" data-z="in" title="Aproximar"><span data-icon="plus"></span></button>
+        <span class="vsep"></span>
+        <button class="icon-btn" data-z="fit" title="Enquadrar a cena"><span data-icon="scan"></span></button>
+      </div>
+      <div id="board-actions"></div>
+      <a id="btn-help" class="help-btn" href="?tutorial" target="_blank" title="Tutorial interativo">?</a>
+    </main>
+
+    <aside id="right">
+      <div class="side-tabs" id="right-tabs"></div>
+      <div class="side-body" id="right-body">
+        <div id="props-slot"></div>
+        <div id="layers"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="windows"></div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/dice.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/images.js"></script>
+  <script src="js/light.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/tutorial.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

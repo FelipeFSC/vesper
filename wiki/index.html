@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manual do Vésper</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: índice fixo à esquerda (como as laterais da mesa), artigo de leitura à direita. Mesmo visual do Vésper: grafite + violeta. */
+:root {
+  --bg: #111114; --panel: #18181d; --panel2: #1f1f26; --line: #2a2a33; --line2: #383843;
+  --text: #e8e6ef; --muted: #9a98a6; --faint: #6d6b78;
+  --accent: #6c4fe0; --accent-text: #a995ff; --gold: #d2a24c; --danger: #e0645b; --ok: #4fb27a;
+  --serif: "EB Garamond", Georgia, "Times New Roman", serif;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f6f5f9; --panel: #ffffff; --panel2: #efedf5; --line: #e0dde9; --line2: #cfcbdc;
+  --text: #1d1b26; --muted: #5d5a6b; --faint: #8a8797; --accent: #5b3fd1; --accent-text: #5b3fd1;
+  --gold: #9a6d17; --danger: #c2413a; --ok: #2f8a58; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f6f5f9; --panel: #ffffff; --panel2: #efedf5; --line: #e0dde9; --line2: #cfcbdc;
+  --text: #1d1b26; --muted: #5d5a6b; --faint: #8a8797; --accent: #5b3fd1; --accent-text: #5b3fd1;
+  --gold: #9a6d17; --danger: #c2413a; --ok: #2f8a58; color-scheme: light; }
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.65 var(--sans); }
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
+
+.shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel);
+  padding: 22px 16px 40px max(16px, env(safe-area-inset-left, 0px)); }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.brand svg { width: 26px; height: 26px; color: var(--accent-text); flex-shrink: 0; }
+.brand b { font: 600 20px var(--serif); letter-spacing: .18em; }
+.brand-sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+.home { display: flex; align-items: center; gap: 8px; margin: -6px 0 18px; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .12s, color .12s; }
+.home:hover { border-color: var(--gold); color: var(--gold); text-decoration: none; }
+.home svg, .home-fab svg { width: 16px; height: 16px; flex-shrink: 0; }
+.home-fab { display: none; position: fixed; right: 16px; bottom: max(16px, env(safe-area-inset-bottom, 0px)); z-index: 20; align-items: center; gap: 7px;
+  padding: 10px 14px; border-radius: 999px; background: var(--accent, #6c4fe0); color: #fff; font-size: 13px; font-weight: 600; text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.home-fab:hover { text-decoration: none; filter: brightness(1.1); }
+.search { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-size: 13.5px; }
+.search::placeholder { color: var(--faint); }
+.toc h3 { font: 600 10.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); margin: 20px 0 6px; }
+.toc a { display: block; padding: 5px 9px; border-radius: 6px; color: var(--muted); font-size: 13.5px; }
+.toc a:hover { background: var(--panel2); color: var(--text); text-decoration: none; }
+.toc a.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.toc .none { color: var(--faint); font-size: 13px; padding: 8px 9px; }
+
+main { padding-block: 40px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.article { max-width: 780px; margin: 0 auto; }
+.hero { padding-bottom: 26px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.hero h1 { font: 600 clamp(32px, 5vw, 44px)/1.1 var(--serif); margin: 0 0 10px; text-wrap: balance; }
+.hero p { color: var(--muted); margin: 0; max-width: 62ch; }
+.quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.quick a { padding: 6px 12px; border: 1px solid var(--line2); border-radius: 999px; font-size: 13px; color: var(--text); }
+.quick a:hover { border-color: var(--accent-text); text-decoration: none; }
+
+section { padding-top: 34px; }
+section + section { border-top: 1px solid var(--line); margin-top: 34px; }
+.eyebrow { font: 600 10.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 4px; }
+h2 { font: 600 30px/1.15 var(--serif); margin: 0 0 12px; text-wrap: balance; }
+h4 { font: 600 15px var(--sans); margin: 24px 0 6px; }
+p, li { max-width: 68ch; }
+p { margin: 0 0 12px; }
+ul, ol { padding-left: 22px; margin: 0 0 14px; }
+li { margin: 4px 0; }
+li::marker { color: var(--faint); }
+b, strong { font-weight: 600; }
+.who { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; margin-left: 8px; vertical-align: 5px; }
+.who.gm { color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); }
+.who.all { color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+
+code, kbd { font-family: var(--mono); font-size: .86em; }
+code { background: var(--panel2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; }
+kbd { display: inline-block; min-width: 1.6em; text-align: center; padding: 1px 6px; border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 5px; background: var(--panel); }
+
+figure { margin: 18px 0 20px; }
+figure img { display: block; width: auto; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line2); }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+.note { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
+.note > b:first-child { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+.note.tip > b:first-child { color: var(--ok); }
+.note.ex > b:first-child { color: var(--accent-text); }
+.note.warn > b:first-child { color: var(--gold); }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+
+.tbl { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; background: var(--panel); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; }
+
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0 18px; }
+.card { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.card h5 { font: 600 17px var(--serif); margin: 0 0 6px; }
+.card dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 13px; }
+.card dt { color: var(--faint); }
+.card dd { margin: 0; overflow-wrap: anywhere; }
+
+.qa { border-top: 1px solid var(--line); padding: 14px 0 4px; }
+.qa h4 { margin: 0 0 4px; }
+
+.top { display: inline-block; margin-top: 8px; font-size: 12.5px; color: var(--faint); }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .toc { columns: 2; column-gap: 16px; }
+  .toc h3 { break-after: avoid; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .home-fab { display: inline-flex; }
+  main { padding-block: 28px 80px; }
+}
+@media (max-width: 460px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+  <a class="home" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Voltar ao menu</a>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M8.5 8.5 12 16l3.5-7.5"/></svg>
+    <b>VÉSPER</b>
+  </div>
+  <p class="brand-sub">Manual da mesa</p>
+  <input class="search" id="busca" type="search" placeholder="Buscar: alcance, porta, Defesa…" aria-label="Buscar no manual">
+  <nav class="toc" id="toc">
+    <h3>Começar</h3>
+    <a href="#comecar">Primeiros passos</a>
+    <a href="#tela">A tela da mesa</a>
+    <a href="#salvar">Salvar e levar a campanha</a>
+    <h3>Preparar a mesa</h3>
+    <a href="#cenas">Cenas e mapas</a>
+    <a href="#separar">Separar jogadores em cenas</a>
+    <a href="#fichas">Fichas</a>
+    <a href="#tokens">Tokens no mapa</a>
+    <a href="#grupos">Vultos e grupos</a>
+    <a href="#voo">Criaturas que voam</a>
+    <a href="#desenho">Desenho, névoa e régua</a>
+    <a href="#luz">Luz, paredes e portas</a>
+    <a href="#cobertura">Muros baixos e cobertura</a>
+    <h3>Jogar</h3>
+    <a href="#acoes">Ações: ataques, magias e curas</a>
+    <a href="#formulas">Fórmulas: ataques e combos</a>
+    <a href="#atacar">Atacar passo a passo</a>
+    <a href="#area">Magias em área</a>
+    <a href="#combate">Combate e turnos</a>
+    <a href="#regras">Regras automáticas</a>
+    <a href="#dados">Dados</a>
+    <a href="#som">Música e sons</a>
+    <a href="#salas-som">Salas de som</a>
+    <a href="#ver-como">Ver como jogador</a>
+    <h3>Consulta</h3>
+    <a href="#atalhos">Atalhos de teclado</a>
+    <a href="#problemas">Problemas comuns</a>
+    <p class="none" id="nada" hidden>Nada encontrado.</p>
+  </nav>
+</aside>
+
+<main>
+<div class="article">
+
+<header class="hero">
+  <h1>Manual do Vésper</h1>
+  <p>Tudo o que você precisa para preparar a mesa, jogar e resolver os problemas mais comuns. Cada tópico funciona sozinho: use o índice ou a busca e vá direto ao ponto. As marcas <span class="who gm">Mestre</span> e <span class="who all">Todos</span> dizem quem usa cada coisa.</p>
+  <div class="quick">
+    <a href="#atacar">Como atacar</a>
+    <a href="#acoes">Criar um ataque</a>
+    <a href="#formulas">Escrever fórmulas</a>
+    <a href="#combate">Iniciar combate</a>
+    <a href="#luz">Esconder monstros no escuro</a>
+    <a href="#problemas">Algo não funciona</a>
+  </div>
+</header>
+
+<!-- ============ COMEÇAR ============ -->
+<section id="comecar">
+  <p class="eyebrow">Começar</p>
+  <h2>Primeiros passos</h2>
+  <p>O Vésper é uma mesa virtual de RPG que roda direto no navegador, sem conta e sem servidor. O computador do mestre faz o papel de servidor: os jogadores se conectam a ele por um código.</p>
+  <figure><img src="img/lobby.jpg" alt="Menu inicial do Vésper: opções Jogar, Preparar tabuleiro, Criar ficha, Tutorial e Wiki no canto inferior esquerdo, sobre a arte de um castelo ao entardecer" width="960" height="600" loading="lazy"><figcaption>O menu inicial. Use o mouse ou as setas <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Enter</kbd> para escolher e <kbd>Esc</kbd> para voltar.</figcaption></figure>
+
+  <table>
+    <tr><th>Opção</th><th>O que faz</th></tr>
+    <tr><td><b>Jogar → Abrir mesa online</b></td><td>Você é o mestre: abre a campanha salva e gera o código para os jogadores.</td></tr>
+    <tr><td><b>Jogar → Entrar na mesa online</b></td><td>Você é jogador: digite o código que o mestre mandou.</td></tr>
+    <tr><td><b>Preparar tabuleiro</b></td><td>Abre a campanha sem conexão, para montar cenas, mapas e fichas antes da sessão. Mostra o nome da campanha que vai continuar.</td></tr>
+    <tr><td><b>Criar ficha</b></td><td>Abre a mesa sem conexão já com uma ficha nova de personagem. Dentro da mesa, a aba <b>Fichas</b> faz o mesmo.</td></tr>
+    <tr><td><b>Tutorial</b></td><td>O passo a passo interativo. Nada é salvo.</td></tr>
+    <tr><td><b>Wiki</b></td><td>Este manual.</td></tr>
+  </table>
+
+  <h4>Se você é o mestre <span class="who gm">Mestre</span></h4>
+  <ol>
+    <li>Escreva seu nome em <b>Jogando como</b>, no canto de cima da tela.</li>
+    <li>Escolha <b>Jogar → Abrir mesa online</b>. Aparece um código de 6 letras, por exemplo <code>K7QX2M</code>.</li>
+    <li>Mande o código para os jogadores, ou use <b>Copiar convite</b> no menu <kbd>⋯</kbd> para mandar o link pronto.</li>
+  </ol>
+
+  <h4>Se você é jogador <span class="who all">Todos</span></h4>
+  <ol>
+    <li>Escreva seu nome em <b>Jogando como</b>.</li>
+    <li>Escolha <b>Jogar → Entrar na mesa online</b>, digite o código e aperte <b>Entrar</b>. Quem abre pelo link de convite já cai nessa tela com o código preenchido.</li>
+  </ol>
+
+  <div class="note tip"><b>Fundo do menu</b><p>Clique em <b>Trocar fundo</b> no canto de baixo e escolha qualquer imagem do seu computador. Ela fica guardada só neste navegador. <b>Fundo padrão</b> volta para o castelo.</p></div>
+
+  <div class="note warn"><b>Importante</b><p>O mestre precisa manter a aba aberta durante toda a sessão. Se ele recarregar a página, os jogadores reconectam sozinhos em alguns segundos.</p></div>
+  <div class="note tip"><b>Primeira vez?</b><p>O tutorial interativo (opção <b>Tutorial</b> no menu inicial ou botão <kbd>?</kbd> no canto do mapa) monta uma cena de exemplo e mostra onde clicar. Nada do tutorial é salvo.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="tela">
+  <p class="eyebrow">Começar</p>
+  <h2>A tela da mesa</h2>
+  <figure><img src="img/overview.jpg" alt="Tela completa da mesa no modo Editar, com laterais, ferramentas, mapa e dock" width="1440" height="900" loading="lazy"><figcaption>Modo Editar, como o mestre vê. Lyra está selecionada, por isso as ações dela aparecem à direita.</figcaption></figure>
+  <div class="tbl"><table>
+    <thead><tr><th>Área</th><th>O que tem</th></tr></thead>
+    <tbody>
+      <tr><td>Topo</td><td><b>VÉSPER</b> no canto esquerdo volta ao menu inicial (também em <kbd>⋯</kbd> → <b>Voltar ao menu inicial</b>; a campanha é salva antes). Nome da campanha (abre o painel <b>Mesa</b>), nome da cena (troca de cena), jogadores online, <b>Apresentar</b>/<b>Editar</b> e o menu <kbd>⋯</kbd>.</td></tr>
+      <tr><td>Esquerda</td><td><b>Fichas</b> (personagens, NPCs e criaturas) e <b>Cenas</b>.</td></tr>
+      <tr><td>Ferramentas</td><td>A coluna ao lado do mapa: selecionar, mover câmera, régua, ping, desenho, névoa, paredes e portas.</td></tr>
+      <tr><td>Direita</td><td><b>Propriedades</b> do token selecionado (vida, condições, luz, ações) e <b>Camadas</b> da cena.</td></tr>
+      <tr><td>Embaixo</td><td>O dock <b>Chat · Dados · Combate · Som</b>, o zoom e o encaixe no grid.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Editar e Apresentar</h4>
+  <p><b>Apresentar</b> esconde as laterais e deixa só o mapa: é a visão de jogo. O painel do token passa a flutuar ao lado dele. Os jogadores entram sempre nesse modo. Clique em <b>Editar</b> para voltar às laterais.</p>
+  <figure><img src="img/play.jpg" alt="Modo Apresentar com o painel do token Lyra flutuando ao lado dela" width="580" height="470" loading="lazy"><figcaption>No modo Apresentar, o painel do token aparece do lado com menos gente em volta.</figcaption></figure>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="salvar">
+  <p class="eyebrow">Começar</p>
+  <h2>Salvar e levar a campanha <span class="who gm">Mestre</span></h2>
+  <p>Tudo é salvo sozinho no navegador do mestre, a cada mudança. Para levar a campanha para outro computador ou guardar um backup, clique no <b>nome da campanha</b> no topo e use o painel <b>Mesa</b>.</p>
+  <figure><img src="img/table.jpg" alt="Painel Mesa com conexão, jogadores e os botões Exportar .json, Código de texto e Importar" width="370" height="560" loading="lazy"><figcaption>O painel Mesa: jogadores conectados e os botões de exportar.</figcaption></figure>
+  <ul>
+    <li><b>Exportar .json</b>: um arquivo com tudo (cenas, fichas e imagens). É o melhor backup.</li>
+    <li><b>Código de texto</b>: a campanha vira um texto para colar num bloco de notas ou mandar por mensagem.</li>
+    <li><b>Importar</b>: abre um .json ou um código de texto. Também serve para trazer só uma cena ou só uma ficha.</li>
+  </ul>
+  <div class="note tip"><b>Dica</b><p>Monstros que você usa sempre podem ser exportados um a um: abra a ficha, vá em <b>Configurar</b> e clique em <b>Exportar</b>. Na próxima campanha, é só importar.</p></div>
+  <p>Jogadores não salvam a campanha. Para guardar a própria ficha, o jogador abre a ficha e usa <b>Configurar → Exportar</b>.</p>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<!-- ============ PREPARAR ============ -->
+<section id="cenas">
+  <p class="eyebrow">Preparar a mesa</p>
+  <h2>Cenas e mapas <span class="who gm">Mestre</span></h2>
+  <p>Cada cena é um mapa: uma taverna, uma caverna, um campo de batalha. Os jogadores veem a cena que o mestre deixar ativa.</p>
+  <ol>
+    <li>Na lateral esquerda, abra <b>Cenas</b> e clique em <b>+</b> (Nova cena).</li>
+    <li>Clique na engrenagem da cena (<b>Configurar cena</b>) e em <b>Enviar mapa…</b> para escolher a imagem.</li>
+    <li>Informe quantos <b>pixels por quadrado</b> a imagem tem e clique em <b>Ajustar tamanho da cena</b>. O grid se encaixa no desenho do mapa.</li>
+    <li>Clique em <b>Salvar</b>.</li>
+  </ol>
+  <figure><img src="img/scene.jpg" alt="Janela Configurar cena com nome, mapa, tamanho, grid, iluminação e névoa" width="560" height="805" loading="lazy"><figcaption>Configurar cena: mapa, tamanho, medida e as opções de luz e névoa.</figcaption></figure>
+  <div class="note ex"><b>Exemplo</b><p>Um mapa de <code>2100 × 1400</code> pixels desenhado com quadrados de <code>70</code> px vira uma cena de <b>30 × 20</b> quadrados.</p></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Campo</th><th>Para que serve</th></tr></thead>
+    <tbody>
+      <tr><td>Medida da diagonal</td><td><b>Diagonal = 1</b> (D&amp;D 5e), <b>Alternada 1-2-1</b> (Pathfinder) ou <b>Real</b>. Vale para a régua e para o alcance dos ataques.</td></tr>
+      <tr><td>Cada quadrado vale</td><td>Distância de um quadrado, com a <b>Unidade</b>. Ex.: <code>1,5</code> e <code>m</code>.</td></tr>
+      <tr><td>Cor do piso</td><td>Fundo da cena quando não há imagem.</td></tr>
+    </tbody>
+  </table></div>
+  <p>As imagens são convertidas para WebP e reduzidas sozinhas (mapas até 4096 px), então a campanha não fica pesada.</p>
+
+  <h4 id="separar">Separar jogadores em cenas diferentes</h4>
+  <p>Um jogador explora a cripta sozinho enquanto o grupo continua na taverna: cada um vê e ouve só a cena em que está.</p>
+  <figure><img src="img/cenas-jogadores.jpg" alt="Lista de cenas: Caverna do Goblin com as bolinhas de Bruno e Caio e a etiqueta Cena do grupo; Cripta com a bolinha de Ana; botões Ativar e Mover jogadores" width="236" height="360" loading="lazy"><figcaption>As bolinhas mostram quem está em cada cena.</figcaption></figure>
+  <ol>
+    <li>Na cena para onde o jogador vai, clique em <b>Mover jogadores</b>.</li>
+    <li>Marque um ou vários jogadores e clique em <b>Mover</b>. Eles passam a ver só aquela cena, e um aviso mostra para eles onde estão.</li>
+    <li>Para trazer de volta, abra <b>Mover jogadores</b> na <b>Cena do grupo</b> e marque quem estava separado. Desmarcar alguém numa cena separada também o devolve ao grupo.</li>
+  </ol>
+  <figure><img src="img/mover-jogadores.jpg" alt="Janela Mover jogadores para Cripta com Ana marcada (separado em Cripta), Bruno e Caio desmarcados (com o grupo)" width="560" height="370" loading="lazy"><figcaption>Cada jogador mostra onde está agora.</figcaption></figure>
+  <ul>
+    <li><b>Ativar</b> leva só o grupo. Quem foi separado continua onde está.</li>
+    <li>Jogadores separados ganham um contorno dourado na bolinha, e o topo da tela avisa quantos estão separados.</li>
+    <li>Para conferir o que um jogador vê, use <kbd>⋯</kbd> → <b>Ver a mesa como</b> → o nome dele: a tela mostra a cena em que ele está.</li>
+    <li>Chat, dados e combate continuam compartilhados. A música geral também; para uma trilha só da cena separada, use uma <a href="#salas-som">sala de som</a> nela.</li>
+    <li>Excluir uma cena devolve ao grupo quem estava nela.</li>
+  </ul>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="fichas">
+  <p class="eyebrow">Preparar a mesa</p>
+  <h2>Fichas</h2>
+  <p>A ficha é livre: não está presa a nenhum sistema. Crie pela lateral <b>Fichas</b>, no <b>+</b> de cada grupo. Abra com dois cliques no token ou pelo botão <b>Ficha</b> no painel do token.</p>
+  <figure><img src="img/sheet-tabs.jpg" alt="Ficha da Lyra com retrato, nome, barras de PV e Mana no topo e as abas Ações, Atributos, Notas e Configurar" width="500" height="670" loading="lazy"><figcaption>O topo fica sempre à vista: retrato, nome e barras. O resto está nas abas.</figcaption></figure>
+  <div class="tbl"><table>
+    <thead><tr><th>Onde</th><th>O que tem</th></tr></thead>
+    <tbody>
+      <tr><td>Topo</td><td>Retrato (clique para trocar), nome e as barras. No número da barra dá para digitar <code>-7</code> ou <code>+5</code>.</td></tr>
+      <tr><td>Ações</td><td>Ataques, magias e curas. A ficha abre nesta aba, porque é a mais usada durante o jogo.</td></tr>
+      <tr><td>Atributos</td><td>Força, Destreza, Defesa… e as fórmulas de <b>teste</b> e de <b>iniciativa</b>.</td></tr>
+      <tr><td>Notas</td><td>Histórico, inventário, anotações.</td></tr>
+      <tr><td>Configurar</td><td>Tipo, quem controla, tamanho, cor, imagem, quais barras a ficha tem e o máximo de cada uma. Também <b>Colocar no mapa</b>, <b>Duplicar</b>, <b>Exportar</b> e <b>Excluir</b>.</td></tr>
+    </tbody>
+  </table></div>
+  <h4>O que cada parte significa</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Parte</th><th>O que é</th><th>Exemplo</th></tr></thead>
+    <tbody>
+      <tr><td>Tipo</td><td><b>Personagem</b>, <b>NPC</b> ou <b>Criatura</b>. Define de que lado o token luta.</td><td>Lyra = Personagem</td></tr>
+      <tr><td>Controlado por</td><td>Quem pode mover e usar as ações: um jogador, todos ou só o mestre.</td><td>Todos os jogadores</td></tr>
+      <tr><td>Barras</td><td>Valores que sobem e descem. O nome é escolhido na lista da campanha.</td><td><code>PV 20/20</code>, <code>Mana 10/10</code></td></tr>
+      <tr><td>Atributos</td><td>Escolhidos na lista da campanha. Nas fórmulas viram <code>@nome</code>, sem acento.</td><td><code>Força 3</code> vira <code>@forca</code></td></tr>
+      <tr><td>Ações</td><td>Ataques, magias e curas. Veja <a href="#acoes">Ações</a>.</td><td>Espada longa</td></tr>
+    </tbody>
+  </table></div>
+  <h4>Ninguém precisa adivinhar os nomes</h4>
+  <p>O mestre define uma vez quais atributos e barras a campanha usa. Nas fichas e nas ações, esses nomes aparecem num menu, então o jogador só escolhe.</p>
+  <ul>
+    <li><b>Onde editar</b> <span class="who gm">Mestre</span>: clique no nome da campanha no topo (painel <b>Mesa</b>) e altere <b>Atributos da campanha</b>, <b>Barras da campanha</b> e <b>Condições disponíveis</b>: o <b>×</b> de cada etiqueta remove, e o campo embaixo adiciona (aperte <kbd>Enter</kbd>; colar "Força, Destreza" adiciona os dois). O botão <b>Editar lista</b> na ficha leva direto para lá.</li>
+    <li><b>Ficha nova</b>: já nasce com todos os atributos da lista (Defesa começa em 10). Personagens ganham todas as barras; criaturas, só a primeira.</li>
+    <li><b>Adicionar</b>: o menu <b>+ Atributo</b> mostra só os que faltam na ficha, com a opção de adicionar todos de uma vez.</li>
+    <li>Um nome que não está na lista aparece como <b>(fora da lista)</b>. Escolha o nome certo no menu ou acrescente esse nome à lista.</li>
+  </ul>
+  <div class="note ex"><b>Exemplo</b><p>Num sistema com Agilidade e Vigor, a lista pode ser <code>Força, Agilidade, Vigor, Intelecto, Defesa</code> e as barras <code>Vida, Sanidade</code>.</p></div>
+  <h4>Personagem e criatura guardam a vida de jeitos diferentes</h4>
+  <ul>
+    <li><b>Personagem</b>: todos os tokens dele dividem a mesma vida. Tomou dano no mapa, a ficha mostra o dano.</li>
+    <li><b>Criatura</b>: cada token tem a própria vida. Uma ficha "Goblin" pode virar Goblin 1, Goblin 2 e Goblin 3, cada um com seu PV.</li>
+  </ul>
+  <div class="note warn"><b>Atenção</b><p>Para os ataques terem chance de errar, o alvo precisa de um atributo com o nome que a ação procura, normalmente <code>Defesa</code>. Fichas novas já nascem com <code>Defesa 10</code>.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="tokens">
+  <p class="eyebrow">Preparar a mesa</p>
+  <h2>Tokens no mapa</h2>
+  <ul>
+    <li><b>Colocar</b> <span class="who gm">Mestre</span>: arraste a ficha da lateral esquerda para o mapa. Jogadores podem colocar as próprias fichas.</li>
+    <li><b>Mover</b>: arraste o token, ou use as <kbd>Setas</kbd>. Segure <kbd>Alt</kbd> ao soltar para não encaixar no grid.</li>
+    <li><b>Abrir a ficha</b>: dois cliques no token.</li>
+    <li><b>Remover</b> <span class="who gm">Mestre</span>: selecione e aperte <kbd>Delete</kbd>.</li>
+    <li><b>Esconder</b> <span class="who gm">Mestre</span>: o botão do olho riscado no painel do token. Os jogadores deixam de ver aquele token.</li>
+  </ul>
+  <h4>Mudar a vida rapidinho</h4>
+  <p>No campo de PV do painel do token, digite:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Digite</th><th>Resultado</th></tr></thead>
+    <tbody>
+      <tr><td><code>12</code></td><td>PV vira 12</td></tr>
+      <tr><td><code>+5</code></td><td>cura 5</td></tr>
+      <tr><td><code>-7</code></td><td>tira 7</td></tr>
+      <tr><td><code>-2d6</code></td><td>rola 2d6 e tira o resultado</td></tr>
+    </tbody>
+  </table></div>
+  <h4>Condições</h4>
+  <p>Em <b>Adicionar condição…</b>, escolha a condição (Envenenado, Atordoado…) e, se quiser, quantas rodadas ela dura no campo <b>rod.</b>. No combate, a duração cai sozinha no início do turno do token. A lista de condições é editada no painel <b>Mesa</b>.</p>
+
+  <h4 id="vultos">Visível, vulto ou invisível <span class="who gm">Mestre</span></h4>
+  <p>No painel do token, em <b>Para os jogadores</b>:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Opção</th><th>O que os jogadores veem</th></tr></thead>
+    <tbody>
+      <tr><td><b>Visível</b></td><td>O token normal.</td></tr>
+      <tr><td><b>Vulto</b></td><td>Só uma silhueta escura com "?": sem imagem, nome, vida nem condições. Dá para atacar; no chat, na mira e no combate o nome aparece como "Vulto".</td></tr>
+      <tr><td><b>Invisível</b></td><td>Nada. Só você vê o token (apagado).</td></tr>
+    </tbody>
+  </table></div>
+  <figure><img src="img/vulto-player.jpg" alt="Visão do jogador: Lyra normal e dois vultos escuros com ponto de interrogação no lugar dos goblins" width="700" height="270" loading="lazy"><figcaption>O que o jogador vê: os dois goblins viraram vultos.</figcaption></figure>
+  <p>Você continua vendo o token normal, com um <b>aro tracejado escuro</b> para lembrar que, para os jogadores, ele é um vulto.</p>
+
+  <h4 id="voo">Criaturas que voam <span class="who gm">Mestre</span></h4>
+  <p>No painel do token, em <b>Voo</b>, marque <b>Voando</b> e diga quantos <b>metros</b> a criatura subiu. Desmarcar põe no chão; marcar de novo volta para a última altura.</p>
+  <figure><img src="img/voo.jpg" alt="Visão do jogador: Lyra de um lado de um muro de 3 metros, tudo escuro do outro lado, e a Harpia com a etiqueta ↑ 6 m visível por cima do muro" width="800" height="450" loading="lazy"><figcaption>A Harpia voa a 6 m e aparece por cima do muro de 3 m. O Goblin 2, no chão do outro lado, continua escondido.</figcaption></figure>
+  <ul>
+    <li><b>Visão:</b> quem voa vê e é visto por cima de qualquer muro mais baixo que o topo dele (altura do corpo + altura do voo). A <b>parede absoluta</b> bloqueia sempre, seja qual for a altura.</li>
+    <li><b>Cobertura:</b> só fica escondida a parte do corpo abaixo do topo do muro. Ex.: muro de 3 m, criatura de 1,8 m voando a 2 m: só 1 m do corpo fica atrás do muro (55%), meia cobertura. Voando a 4 m, nenhuma.</li>
+    <li><b>Atacando de cima:</b> quem voa acima de um muro enxerga por cima dele; quanto mais longe do muro o alvo está, menos dele fica escondido.</li>
+    <li><b>Luz:</b> a tocha de quem voa ilumina por cima dos muros mais baixos que ele.</li>
+    <li>No mapa, o token ganha a etiqueta <b>↑ 6 m</b> e uma sombra no chão, para todos que o veem.</li>
+  </ul>
+
+  <h4 id="grupos">Grupos de tokens <span class="who gm">Mestre</span></h4>
+  <p>Junte vários tokens num grupo para mudar todos com <b>um clique</b>: a emboscada de três goblins aparece de uma vez.</p>
+  <figure><img src="img/vulto-gm.jpg" alt="Painel do Goblin 1 para o mestre: opções Visível, Vulto e Invisível, o grupo Emboscada com 2 tokens e os mesmos três botões para o grupo inteiro" width="650" height="510" loading="lazy"><figcaption>Painel do token: a visibilidade dele e, embaixo, a do grupo Emboscada inteiro.</figcaption></figure>
+  <ol>
+    <li>Selecione um token e, em <b>Grupo</b>, escolha <b>+ Novo grupo…</b> e dê um nome.</li>
+    <li>Nos outros tokens, escolha esse grupo na mesma lista.</li>
+    <li>Use <b>Visível</b>, <b>Vulto</b> ou <b>Invisível</b> no quadro do grupo: vale para todos os tokens dele.</li>
+  </ol>
+  <ul>
+    <li>A aba <b>Camadas</b> lista os grupos da cena: renomeie, mude a visibilidade, centralize a câmera no grupo ou desfaça o grupo (os tokens continuam no mapa).</li>
+    <li>Se os tokens do grupo estiverem com visibilidades diferentes, nenhum botão aparece marcado; clicar em um iguala todos.</li>
+  </ul>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="desenho">
+  <p class="eyebrow">Preparar a mesa</p>
+  <h2>Desenho, névoa e régua</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Ferramenta</th><th>Tecla</th><th>Uso</th></tr></thead>
+    <tbody>
+      <tr><td>Selecionar</td><td><kbd>V</kbd></td><td>Clica e arrasta tokens. Arrastar no vazio move a câmera.</td></tr>
+      <tr><td>Mover câmera</td><td><kbd>H</kbd></td><td>Também funciona com o botão direito ou segurando <kbd>Espaço</kbd>.</td></tr>
+      <tr><td>Régua</td><td><kbd>R</kbd></td><td>Arraste para medir, em quadrados e na unidade da cena.</td></tr>
+      <tr><td>Ping</td><td><kbd>P</kbd></td><td>Clique para chamar a atenção de todos para um ponto.</td></tr>
+      <tr><td>Desenho livre, linha, retângulo, círculo</td><td><kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>E</kbd></td><td>Marcar salas, áreas de magia, caminhos. Cor e espessura aparecem na barra ao lado.</td></tr>
+      <tr><td>Borracha</td><td><kbd>X</kbd></td><td>Apaga desenhos e paredes.</td></tr>
+      <tr><td>Névoa: revelar / esconder</td><td><kbd>F</kbd> <kbd>G</kbd></td><td><span class="who gm">Mestre</span> Arraste para mostrar ou cobrir partes do mapa.</td></tr>
+    </tbody>
+  </table></div>
+  <p>A névoa precisa estar ligada em <b>Configurar cena → Névoa de guerra</b>. O mestre vê a névoa transparente; os jogadores veem preto.</p>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="luz">
+  <p class="eyebrow">Preparar a mesa</p>
+  <h2>Luz, paredes e portas <span class="who gm">Mestre</span></h2>
+  <p>Com a luz ligada, cada jogador só vê o que está iluminado <b>e</b> à vista do token dele. É assim que um monstro fica escondido atrás da porta até alguém abrir.</p>
+  <figure><img src="img/light.jpg" alt="Cena escura com Lyra segurando uma tocha, uma parede com porta e goblins apagados do outro lado" width="1190" height="600" loading="lazy"><figcaption>Lyra tem uma tocha. A parede com a porta fechada (marcador dourado) esconde os goblins.</figcaption></figure>
+  <ol>
+    <li>Sem nenhum token selecionado, ligue <b>Luz e visão dinâmicas</b> na lateral direita e escolha <b>Claro</b> ou <b>Escuro</b>.</li>
+    <li>Use <b>Parede</b> <kbd>W</kbd> e <b>Porta</b> <kbd>O</kbd>: arraste de um canto do grid até outro.</li>
+    <li>Selecione o token e escolha a luz dele em <b>Luz e visão</b>: vela, <b>Tocha (4/8)</b>, lanterna ou fogueira. Ali também fica a <b>visão no escuro</b>.</li>
+  </ol>
+  <ul>
+    <li><b>Escuro</b>: os jogadores só veem o que uma luz ilumina. <b>Claro</b>: tudo é visível, mas as paredes ainda escondem o outro lado.</li>
+    <li>Portas abrem e fecham com um clique no marcador dourado. Os jogadores também podem abrir.</li>
+    <li>Já desenhou as salas com linhas e retângulos? <b>Configurar cena → Paredes dos desenhos</b> transforma os desenhos em paredes.</li>
+    <li>Monstros que o jogador não vê também não podem ser clicados nem atacados por ele.</li>
+  </ul>
+  <div class="note ex"><b>Exemplo</b><p>"Tocha (4/8)" ilumina forte até 4 quadrados e fraco até 8.</p></div>
+
+  <h4 id="cobertura">Muros baixos e cobertura</h4>
+  <p>São quatro tipos. Com a ferramenta <b>Parede</b> ativa, escolha o tipo no quadro ao lado da barra. Ele vale para as próximas paredes. Clicar numa parede já desenhada troca o tipo dela.</p>
+  <figure><img src="img/cover.jpg" alt="Mapa com parede absoluta roxa (marca A) num canto, cobertura total laranja, trecho de três quartos (tracejado amarelo, marca ¾) e de meia cobertura (pontilhado verde, marca ½) entre Lyra e os goblins; ao lado, o quadro Tipo de parede com os quatro tipos" width="700" height="720" loading="lazy"><figcaption>Os quatro tipos: parede absoluta em roxo (marca A), cobertura total em laranja, três quartos (¾) e meia (½). Essas linhas só o mestre vê.</figcaption></figure>
+  <div class="tbl"><table>
+    <thead><tr><th>Tipo</th><th>Altura padrão</th><th>Visão</th><th>Quem está atrás</th></tr></thead>
+    <tbody>
+      <tr><td><b>Parede absoluta</b> (casa com telhado)</td><td>sem altura</td><td>Corta sempre, para todos</td><td>Não pode ser alvo</td></tr>
+      <tr><td><b>Cobertura total</b></td><td>3 m</td><td>Corta a luz e a visão de quem não é mais alto que a parede</td><td>Pela altura: em geral não pode ser alvo; um gigante por cima vê e ataca</td></tr>
+      <tr><td><b>Três quartos</b> (ombro)</td><td>1,4 m</td><td>Corta só para quem não é mais alto que o muro</td><td><b>+5</b> na Defesa e nos testes de resistência</td></tr>
+      <tr><td><b>Meia cobertura</b> (cintura)</td><td>0,9 m</td><td>Corta só para quem não é mais alto que o muro</td><td><b>+2</b> na Defesa e nos testes de resistência</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>A altura decide.</b> A proteção é a altura do muro dividida pela altura do alvo. Cobrindo 100% ou mais, é cobertura total; a partir de 75%, vale o bônus de três quartos; a partir de 50%, o de meia. A altura da criatura fica na aba <b>Config</b> da ficha; sem ela, vale 1,8 m por quadrado de tamanho.</p>
+  <p><b>Quem é baixo não enxerga por cima.</b> Um muro da altura de quem olha (ou mais alto) tapa a visão dele como uma parede total, e ele também não consegue atacar através do muro. A luz passa por cima de qualquer muro baixo.</p>
+  <div class="note ex"><b>Exemplo</b><p>Um halfling de 1 m entre um muro de 1 m e outro de 2 m não vê nada além dos dois. Um humano de 1,8 m no mesmo lugar vê por cima do muro de 1 m, mas não do de 2 m. Muro de 1,4 m: cobre 78% de um humano (1,8 m) e dá +5. Um goblin de 1,2 m atrás dele tem cobertura total. Um gigante de 3,6 m fica com só 39%: sem bônus.</p></div>
+  <ul>
+    <li><b>Cobertura total</b> é o tipo padrão da ferramenta, como na regra oficial, e as paredes antigas são desse tipo. Use <b>Parede absoluta</b> para casas e torres com telhado: nem um gigante enxerga o lado de dentro.</li>
+    <li><b>Tudo é por cena:</b> <b>Configurar cena → Cobertura</b> muda alturas, limites (75% e 50%) e bônus, ou desliga a cobertura na cena.</li>
+    <li><b>Sombra do muro:</b> quantos quadrados atrás do muro alguém fica fora de vista para quem olha do outro lado (padrão: 3 no três quartos, 1 na meia). Na cena você escolhe como essas criaturas aparecem para os jogadores: <b>Normal</b> (padrão), <b>Vulto</b> (círculo escuro com "?", sem nome nem vida, ainda pode ser atacado) ou <b>Escondido</b>. Cada ficha pode ter a própria regra em <b>Config → Atrás de muro baixo</b>: um ladino que sempre se esconde, um ogro que sempre aparece.</li>
+    <li><b>Encostado no muro:</b> quem está colado no muro ataca por cima dele, e o muro não protege o alvo (dá para desligar na cena).</li>
+    <li><b>Magias em área:</b> a cobertura é medida do ponto de impacto até cada alvo e entra no teste de resistência. Com cobertura total, o alvo não sofre dano.</li>
+    <li>A chance de acerto na mira e o resultado no chat já mostram o bônus, por exemplo "contra 18 (cobertura ¾ +5)".</li>
+    <li>Altura e regra de visibilidade da ficha só o mestre muda.</li>
+  </ul>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<!-- ============ JOGAR ============ -->
+<section id="acoes">
+  <p class="eyebrow">Jogar</p>
+  <h2>Ações: ataques, magias e curas</h2>
+  <p>As ações ficam na ficha. Cada uma tem um <b>Tipo</b>, e o tipo decide o que o sistema faz sozinho. Abra a ficha, clique em <b>Nova ação</b> ou no lápis de uma ação existente.</p>
+  <figure><img src="img/sheet.jpg" alt="Ficha da Lyra com a ação Espada longa aberta para edição" width="500" height="780" loading="lazy"><figcaption>Editando a Espada longa: ataque <code>1d20+@forca</code> contra a <code>Defesa</code> do alvo, dano <code>1d8+@forca</code>.</figcaption></figure>
+  <div class="tbl"><table>
+    <thead><tr><th>Tipo</th><th>O que o sistema faz</th></tr></thead>
+    <tbody>
+      <tr><td>Ataque</td><td>Rola o ataque contra um atributo do alvo (ex.: <code>Defesa</code>). Se acertar, rola o dano e tira da barra (ex.: <code>PV</code>).</td></tr>
+      <tr><td>Resistência</td><td>Cada alvo rola o atributo pedido (ex.: <code>Destreza</code>) contra a CD. Quem falha leva o dano todo; quem passa leva metade ou nada.</td></tr>
+      <tr><td>Dano direto</td><td>Rola e aplica em todos os alvos, sem teste.</td></tr>
+      <tr><td>Cura</td><td>Rola e soma na barra, sem passar do máximo.</td></tr>
+      <tr><td>Só rolar</td><td>Rolagem comum, sem alvo. Bom para testes de perícia.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Exemplos prontos</h4>
+  <div class="cards">
+    <div class="card"><h5>Espada longa</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@forca</code></dd><dt>Contra</dt><dd><code>Defesa</code></dd><dt>Dano</dt><dd><code>1d8+@forca</code></dd><dt>Alcance</dt><dd>vazio (corpo a corpo)</dd></dl></div>
+    <div class="card"><h5>Arco curto</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@destreza</code></dd><dt>Contra</dt><dd><code>Defesa</code></dd><dt>Dano</dt><dd><code>1d6+@destreza</code></dd><dt>Alcance</dt><dd><code>16</code></dd></dl></div>
+    <div class="card"><h5>Bola de fogo</h5><dl>
+      <dt>Tipo</dt><dd>Resistência</dd><dt>Resiste com</dt><dd><code>Destreza</code></dd><dt>CD</dt><dd><code>13</code></dd><dt>Dano</dt><dd><code>8d6</code>, metade se passar</dd><dt>Alcance</dt><dd><code>20</code>, área <code>2</code></dd><dt>Custo</dt><dd><code>3</code> de <code>Mana</code></dd></dl></div>
+    <div class="card"><h5>Poção de cura</h5><dl>
+      <dt>Tipo</dt><dd>Cura</dd><dt>Cura</dt><dd><code>2d4+2</code></dd><dt>Barra</dt><dd><code>PV</code></dd><dt>Alcance</dt><dd>vazio (toque)</dd></dl></div>
+  </div>
+
+  <h4>Fórmulas sem decorar nomes</h4>
+  <p>O passo a passo completo, com receitas de golpes e combos, está em <a href="#formulas">Fórmulas</a>.</p>
+  <p>Ao lado de cada fórmula (ataque, dano, CD) há o menu <b>+ atributo</b>. Escreva o dado, por exemplo <code>1d20</code>, e escolha <b>Força</b>: a fórmula vira <code>1d20+@forca</code>. Os campos <b>Contra o atributo do alvo</b>, <b>Alvo resiste com</b>, <b>Barra afetada</b> e <b>Gasta da barra</b> também são menus com a lista da campanha.</p>
+  <h4>Alcance, área e custo</h4>
+  <ul>
+    <li><b>Alcance</b> (em quadrados): <code>1</code> = corpo a corpo, <code>16</code> = arco, <code>0</code> = sem limite. Se ficar vazio, o padrão é corpo a corpo para ataques (16 quadrados se o nome tiver arco, besta, arremesso…), 12 para magias e toque para curas.</li>
+    <li><b>Área</b> (raio em quadrados): só para resistência, dano e cura. Com área, você escolhe um ponto no mapa em vez de um alvo.</li>
+    <li><b>Custo</b>: quanto a ação gasta e de qual barra. Sem Mana suficiente, a ação é bloqueada.</li>
+    <li><b>Crítico a partir do d20 natural</b>: <code>19</code> faz a ação dar crítico com 19 ou 20.</li>
+  </ul>
+  <div class="note tip"><b>Use os nomes do seu sistema</b><p>Se o seu jogo usa "CA" em vez de "Defesa" ou "Vida" em vez de "PV", troque na lista da campanha (painel <b>Mesa</b>). Fichas e ações passam a oferecer esses nomes.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="formulas">
+  <p class="eyebrow">Jogar</p>
+  <h2>Fórmulas: crie seus ataques e combos <span class="who all">Todos</span></h2>
+  <p>Toda ação tem fórmulas: a rolagem de ataque, o dano, a CD, a cura. Uma fórmula é uma conta com dados, números e atributos da ficha. Se você sabe escrever <code>1d20+3</code>, já sabe o básico; o resto deste tópico é para montar golpes mais elaborados.</p>
+
+  <h4>1. Dados e números</h4>
+  <p>Escreva <b>quantidade</b>, a letra <b>d</b> e o <b>número de faces</b>. Some, subtraia e multiplique à vontade.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Fórmula</th><th>O que rola</th></tr></thead>
+    <tbody>
+      <tr><td><code>1d20</code></td><td>Um d20. <code>d20</code> sozinho também vale.</td></tr>
+      <tr><td><code>2d6+3</code></td><td>Dois d6 somados, mais 3.</td></tr>
+      <tr><td><code>1d8+1d6</code></td><td>Um d8 mais um d6 (ex.: espada com dano de fogo).</td></tr>
+      <tr><td><code>1d20-2</code></td><td>Um d20 com penalidade de 2.</td></tr>
+      <tr><td><code>3*(1d4+1)</code></td><td>Rola 1d4+1 uma vez e multiplica por 3. Os parênteses decidem o que vem primeiro.</td></tr>
+      <tr><td><code>1d10/2</code></td><td>Divide e arredonda para baixo.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>2. Atributos da ficha com @</h4>
+  <p>Um <code>@</code> antes do nome puxa o valor da ficha de quem usa a ação. Com <b>Força 3</b>, <code>1d20+@forca</code> rola um d20 e soma 3. Quando a Força subir, o ataque sobe junto, sem editar nada.</p>
+  <ul>
+    <li>O nome vai em minúsculas e sem acento: <b>Inteligência</b> vira <code>@inteligencia</code>. Nomes com espaço usam <code>_</code>: <b>Bônus de proficiência</b> vira <code>@bonus_de_proficiencia</code>.</li>
+    <li>Você não precisa decorar nada: ao lado de cada fórmula há o menu <b>+ atributo</b>, que escreve o nome certo. Na aba <b>Atributos</b> da ficha, o nome <code>@</code> aparece ao lado de cada um.</li>
+    <li>As barras também valem: <code>@pv</code> é o PV atual e <code>@pv_max</code> o máximo.</li>
+    <li>No campo <b>Teste de atributo</b>, <code>@valor</code> é o número do atributo que está sendo testado.</li>
+  </ul>
+  <div class="note warn"><b>Se o nome estiver errado</b><p>Um <code>@</code> que não existe na ficha vale 0. A ficha avisa em vermelho embaixo do campo, por exemplo: "@forsa não existe nesta ficha (vale 0)".</p></div>
+
+  <h4>3. Truques com os dados</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Escreva</th><th>Efeito</th><th>Uso típico</th></tr></thead>
+    <tbody>
+      <tr><td><code>2d20kh1</code></td><td>Rola 2, fica com o <b>maior</b> (keep high).</td><td>Vantagem</td></tr>
+      <tr><td><code>2d20kl1</code></td><td>Rola 2, fica com o <b>menor</b> (keep low).</td><td>Desvantagem</td></tr>
+      <tr><td><code>4d6kh3</code></td><td>Rola 4, fica com os 3 maiores.</td><td>Gerar atributos</td></tr>
+      <tr><td><code>4d6dl1</code></td><td>Rola 4 e <b>descarta</b> o menor (drop low). <code>dh</code> descarta o maior.</td><td>O mesmo, escrito de outro jeito</td></tr>
+      <tr><td><code>1d6!</code></td><td>Dado que <b>explode</b>: tirou o máximo, rola de novo e soma.</td><td>Savage Worlds, golpes de sorte</td></tr>
+      <tr><td><code>(@nivel)d6</code></td><td>A <b>quantidade de dados</b> vem do atributo. Com Nível 4, rola 4d6.</td><td>Ataque furtivo que cresce com o nível</td></tr>
+      <tr><td><code>4dF</code></td><td>Dados Fudge: cada um dá −1, 0 ou +1.</td><td>Fate</td></tr>
+      <tr><td><code>d%</code></td><td>Um d100.</td><td>Sistemas percentuais</td></tr>
+      <tr><td><code>1d8+2 [fúria]</code></td><td>Texto entre colchetes é só um lembrete, não entra na conta.</td><td>Anotar de onde vem cada bônus</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>4. Onde cada fórmula entra</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Campo</th><th>O que o sistema faz com o resultado</th></tr></thead>
+    <tbody>
+      <tr><td>Rolagem de ataque</td><td>Compara com o atributo de defesa do alvo. Igual ou maior acerta.</td></tr>
+      <tr><td>Dano / Cura</td><td>Tira ou soma na barra do alvo. No crítico, os dados dobram sozinhos: <code>2d6+3</code> vira <code>4d6+3</code>.</td></tr>
+      <tr><td>Dificuldade (CD)</td><td>O número que o alvo precisa tirar no teste de resistência. Ex.: <code>8+@inteligencia+2</code>.</td></tr>
+      <tr><td>Fórmula (tipo Só rolar)</td><td>Só rola e mostra. Aceita várias partes com nome: <code>Ataque: 1d20+5 | Dano: 2d6</code>.</td></tr>
+      <tr><td>Teste de atributo e Iniciativa</td><td>Ficam na aba <b>Atributos</b>. Ex.: <code>1d20+@valor</code> ou <code>1d20+@destreza</code>.</td></tr>
+      <tr><td>Chat e campo de PV</td><td><code>/r 2d6+@forca</code> usa o token selecionado. No PV, <code>-2d6</code> rola e aplica.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>5. Receitas prontas</h4>
+  <p>Copie, cole e ajuste. Todas usam a lista padrão de atributos; crie <b>Nível</b> ou <b>Proficiência</b> na lista da campanha quando a receita pedir.</p>
+  <div class="cards">
+    <div class="card"><h5>Ataque com vantagem</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>2d20kh1+@forca</code></dd><dt>Dano</dt><dd><code>1d8+@forca</code></dd></dl></div>
+    <div class="card"><h5>Golpe poderoso</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@forca-5</code></dd><dt>Dano</dt><dd><code>1d12+@forca+10</code></dd><dt>Ideia</dt><dd>Erra mais, bate muito mais forte.</dd></dl></div>
+    <div class="card"><h5>Lâmina flamejante</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@forca</code></dd><dt>Dano</dt><dd><code>1d8+@forca+1d6 [fogo]</code></dd><dt>Custo</dt><dd><code>1</code> de <code>Mana</code></dd></dl></div>
+    <div class="card"><h5>Ataque furtivo</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@destreza</code></dd><dt>Dano</dt><dd><code>1d6+@destreza+(@nivel)d6</code></dd><dt>Precisa</dt><dd>Atributo <b>Nível</b></dd></dl></div>
+    <div class="card"><h5>Rajada de mísseis</h5><dl>
+      <dt>Tipo</dt><dd>Dano direto</dd><dt>Dano</dt><dd><code>3*(1d4+1)</code></dd><dt>Alvos</dt><dd>Vários · alcance <code>24</code></dd><dt>Custo</dt><dd><code>2</code> de <code>Mana</code></dd></dl></div>
+    <div class="card"><h5>Onda de choque</h5><dl>
+      <dt>Tipo</dt><dd>Resistência</dd><dt>Resiste com</dt><dd><code>Constituição</code></dd><dt>CD</dt><dd><code>8+@inteligencia+@proficiencia</code></dd><dt>Dano</dt><dd><code>2d8</code> · área <code>2</code> · alcance <code>6</code></dd></dl></div>
+    <div class="card"><h5>Cura pela fé</h5><dl>
+      <dt>Tipo</dt><dd>Cura</dd><dt>Cura</dt><dd><code>1d8+@sabedoria</code></dd><dt>Alcance</dt><dd><code>6</code></dd><dt>Custo</dt><dd><code>2</code> de <code>Mana</code></dd></dl></div>
+    <div class="card"><h5>Último fôlego</h5><dl>
+      <dt>Tipo</dt><dd>Ataque</dd><dt>Ataque</dt><dd><code>1d20+@forca</code></dd><dt>Dano</dt><dd><code>1d8+(@pv_max-@pv)/2</code></dd><dt>Ideia</dt><dd>Quanto mais ferido, mais dano.</dd></dl></div>
+  </div>
+
+  <h4>Combos: várias ações em sequência</h4>
+  <p>Cada ação faz <b>uma</b> rolagem de ataque. Um combo de vários golpes vira várias ações na ficha, usadas em seguida pelas teclas <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>…</p>
+  <div class="note ex"><b>Exemplo: combo do monge</b>
+    <ul>
+      <li><b>1 · Soco</b>: Ataque <code>1d20+@destreza</code>, dano <code>1d6+@destreza</code>.</li>
+      <li><b>2 · Soco extra</b>: igual ao primeiro, com custo <code>1</code> de <code>Ki</code>.</li>
+      <li><b>3 · Golpe atordoante</b>: Resistência, o alvo resiste com <code>Constituição</code>, CD <code>8+@sabedoria+2</code>, sem dano. Custo <code>1</code> de <code>Ki</code>. O resultado mostra quem falhou, e você aplica a condição <b>Atordoado</b> no painel do token.</li>
+    </ul>
+    <p>Na mesa: selecione o monge e aperte <kbd>1</kbd>, clique no alvo; <kbd>2</kbd>, clique; <kbd>3</kbd>, clique. Para isso funcionar, <b>Ki</b> precisa estar na lista de barras da campanha.</p></div>
+
+  <h4>Para outros sistemas</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Sistema</th><th>Teste de atributo</th><th>Exemplo de dano</th></tr></thead>
+    <tbody>
+      <tr><td>D&amp;D / Tormenta</td><td><code>1d20+@valor</code></td><td><code>1d8+@forca</code></td></tr>
+      <tr><td>Call of Cthulhu</td><td><code>1d100</code> (passa se tirar até o valor)</td><td><code>1d6+1d4</code></td></tr>
+      <tr><td>GURPS</td><td><code>3d6</code></td><td><code>2d6+1</code></td></tr>
+      <tr><td>Savage Worlds</td><td><code>1d8!</code></td><td><code>1d6!+1d8!</code></td></tr>
+      <tr><td>Fate</td><td><code>4dF+@valor</code></td><td>—</td></tr>
+      <tr><td>Ordem Paranormal</td><td><code>(@valor)d20kh1</code></td><td><code>1d10+@forca</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Erros comuns</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Escrito</th><th>Problema</th><th>Certo</th></tr></thead>
+    <tbody>
+      <tr><td><code>1d20+@força</code></td><td>Funciona, mas prefira sem acento para não confundir.</td><td><code>1d20+@forca</code></td></tr>
+      <tr><td><code>2d+3</code></td><td>Falta o número de faces.</td><td><code>2d6+3</code></td></tr>
+      <tr><td><code>(1d6+2</code></td><td>Parêntese aberto e não fechado.</td><td><code>(1d6+2)</code></td></tr>
+      <tr><td><code>@niveld6</code></td><td>O nome gruda no dado.</td><td><code>(@nivel)d6</code></td></tr>
+      <tr><td><code>1d20 + forca</code></td><td>Sem <code>@</code>, "forca" não é atributo.</td><td><code>1d20+@forca</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>Quando a fórmula tem erro, o campo fica com a borda vermelha e o motivo aparece embaixo dele.</p>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="atacar">
+  <p class="eyebrow">Jogar</p>
+  <h2>Atacar passo a passo <span class="who all">Todos</span></h2>
+  <ol>
+    <li><b>Selecione seu token.</b> No combate, quando chega a sua vez, ele já vem selecionado.</li>
+    <li><b>Escolha a ação</b> no painel do token, ou aperte o número dela: <kbd>1</kbd> a <kbd>9</kbd>.</li>
+    <li><b>Escolha o alvo.</b> O jogo mostra quem você pode atacar.</li>
+  </ol>
+  <h4>Se o alvo estiver longe</h4>
+  <figure><img src="img/far.jpg" alt="Lyra com a área de alcance de um quadrado em volta; os goblins aparecem escurecidos e um aviso diz fora de alcance" width="1160" height="790" loading="lazy"><figcaption>A área roxa é o alcance da espada. Os goblins estão longe, então ficam escuros e a barra avisa "ninguém ao alcance".</figcaption></figure>
+  <p>Aperte <kbd>Esc</kbd>, aproxime-se e tente de novo.</p>
+  <h4>Com o alvo ao alcance</h4>
+  <figure><img src="img/target.jpg" alt="Goblin 1 com anel vermelho e a dica 56% de acerto, 1 quadrado" width="540" height="590" loading="lazy"><figcaption>O goblin ao lado pulsa em vermelho. Passe o mouse para ver a chance de acerto e a distância.</figcaption></figure>
+  <p>Clique no alvo. O sistema rola o ataque, compara com a Defesa e, se acertar, rola o dano e tira da vida.</p>
+  <h4>O resultado aparece no mapa</h4>
+  <figure><img src="img/fx.jpg" alt="Número -8 com a palavra CRÍTICO subindo do Goblin 1 e um cartão no canto com o resumo e o botão Desfazer" width="920" height="580" loading="lazy"><figcaption>O dano sobe do alvo. O cartão no canto resume o golpe; o mestre tem o botão Desfazer.</figcaption></figure>
+  <div class="tbl"><table>
+    <thead><tr><th>No mapa</th><th>Significa</th></tr></thead>
+    <tbody>
+      <tr><td><b>−7</b></td><td>Acertou e tirou 7 de vida.</td></tr>
+      <tr><td><b>CRÍTICO</b></td><td>Tirou o número de crítico no d20. O dano dobra.</td></tr>
+      <tr><td><b>Errou</b></td><td>O ataque não passou da Defesa.</td></tr>
+      <tr><td><b>Falha crítica</b></td><td>Tirou 1 natural.</td></tr>
+      <tr><td><b>Caiu</b></td><td>A vida do alvo chegou a 0.</td></tr>
+      <tr><td><b>+6</b></td><td>Cura.</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>Ataques miram o outro lado (personagens contra criaturas). Curas miram o próprio grupo. NPCs podem ser alvo dos dois.</li>
+    <li>Paredes bloqueiam: não dá para atacar quem está atrás de uma parede.</li>
+    <li>O chat guarda todos os dados rolados, para quem quiser conferir. Não é preciso abri-lo para jogar.</li>
+  </ul>
+  <div class="note tip"><b>Mestre</b><p>Precisa ignorar a regra, como num aliado enfeitiçado? Segure <kbd>Alt</kbd> e clique no alvo. Errou alguma coisa? Use <b>Desfazer</b> no cartão: a vida e a Mana voltam.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="area">
+  <p class="eyebrow">Jogar</p>
+  <h2>Magias em área <span class="who all">Todos</span></h2>
+  <p>Ações com <b>Área</b> maior que zero não pedem um alvo: pedem um <b>ponto</b> no mapa.</p>
+  <figure><img src="img/area.jpg" alt="Círculo laranja da Bola de fogo cobrindo os dois goblins, com a dica 2 alvos na área" width="560" height="590" loading="lazy"><figcaption>O círculo segue o mouse e marca em vermelho quem vai ser atingido.</figcaption></figure>
+  <ol>
+    <li>Escolha a magia (ex.: <b>Bola de fogo</b>).</li>
+    <li>Mova o mouse. O círculo mostra a área, e a dica diz quantos alvos estão dentro.</li>
+    <li>Clique para lançar. Cada alvo faz o próprio teste de resistência.</li>
+  </ol>
+  <ul>
+    <li>O ponto precisa estar dentro do alcance da magia e à vista.</li>
+    <li>Quem está atrás de uma parede fica protegido da explosão.</li>
+    <li>Quem lança não é atingido pela própria magia.</li>
+  </ul>
+  <div class="note ex"><b>Sem área, vários alvos</b><p>Uma ação com <b>Alvos: Vários</b> e área <code>0</code> deixa marcar alvos um a um. Clique em cada um e aperte <kbd>Enter</kbd> ou <b>Confirmar</b>.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="combate">
+  <p class="eyebrow">Jogar</p>
+  <h2>Combate e turnos</h2>
+  <figure><img src="img/combat.jpg" alt="Painel Combate com a rodada 1, a ordem Goblin 2, Goblin 1 e Lyra, e a faixa de iniciativa no topo" width="600" height="780" loading="lazy"><figcaption>Painel Combate e a faixa de iniciativa no topo do mapa. O anel dourado marca de quem é a vez.</figcaption></figure>
+  <h4>Começar uma luta <span class="who gm">Mestre</span></h4>
+  <ol>
+    <li>Abra <b>Combate</b> no dock.</li>
+    <li>Clique em <b>Todos da cena</b>, ou selecione tokens e use <b>Token selecionado</b>.</li>
+    <li>Clique em <b>Rolar faltantes</b>. A iniciativa de cada um usa a fórmula da ficha (ex.: <code>1d20+@destreza</code>).</li>
+    <li>Clique em <b>Iniciar combate</b>.</li>
+    <li>Passe a vez com <b>Próximo</b>. Ao fim do último, começa a próxima rodada.</li>
+  </ol>
+  <h4>Durante a luta</h4>
+  <ul>
+    <li>Os jogadores só movem os próprios tokens na vez deles.</li>
+    <li>Na sua vez, seu token já vem selecionado, com as ações à mão.</li>
+    <li>O jogador termina a vez com <b>Encerrar meu turno</b>, no painel Combate.</li>
+    <li>As condições com duração perdem uma rodada no início do turno do token.</li>
+    <li>Quem sai do mapa ou tem a ficha excluída sai da ordem sozinho. Para tirar alguém na mão, use o <b>×</b> da linha.</li>
+  </ul>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="regras">
+  <p class="eyebrow">Jogar</p>
+  <h2>Regras automáticas <span class="who gm">Mestre</span></h2>
+  <p>Clique no nome da campanha no topo e desça até <b>Regras automáticas</b>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Opção</th><th>Efeito</th></tr></thead>
+    <tbody>
+      <tr><td>Acerto crítico</td><td><b>Dobra os dados de dano</b>, <b>Dobra o dano total</b> ou <b>Sem crítico</b>.</td></tr>
+      <tr><td>Crítico sempre acerta</td><td>Um crítico acerta mesmo contra Defesa alta.</td></tr>
+      <tr><td>1 natural sempre erra</td><td>Tirar 1 no d20 é erro automático.</td></tr>
+      <tr><td>Barras não ficam negativas</td><td>A vida para em 0.</td></tr>
+      <tr><td>Jogador só usa ações na própria vez</td><td>Fora da vez, o botão avisa "Aguarde a sua vez".</td></tr>
+      <tr><td>Esconder Defesa e PV dos monstros</td><td>Os jogadores não veem os números dos monstros, nem a chance de acerto.</td></tr>
+    </tbody>
+  </table></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="dados">
+  <p class="eyebrow">Jogar</p>
+  <h2>Dados <span class="who all">Todos</span></h2>
+  <figure><img src="img/dice.jpg" alt="Painel Dados com botões d4 a d100, modificador, vantagem, desvantagem e Rolar" width="370" height="435" loading="lazy"><figcaption>O painel Dados: clique nos dados para montar a rolagem.</figcaption></figure>
+  <p>No painel, clique nos dados (cada clique soma um), ajuste o <b>Modificador</b> e clique em <b>Rolar</b>. <b>Pública</b> vira <b>Secreta</b> com um clique: só você e o mestre veem.</p>
+  <p>No chat, comece com <code>/r</code>. Use <code>/gr</code> para rolar em segredo.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Escreva</th><th>Rola</th></tr></thead>
+    <tbody>
+      <tr><td><code>/r 2d6+3</code></td><td>Dois d6 mais 3.</td></tr>
+      <tr><td><code>/r 1d20+@forca</code></td><td>d20 mais a Força do token selecionado.</td></tr>
+      <tr><td><code>/r 2d20kh1</code></td><td>Vantagem: dois d20, fica o maior.</td></tr>
+      <tr><td><code>/r 2d20kl1</code></td><td>Desvantagem: fica o menor.</td></tr>
+      <tr><td><code>/r 4d6kh3</code></td><td>Quatro d6, ficam os três maiores.</td></tr>
+      <tr><td><code>/r 1d6!</code></td><td>d6 que explode: tirou 6, rola de novo e soma.</td></tr>
+      <tr><td><code>/r 4dF</code></td><td>Dados Fudge (−1, 0, +1).</td></tr>
+      <tr><td><code>/r d%</code></td><td>d100.</td></tr>
+      <tr><td><code>/r Ataque: 1d20+5 | Dano: 2d6</code></td><td>Duas rolagens com nome, no mesmo cartão.</td></tr>
+    </tbody>
+  </table></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="som">
+  <p class="eyebrow">Jogar</p>
+  <h2>Música e sons <span class="who gm">Mestre</span></h2>
+  <figure><img src="img/audio.jpg" alt="Painel Som pedindo para escolher a pasta de músicas" width="370" height="315" loading="lazy"><figcaption>Na primeira vez, o painel Som pede a pasta com as músicas.</figcaption></figure>
+  <ol>
+    <li>Junte os arquivos (mp3, ogg, m4a, wav, flac) numa pasta. Subpastas <code>musicas</code>, <code>ambiente</code> e <code>efeitos</code> viram as categorias sozinhas.</li>
+    <li>No dock, abra <b>Som</b> e clique em <b>Escolher pasta</b> (Chrome ou Edge). A cada sessão, o navegador pede um clique para reconectar a pasta.</li>
+    <li>Toque uma faixa. Ela chega aos jogadores pela própria conexão da mesa.</li>
+  </ol>
+  <ul>
+    <li><b>Música</b> e <b>Ambiente</b> tocam juntos, cada um com seu volume. <b>Efeitos</b> tocam uma vez (porta, trovão, rugido).</li>
+    <li><b>Trilha da cena</b>: a faixa marcada começa sozinha quando você ativa a cena.</li>
+    <li><b>Sons no mapa</b>: arraste uma faixa para o mapa. Cada jogador ouve mais alto perto do som, do lado certo, e abafado atrás de paredes.</li>
+  </ul>
+  <div class="note ex"><b>Exemplo</b><p>Coloque um som de cachoeira no canto do rio. Os jogadores escutam a água ficar mais alta conforme andam até lá.</p></div>
+  <p><b>Jogadores</b> não veem controles de som. Só precisam clicar uma vez em <b>Ativar som</b> quando o aviso aparecer.</p>
+
+  <h4 id="salas-som">Salas de som</h4>
+  <p>Uma área à prova de som com música própria: a taverna com o alaúde, a cripta em silêncio, o salão do trono com a fanfarra.</p>
+  <figure><img src="img/rooms.jpg" alt="Mapa com duas salas de som tracejadas em verde-água: Taverna, com a música Taverna do Javali, e Cripta, em forma de L, sem música. À direita, o painel da sala Taverna com música, volume e o ambiente de fora" width="1180" height="790" loading="lazy"><figcaption>Duas salas: a Taverna tem música própria; a Cripta, em L, foi feita no modo Polígono e só isola o som. O painel da sala aparece à direita.</figcaption></figure>
+  <ol>
+    <li>Escolha a ferramenta <b>Sala de som</b> <kbd>M</kbd> na barra da esquerda.</li>
+    <li>Arraste um <b>retângulo</b>. Para salas tortas, troque para <b>Polígono</b> e clique em cada canto; feche clicando no primeiro ponto, com dois cliques ou <kbd>Enter</kbd>.</li>
+    <li>Solte uma <b>música</b> da biblioteca dentro da sala, ou escolha no painel dela. Ela vira a música da sala inteira, com o mesmo volume em qualquer ponto.</li>
+  </ol>
+  <div class="tbl"><table>
+    <thead><tr><th>Para quem está dentro da sala</th><th>O que acontece</th></tr></thead>
+    <tbody>
+      <tr><td>Música da cena</td><td>Para enquanto ele estiver lá dentro (se a sala tiver música). Ao sair, volta do ponto certo.</td></tr>
+      <tr><td>Ambiente de fora (chuva, vento)</td><td>Você escolhe no painel da sala: <b>Para</b> (padrão), <b>Abafado</b> ou <b>Continua</b>.</td></tr>
+      <tr><td>Efeitos</td><td>Continuam tocando normalmente.</td></tr>
+      <tr><td>Sons no mapa</td><td>Os de dentro só se ouvem dentro; os de fora não entram.</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>Cada jogador ouve pelo <b>próprio token</b>: quem está na taverna ouve a música dela, quem ficou na rua ouve a música da cena. Com vários tokens em lugares diferentes, a sala com música tem prioridade.</li>
+    <li>Todos que estão na mesma sala ouvem o mesmo trecho da música. <b>Recomeçar</b> volta a música da sala ao início.</li>
+    <li>Você, mestre, ouve pelo centro da câmera: mova a câmera para dentro de uma sala para conferir.</li>
+    <li>As salas aparecem só para você, em verde-água tracejado. Clique numa sala com a ferramenta para editar, ou escolha na lista ao lado da barra. <kbd>Delete</kbd> apaga a sala selecionada.</li>
+    <li>A sala não mexe em luz nem em visão: paredes continuam sendo paredes.</li>
+  </ul>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="ver-como">
+  <p class="eyebrow">Jogar</p>
+  <h2>Ver como jogador <span class="who gm">Mestre</span></h2>
+  <p>No menu <kbd>⋯</kbd>, escolha ver como <b>todos os jogadores</b> ou como <b>um jogador específico</b>. A tela fica igual à deles: sem painéis do mestre, sem tokens ocultos, com a luz e o som do ponto de vista deles. Use para conferir se o monstro está mesmo escondido. <b>Voltar a ser mestre</b> fica no topo.</p>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<!-- ============ CONSULTA ============ -->
+<section id="atalhos">
+  <p class="eyebrow">Consulta</p>
+  <h2>Atalhos de teclado</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Tecla</th><th>Faz</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>1</kbd> a <kbd>9</kbd></td><td>Usa a ação de mesmo número do token selecionado.</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Cancela a mira ou a ferramenta.</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Confirma alvos marcados (ações com vários alvos).</td></tr>
+      <tr><td><kbd>Setas</kbd></td><td>Movem o token selecionado.</td></tr>
+      <tr><td><kbd>Alt</kbd></td><td>Ao soltar um token: sem encaixe no grid. Ao mirar (mestre): aceita qualquer alvo.</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>Remove o token selecionado (mestre).</td></tr>
+      <tr><td><kbd>V</kbd> <kbd>H</kbd> <kbd>R</kbd> <kbd>P</kbd></td><td>Selecionar, mover câmera, régua, ping.</td></tr>
+      <tr><td><kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>E</kbd> <kbd>X</kbd></td><td>Desenho livre, linha, retângulo, círculo, borracha.</td></tr>
+      <tr><td><kbd>F</kbd> <kbd>G</kbd> <kbd>W</kbd> <kbd>O</kbd> <kbd>M</kbd></td><td>Revelar névoa, esconder névoa, parede, porta, sala de som.</td></tr>
+    </tbody>
+  </table></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+<section id="problemas">
+  <p class="eyebrow">Consulta</p>
+  <h2>Problemas comuns</h2>
+  <div class="qa"><h4>Clico no ataque e só aparece um número no chat</h4>
+    <p>A ação está com o tipo <b>Só rolar</b>. Abra a ficha, clique no lápis da ação e mude o <b>Tipo</b> para <b>Ataque</b>. O botão de uma ação de ataque mostra o ícone de espada; o de "Só rolar" mostra um dado. Ações antigas escritas como <code>Ataque: … | Dano: …</code> são convertidas sozinhas ao abrir a campanha.</p></div>
+  <div class="qa"><h4>Aparece "ninguém ao alcance"</h4>
+    <p>O alvo está mais longe que o alcance da ação. Aproxime o token ou aumente o <b>Alcance</b> da ação. Passe o mouse no alvo para ver a distância.</p></div>
+  <div class="qa"><h4>Todo ataque acerta</h4>
+    <p>O alvo não tem o atributo que a ação procura. Se a ação diz "Contra o atributo do alvo: <code>Defesa</code>", abra a ficha do monstro e use <b>+ Atributo → Defesa</b>.</p></div>
+  <div class="qa"><h4>Aparece "(fora da lista)" num atributo</h4>
+    <p>O nome não está na lista da campanha (às vezes é só um erro de digitação de uma ficha antiga). Escolha o nome certo no menu, ou o mestre acrescenta o nome no painel <b>Mesa</b>.</p></div>
+  <div class="qa"><h4>Não consigo clicar num token para atacar</h4>
+    <p>Ele está fora do alcance, atrás de uma parede, é do seu próprio grupo ou está escondido no escuro. Passe o mouse sobre ele: a dica diz o motivo. O mestre pode forçar com <kbd>Alt</kbd>+clique.</p></div>
+  <div class="qa"><h4>O jogador não consegue mover o token</h4>
+    <p>Há um combate ativo e não é a vez dele, ou a ficha não está liberada para ele. Confira <b>Controlado por</b> na ficha.</p></div>
+  <div class="qa"><h4>Os jogadores não ouvem a música</h4>
+    <p>Cada jogador precisa clicar uma vez em <b>Ativar som</b>; o navegador exige isso. Confira também se o mestre reconectou a pasta no painel Som.</p></div>
+  <div class="qa"><h4>Um jogador caiu da mesa</h4>
+    <p>Ele recarrega a página e entra de novo com o mesmo código. Se foi o mestre que recarregou, os jogadores voltam sozinhos.</p></div>
+  <div class="qa"><h4>Ataquei por engano</h4>
+    <p>O mestre clica em <b>Desfazer</b> no cartão do resultado, ou no mesmo cartão dentro do chat. A vida e a Mana voltam ao que eram.</p></div>
+  <a class="top" href="#">Voltar ao topo</a>
+</section>
+
+</div>
+</main>
+</div>
+
+<script>
+(function () {
+  var norm = function (s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var heads = Array.prototype.slice.call(document.querySelectorAll('#toc h3'));
+  var none = document.getElementById('nada');
+  var index = links.map(function (a) {
+    var sec = document.querySelector(a.getAttribute('href'));
+    return { a: a, sec: sec, text: norm(sec ? sec.textContent : a.textContent) };
+  });
+  document.getElementById('busca').addEventListener('input', function (e) {
+    var q = norm(e.target.value.trim()), any = false;
+    index.forEach(function (it) { var ok = !q || it.text.indexOf(q) >= 0; it.a.hidden = !ok; if (ok) any = true; });
+    heads.forEach(function (h) {
+      var n = h.nextElementSibling, vis = false;
+      while (n && n.tagName === 'A') { if (!n.hidden) vis = true; n = n.nextElementSibling; }
+      h.hidden = !vis;
+    });
+    none.hidden = any;
+  });
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        index.forEach(function (it) { it.a.classList.toggle('on', it.sec === en.target); });
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    index.forEach(function (it) { if (it.sec) io.observe(it.sec); });
+  }
+})();
+</script>
+<a class="home-fab" href="../index.html" title="Voltar ao menu inicial"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Menu</a>
+</body>
+</html>
