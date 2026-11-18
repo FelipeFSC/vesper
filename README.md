@@ -75,3 +75,9 @@ wiki/          manual
 ```
 
 Toda mudança na mesa é uma ação (ex.: `{ type: 'token.move', … }`) aplicada em `js/store.js`. O mestre confere o que cada jogador pode fazer em `permit()` e repassa para todos.
+
+## Créditos
+
+- **Bestiário:** os dados e as imagens vêm do 5etools e **não estão no repositório**. Cada um gera a base no próprio computador a partir dos livros que tem: `node tools/importar-5etools.mjs <pasta do 5etools-src>` (cria `data/5etools/`).
+- **Ícones:** [Lucide](https://lucide.dev) (ISC).
+- Imagens próprias para o bestiário podem ficar em `imagens/bestiario/` (fora do repositório); elas têm prioridade sobre os tokens.

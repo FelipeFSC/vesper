@@ -14,6 +14,45 @@ O manual para o usuário final está em `wiki/index.html`. Aqui fica o resumo t�
 - Configurar: tipo, dono, tamanho, cor, **Altura (m)** e **Atrás de muro baixo** (só o mestre muda os dois).
 - Fórmulas com erro ou `@` inexistente ficam em vermelho (`Dice.check`).
 
+## Bestiário (Plano 25, `js/bestiary.js` + `data/5etools/`; ainda sem tutorial/wiki)
+- Base: criaturas e NPCs do 5etools do usuário, gerada por `node tools/importar-5etools.mjs [pasta do 5etools-src]` (padrão `D:\Projetos\5etools-src`). Usa o carregador do próprio 5etools (`DataLoader`), que resolve as cópias (`_copy`/`_mod`).
+- Saída em `data/5etools/` (**fora do git**: são dados dos livros do usuário):
+  - `indice.js` = `App.BESTIARY5E_INDEX` `{books, list: [{k, n, s, cr, crn, ty, sz, npc, named, tok, art, rep, ali}]}`;
+  - `livro-<SIGLA>.js` = `App.BESTIARY5E_BOOKS[sigla]`, com cada criatura inteira, mais `_token` (URL), `_fluff` (`{entries, images: [{url, title, credit}]}`) e `_txt` (tendência, tipo e iniciativa montados pelas funções do 5etools).
+- Imagens: base `https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/` (`Access-Control-Allow-Origin: *`).
+  - O token vira asset WebP da campanha ao adicionar (`B.imageFile` + `App.Images.add`).
+  - A pasta local e a escolha à mão têm prioridade sobre o token.
+  - A arte só carrega na aba Imagens.
+- Janela: só o índice carrega ao abrir, e o livro da criatura só ao ver ou adicionar.
+  - Filtros: busca, Livro, Tipo/NPCs, ND, tamanho, Meu bestiário, Sem imagem, Esconder versões antigas (`reprintedAs`).
+  - Prévia em abas: Ficha, Descrição e Imagens. As marcações `{@…}` são limpas por `B.clean`.
+- `B.toActor(m)` não converte regras (é uma escolha do usuário; ações e tradução ficam para depois).
+  - Leva nome, tipo (`isNpc` → NPC), tamanho do token, PV médio, atributos (modificador), Defesa = CA e visão no escuro.
+  - Leva também `hpDice` (Rolar PV), as notas = `blockText` e `dados5e` = a criatura inteira; `actions: []`.
+- Unidades (`js/units.js`, `App.Units`), opcional:
+  - tabela 1 pé = 0,3 m, 1 milha = 1,5 km, 1 mi/h = 1,5 km/h, 1 libra = 0,5 kg, 1 onça fluida = 30 ml, 1 pinta = 0,5 L, 1 quarto = 1 L, 1 galão = 4 L;
+  - preferência `vesper-unidades` no navegador, escolhida na janela;
+  - vale para a prévia e para as notas das fichas criadas depois.
+- Token pronto (Plano 26): `a.imgStyle === 'token'` desenha a imagem inteira do tamanho do token, sem disco nem aro (padrão das fichas do bestiário; Configurar → Imagem no tabuleiro).
+- Armazenamento do bestiário: banco `mesarpg`/`kv`, chaves `bst-pasta`, `bst-ligacoes` e `bst-meu` (Meu bestiário), fora da campanha.
+
+## Página "Criar ficha" (Plano 23, `ficha.html` + `js/ficha.js`; ainda sem wiki)
+- O botão **Criar ficha** da home abre `ficha.html`, uma página só da ficha: sem mesa, sem rede e sem tabuleiro.
+- Uso típico (é só um exemplo; os textos da página não falam em mestre): o jogador monta a ficha, **Exportar** gera o `.json` `mesarpg-actor` (com a imagem), e o mestre importa na mesa (`applyImport`). Na mesa vira uma ficha normal; o mestre escolhe o jogador em Configurar → Controlado por.
+- As fichas ficam neste navegador: IndexedDB `mesarpg`/`kv`, chave `fichas` = `{actors, assets, savedAt}`, separada da `campaign`. A ficha aberta é lembrada em `localStorage` (`vesper-ficha-sel`).
+- Tem tudo o que a janela da mesa tem, menos "Controlado por" (o mestre decide ao importar) e Colocar no mapa / usar ação no alvo:
+  - identidade (retrato, nome, tipo, tamanho, cor, altura com vírgula, atrás de muro baixo);
+  - barras (atual aceita +5/-2d6);
+  - atributos em cartões (dado de teste);
+  - fórmulas de teste e iniciativa com aviso;
+  - ações (os 5 tipos, "+ atributo", Testar, Duplicar);
+  - notas;
+  - Duplicar, Exportar, Excluir, Importar.
+- Nomes de atributos e barras são livres (sem lista da campanha), com sugestões (`datalist`) da lista padrão e da própria ficha. Na mesa, nome fora da lista do mestre aparece como "(fora da lista)".
+- Rolagens: não há chat; o resultado aparece no quadro "Rolagens" no canto (só quem está na página vê).
+- Redesenho: cada mudança redesenha depois que o foco já foi ao próximo campo, e devolve o foco pelo `data-f`.
+- Celular (até 760 px): uma coluna, e a lista "Minhas fichas" fecha quando há ficha aberta.
+
 ## Dados (`js/dice.js`)
 `2d6+3`, `kh/kl/dh/dl`, `!` (explode), `dF`, `d%`, `[comentário]`, `(@nivel)d6`, várias rolagens com `|`. No crítico, `doubleDice` dobra a quantidade de dados (inclusive `(expr)dN`).
 

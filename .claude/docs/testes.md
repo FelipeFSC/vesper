@@ -21,6 +21,8 @@ powershell -NoProfile -File .claude/testes/runwalk.ps1 -js meu_teste.js -budget 
 powershell -NoProfile -File .claude/testes/runwalk.ps1 -js meu_teste.js -query '' -budget 8000
 # tela menor (padrão 1440,900)
 powershell -NoProfile -File .claude/testes/runwalk.ps1 -js menus.js -budget 15000 -size '1280,620'
+# outra página (a página de ficha, Plano 23)
+powershell -NoProfile -File .claude/testes/runwalk.ps1 -js ficha.js -page 'ficha.html' -query '' -budget 60000
 ```
 
 Os scripts de teste (`-js`) e as saídas ficam na pasta do `runwalk.ps1`.

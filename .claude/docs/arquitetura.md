@@ -31,7 +31,12 @@
 | `js/board.js` | Canvas do mapa: câmera, ferramentas, tokens, paredes, salas, mira, efeitos |
 | `js/ui.js` | Interface: laterais, dock, painel do token, fichas (abas), combate, cenas, painel Mesa, modais |
 | `js/tutorial.js` | Tutorial interativo (`?tutorial`), lista `STEPS`, campanha de demonstração |
-| `js/main.js` | Menu inicial (fundo animado, teclado, trocar fundo, criar ficha) |
+| `js/main.js` | Menu inicial (fundo animado, teclado, trocar fundo; Criar ficha abre `ficha.html`) |
+| `js/units.js` | Conversor de unidades (pés, milhas, libras… → m, km, kg, L), opcional, com a preferência no navegador |
+| `js/bestiary.js` | Bestiário (Plano 25): índice e livros do 5etools sob demanda, filtros, prévia (Ficha, Descrição, Imagens), limpeza das marcações, token da web, pasta local, Meu bestiário, `toActor` sem conversão de regras, janela da mesa. O núcleo não depende de `store`/`ui` (a página de ficha usa o mesmo arquivo) |
+| `data/5etools/` | Gerado por `tools/importar-5etools.mjs` a partir do 5etools-src do usuário; **fora do git** |
+| `tools/` | Ferramentas de quem mantém o projeto (Node): `importar-5etools.mjs`. Não é carregado pela mesa |
+| `ficha.html` + `js/ficha.js` + `css/ficha.css` | Página "Criar ficha" (Plano 23): fichas guardadas no navegador (chave `fichas`), editor em uma página, exporta `mesarpg-actor`. Usa só `util`, `icons`, `dice`, `images` (`toWebP`) e `combat` (alcance e altura); não carrega `store`, `net` nem `ui` |
 | `wiki/index.html` | Manual estático com fotos em `wiki/img/` |
 
 ## Estado (resumo)

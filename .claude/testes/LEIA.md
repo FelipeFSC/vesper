@@ -3,7 +3,11 @@
 | Script | O que confere |
 |---|---|
 | `walk.js` | Tutorial inteiro, passo a passo (precisa terminar em "Pronto" sem erros) |
-| `menu.js` | Menu inicial: teclado, submenu Jogar, nome obrigatório, Criar ficha (rodar com `-query ''`) |
+| `menu.js` | Menu inicial: teclado, submenu Jogar, nome obrigatório, Criar ficha leva a `ficha.html` (rodar com `-query ''`) |
+| `ficha.js` | Plano 23, página "Criar ficha" (rodar com `-page 'ficha.html' -query ''`): vazio, ficha nova, identidade (altura com vírgula), barras (+/-, 1d4), atributos (da lista, escrito, remover, rolar), aviso de @, os 5 tipos de ação, + atributo, Testar, Duplicar, remover, notas, foco mantido, imagem, duplicar/excluir ficha, exportar = formato da mesa, importar, recusa campanha, IndexedDB (campanha intacta), busca, largura. `#shot` + `-shot` = foto; `#mobile` com `-size '390,844'` (o Edge de teste não desce de ~492 px) |
+| `ficha_mesa.js` | Plano 23: arquivo da página importado pelo mestre na mesa: tudo igual, imagem, id novo, dono, janela da ficha, variáveis |
+| `bestiario.js` | Plano 25 (precisa de `data/5etools/`): a mesa abre sem carregar a base, botão na aba Fichas, índice inteiro sem nenhum livro, filtros (livro, NPC, tipo, versões antigas, ND, busca), prévia carrega só o livro da criatura, ficha sem marcações, unidades Brasil/originais, abas Descrição e Imagens, token da web (simulado) na ficha, PV/Defesa/atributos, sem ações e com `dados5e`, não duplica, dragão 3×3 com visão no escuro, Rolar PV, pasta local e escolha à mão por cima do token, Meu bestiário, jogador. `#shot` + `-shot` = foto com os tokens de verdade |
+| `tokenpronto.js` | Plano 26: token pronto × retrato pelos pixels (canto, centro, borda), 1×1 e 3×3, trocar na ficha e voltar, seleção com condição, `migrate` das fichas do 5etools |
 | `cover.js` | Cobertura: meia/¾, altura do alvo, encostado no muro, bônus no ataque, sombra e vulto |
 | `high.js` | Os quatro tipos de parede com alvos de 1,8 m e 4 m |
 | `eye.js` | Altura de quem olha (personagem baixo atrás de muros) |

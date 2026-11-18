@@ -26,3 +26,10 @@ desktop.ini
 .claude/testes/*_out.html
 .claude/testes/*.png
 .claude/testes/edgeprof_*/
+
+# Imagens do bestiário: cada um usa as suas (Plano 24); só a pasta vai para o repositório
+imagens/bestiario/**
+!imagens/bestiario/.gitkeep
+
+# Bestiário importado do 5etools (Plano 25): dados dos livros do usuário, gerados localmente
+data/5etools/

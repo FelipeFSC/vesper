@@ -46,3 +46,7 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 20 | [Selecionar vários, copiar e colar](20-selecao-multipla.md) | Implementado (testes do usuário) |
 | 21 | [Gatilhos com vários alvos e animação](21-gatilhos-com-varios-alvos-e-animacao.md) | Implementado (testes do usuário) |
 | 22 | [Scan de paredes e portas](22-scan-de-paredes-e-portas.md) | Implementado (testes do usuário) |
+| 23 | [Tela de criação de ficha](23-editor-de-fichas.md) | Implementado (testes do usuário) |
+| 24 | [Bestiário embutido](24-bestiario-embutido.md) | Substituído pelo Plano 25 (base e tradução descartadas) |
+| 25 | [Bestiário a partir do 5etools](25-bestiario-5etools.md) | Implementado (testes do usuário) |
+| 26 | [Token pronto no tabuleiro](26-token-pronto-no-tabuleiro.md) | Implementado (testes do usuário) |

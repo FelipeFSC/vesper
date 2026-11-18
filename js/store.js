@@ -163,6 +163,8 @@
       a.bars = a.bars || []; a.stats = a.stats || []; a.actions = a.actions || [];
       a.testFormula = a.testFormula || '1d20+@valor'; a.initFormula = a.initFormula || '1d20';
       for (const ac of a.actions) upgradeAction(ac, a);
+      // Plano 26: fichas do bestiário (token do 5etools) desenham o token pronto
+      if (a.source === '5etools' && a.imgStyle === undefined) a.imgStyle = 'token';
     }
     // Campanhas antigas: a lista nasce dos nomes que as fichas já usam
     if (!Array.isArray(st.attrs)) { const used = uniqNames(Object.values(st.actors).flatMap((a) => a.stats.map((x) => x.name))); st.attrs = used.length ? uniqNames(DEFAULT_ATTRS.filter((n) => used.some((u) => U.slug(u) === U.slug(n))).concat(used)) : DEFAULT_ATTRS.slice(); }

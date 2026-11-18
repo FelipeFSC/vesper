@@ -967,3 +967,86 @@ input.grp-name:hover, input.grp-name:focus { border-color: var(--line2) !importa
 .scan-status { margin: 0; font-size: 12px; color: #5fd0c4; }
 .scan-status.hint { color: var(--warn); }
 .scan .row { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Bestiário (Plano 24) ---------- */
+.bst-win .win-body { padding: 12px 14px 10px; }
+.bst { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.bst-folder { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); font-size: 12px; flex-wrap: wrap; }
+.bst-folder > .ico { color: var(--accent-text); }
+.bst-filters { display: grid; grid-template-columns: minmax(160px, 2fr) repeat(4, minmax(110px, 1fr)); gap: 8px; align-items: center; }
+.bst-filters .search-box { margin: 0; }
+.bst-filters select { min-width: 0; font-size: 12px; }
+.bst-body { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 12px; min-height: 0; height: min(62vh, 620px); }
+.bst-left { display: flex; flex-direction: column; min-height: 0; }
+.bst-count { padding: 0 2px 4px; }
+.bst-list { overflow-y: auto; min-height: 0; flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.bst-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+.bst-item:hover { background: var(--panel2); }
+.bst-item.on { background: var(--accent-soft); border-color: var(--accent); }
+.bst-item .name { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bst-item .sub { font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bst-thumb { background-size: cover !important; background-position: center !important; }
+.bst-prev { overflow-y: auto; min-height: 0; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--panel2); }
+.bst-head { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; }
+.bst-head h3 { margin: 0; font: 600 22px/1.15 var(--serif); }
+.bst-cr { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--muted); }
+.bst-cr b { font: 600 18px/1.1 var(--serif); color: var(--gold); }
+.bst-img { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; overflow-wrap: anywhere; }
+.bst-acts { margin-bottom: 10px; }
+.bst-block { border-top: 2px solid rgba(176, 72, 72, .55); border-bottom: 2px solid rgba(176, 72, 72, .55); padding: 8px 0; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.bst-main { display: flex; gap: 14px; flex-wrap: wrap; }
+.bst-abil { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 4px 0; text-align: center; }
+.bst-abil > div { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; }
+.bst-abil b { font-size: 10px; letter-spacing: .08em; color: var(--faint); }
+.bst-abil span { font: 600 16px/1.2 var(--serif); }
+.bst-abil small { font-size: 11px; color: var(--muted); }
+.bst-line b { color: var(--muted); }
+.bst-sec h4 { color: #d98b7f; margin: 10px 0 4px; }
+.bst-sec p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.5; }
+.bst-auto { display: inline-grid; place-items: center; margin-left: 6px; vertical-align: -2px; color: var(--accent-text); }
+.bst-auto .ico { width: 13px; height: 13px; }
+.bst-notes { white-space: pre-wrap; font: 12px/1.5 var(--sans); color: var(--muted); }
+.bst-credit { margin: 0; font-size: 10.5px; color: var(--faint); line-height: 1.4; }
+.bst-pick-modal { width: min(720px, 100%); }
+.bst-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 8px; }
+.bst-pick-item { display: flex; flex-direction: column; gap: 4px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px; cursor: pointer; color: inherit; font: inherit; }
+.bst-pick-item:hover { border-color: var(--accent); }
+.bst-pick-item img { width: 88px; height: 88px; object-fit: cover; border-radius: 6px; background: var(--panel3); }
+.bst-pick-item span { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .bst-filters { grid-template-columns: 1fr 1fr; }
+  .bst-filters .search-box { grid-column: 1 / -1; }
+  .bst-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .bst-list { max-height: 40vh; }
+}
+.faint { color: var(--faint); }
+
+/* ---------- Bestiário 5etools (Plano 25) ---------- */
+.bst-filters { grid-template-columns: minmax(150px, 1.6fr) minmax(150px, 1.6fr) repeat(4, minmax(100px, 1fr)) auto; }
+.bst-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.bst-units { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.bst-units select { font-size: 12px; }
+.bst-thumb { overflow: hidden; }
+.bst-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.bst-tabs { margin: 4px 0 10px; }
+.bst-pane { font-size: 12.5px; line-height: 1.5; }
+.bst-pane p { margin: 0 0 6px; }
+.bst-pane h4 { color: #d98b7f; margin: 12px 0 4px; }
+.bst-pane h5 { margin: 8px 0 2px; font-size: 12px; color: var(--muted); }
+.bst-pane ul { margin: 2px 0 8px; padding-left: 18px; }
+.bst-act { margin-bottom: 6px; }
+.bst-act > b { float: left; margin-right: 4px; }
+.bst-act > p:first-of-type { display: inline; }
+.bst-table { border-collapse: collapse; margin: 6px 0 10px; font-size: 12px; }
+.bst-table th, .bst-table td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; }
+.bst-table caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
+.bst-quote { margin: 6px 0 10px; padding: 6px 12px; border-left: 3px solid var(--line2); color: var(--muted); font-style: italic; }
+.bst-art { margin: 0 0 12px; }
+.bst-art img { max-width: 100%; max-height: 520px; border-radius: 8px; display: block; background: var(--panel); }
+.bst-art-token img { max-width: 180px; }
+.bst-ent > h4 { margin-top: 10px; }
+@media (max-width: 900px) { .bst-filters { grid-template-columns: 1fr 1fr; } .bst-filters .search-box { grid-column: 1 / -1; } }
+.bst-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bst-filters .search-box { flex: 1 1 200px; }
+.bst-filters select { flex: 1 1 130px; max-width: 240px; }
+.bst-filters select[data-bf="book"] { flex: 2 1 220px; max-width: 320px; }

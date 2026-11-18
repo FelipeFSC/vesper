@@ -675,6 +675,7 @@
     if (foot._tab !== 'actors') {
       foot._tab = 'actors';
       foot.innerHTML = '';
+      if (S().gmView()) foot.append(btnI('book-open', 'Bestiário', { class: 'btn block', id: 'btn-bestiary', title: 'Criaturas e NPCs prontos (SRD 5.2)', onclick: () => App.Bestiary.open() }));
       foot.append(btnI('folder-open', 'Importar ficha', { class: 'btn block', onclick: () => UI.importDialog() }));
     }
   }
@@ -1681,6 +1682,10 @@
         h('label', {}, 'Tamanho do token', h('select', { disabled: ro, value: String(a.size || 1), onchange: (e) => upd({ size: Number(e.target.value) }) },
           [[0.5, 'Minúsculo (½)'], [1, '1 quadrado'], [2, '2×2'], [3, '3×3'], [4, '4×4'], [6, '6×6']].map(([v, l]) => h('option', { value: String(v) }, l)))),
         h('label', {}, 'Cor', h('input', { type: 'color', disabled: ro, value: U.safeColor(a.color, '#64748b'), onchange: (e) => upd({ color: e.target.value }) })),
+        // Plano 26: token pronto (imagem inteira, com a moldura dela) ou retrato recortado em círculo
+        h('label', { title: 'Token pronto: a imagem já tem moldura e vai inteira, do tamanho do token. Retrato: recortada em círculo, com o aro do Vésper.' }, 'Imagem no tabuleiro',
+          h('select', { disabled: ro, value: a.imgStyle === 'token' ? 'token' : 'portrait', onchange: (e) => upd({ imgStyle: e.target.value === 'token' ? 'token' : null }) },
+            h('option', { value: 'portrait' }, 'Retrato (círculo)'), h('option', { value: 'token' }, 'Token pronto (imagem inteira)'))),
         // Cobertura: o mestre decide a altura e como a ficha aparece atrás de muros baixos
         h('label', { title: 'Usada na cobertura: muro mais alto que a criatura = cobertura total' }, 'Altura (m)',
           h('input', { type: 'number', step: 0.1, min: 0, disabled: !gm, value: a.height || '', placeholder: String(App.Combat.defaultHeight(a.size)).replace('.', ',') + ' (pelo tamanho)',
@@ -1693,6 +1698,12 @@
       pane.append(h('p', { class: 'hint' }, a.kind === 'pc'
         ? 'Personagem: todos os tokens compartilham os mesmos valores das barras.'
         : 'NPC e criatura: cada token criado no mapa ganha uma cópia própria das barras (PV separado).'));
+      // Bestiário (Plano 24): PV rolado por token e visão no escuro que o token herda
+      if (gm && a.kind !== 'pc') pane.append(h('div', { class: 'form', style: { marginTop: '8px' } },
+        h('label', { title: 'Ex.: 3d6 ou 6d8+6. Vazio = todos com o PV da ficha' }, 'Dados de vida', h('input', { value: a.hpDice || '', placeholder: 'ex.: 2d8+2', onchange: (e) => upd({ hpDice: e.target.value.trim() || null }) })),
+        h('label', { class: 'check-row', style: { flexDirection: 'row', alignItems: 'center', gap: '6px', marginTop: '18px' } },
+          h('input', { type: 'checkbox', checked: !!a.rollHp, disabled: !a.hpDice, onchange: (e) => upd({ rollHp: e.target.checked }) }), 'Rolar PV de cada token'),
+        h('label', { title: 'Os tokens novos desta ficha já nascem com essa visão no escuro' }, 'Visão no escuro (quad.)', h('input', { type: 'number', min: 0, value: a.darkvision || 0, onchange: (e) => upd({ darkvision: Number(e.target.value) || 0 }) }))));
 
       pane.append(h('h4', {}, 'Barras'));
       (a.bars || []).forEach((b, i) => {
@@ -1713,6 +1724,12 @@
           S().dispatch({ type: 'actor.add', actor: c }); UI.openActor(c.id);
         } }),
         btnI('download', 'Exportar', { onclick: () => App.Storage.downloadJSON(App.Storage.actorBundle(a.id), 'ficha_' + a.name) }),
+        gm && btnI('book-open', a.mineId && App.Bestiary.mine[a.mineId] ? 'Atualizar no meu bestiário' : 'Salvar no meu bestiário', { title: 'Guarda esta ficha para usar em qualquer campanha', onclick: async () => {
+          await App.Bestiary.load();
+          const id = await App.Bestiary.saveMine(a, a.img ? S().assets[a.img] : null);
+          if (a.mineId !== id) upd({ mineId: id });
+          U.toast('Salva no meu bestiário.');
+        } }),
         h('span', { class: 'grow' }),
         gm && btnI('trash-2', 'Excluir', { class: 'btn danger', onclick: () => {
           const n = Object.values(S().state.scenes).reduce((k, sc) => k + Object.values(sc.tokens).filter((t) => t.actorId === a.id).length, 0);
@@ -3340,6 +3357,7 @@
     ]);
   };
 
+  UI.applyImport = (obj) => applyImport(obj);
   async function applyImport(obj) {
     const S_ = S(), gm = S_.isGM();
     const addAssets = (assets) => {

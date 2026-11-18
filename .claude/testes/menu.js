@@ -16,8 +16,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     key('Escape'); log.push('esc volta: raiz visível ' + !$('#mn-root').hidden + ', sel ' + sel());
     $('#lb-name').value = '';
     $('#lb-host').click(); await W(50); log.push('abrir sem nome pede nome: ' + $('.mn-profile').classList.contains('need') + ', lobby visível ' + !$('#lobby').hidden);
-    $('#lb-sheet').click(); await W(1500);
-    log.push('criar ficha: lobby escondido ' + $('#lobby').hidden + ', janela: ' + ([...document.querySelectorAll('.win')].map((w) => w.querySelector('input') && w.querySelector('input').value).join(',')) + ', nome ' + App.Store.me.name);
+    log.push('criar ficha leva à página: ' + /ficha.html/.test(String($('#lb-sheet').onclick)) + ' | desc: ' + $('#lb-sheet').dataset.desc);
   } catch (e) { log.push('EXC ' + e.stack); }
   log.push('erros: ' + JSON.stringify(window.__err || []));
   document.body.setAttribute('data-log', JSON.stringify(log));

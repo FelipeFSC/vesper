@@ -74,7 +74,7 @@
     });
     canvas.addEventListener('dragover', (e) => {
       const types = [...e.dataTransfer.types];
-      if (types.includes('text/x-actor') || types.includes('text/x-sound') || (S().gmView() && (types.includes('text/x-image') || types.includes('Files')))) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+      if (types.includes('text/x-actor') || types.includes('text/x-bestiary') || types.includes('text/x-sound') || (S().gmView() && (types.includes('text/x-image') || types.includes('Files')))) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
     });
     canvas.addEventListener('drop', onDrop);
     window.addEventListener('keydown', onKey);
@@ -1896,13 +1896,22 @@
     ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
   }
 
+  // Imagem inteira dentro do quadrado, sem cortar (token pronto, Plano 26)
+  function drawContain(ctx, img, x, y, w, h) {
+    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    const iw = img.naturalWidth * k, ih = img.naturalHeight * k;
+    ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+  }
+
   function drawToken(ctx, sc, t, isTurn) {
     const g = sc.grid, s = (t.size || 1) * g, z = B.cam.z;
     let x = t.x, y = t.y;
     if (B.drag && B.drag.id === t.id) { x = B.drag.x; y = B.drag.y; }
     const a = S().actorOf(t);
     const img = App.Images.get(t.img || (a && a.img));
-    const cx = x + s / 2, cy = y + s / 2, r = s * 0.4;
+    // Token pronto (Plano 26): a imagem já tem moldura; vai inteira, do tamanho do quadrado, sem disco nem aro
+    const ready = !!(img && a && a.imgStyle === 'token');
+    const cx = x + s / 2, cy = y + s / 2, r = ready ? s * 0.5 : s * 0.4;
     const color = U.safeColor(t.color || (a && a.color), '#6b6a75');
     const bars = S().barsOf(t);
     const dead = bars[0] && bars[0].max > 0 && Number(bars[0].value) <= 0;
@@ -1935,6 +1944,14 @@
       ctx.strokeStyle = isTurn ? C.turn : C.sel; ctx.lineWidth = Math.max(2.5, s * 0.04); ctx.stroke();
       ctx.restore();
     }
+    if (ready) {
+      // Sombra que segue o desenho do próprio token
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = s * 0.12; ctx.shadowOffsetY = s * 0.04;
+      drawContain(ctx, img, x, y, s, s);
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.86, 0, Math.PI * 2);
+    } else {
     // Disco com sombra no chão
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = s * 0.18; ctx.shadowOffsetY = s * 0.05;
@@ -1956,6 +1973,7 @@
     ctx.lineWidth = Math.max(1.5, s * 0.035);
     ctx.strokeStyle = 'rgba(236,229,214,.85)';
     ctx.stroke();
+    }
 
     if (dead) {
       ctx.fillStyle = 'rgba(13,13,16,.55)'; ctx.fill();
@@ -2965,6 +2983,8 @@
     }
     const snd = e.dataTransfer.getData('text/x-sound');
     if (snd) { e.preventDefault(); App.Audio.dropAt(snd, toWorld(e)); return; }
+    const bst = e.dataTransfer.getData('text/x-bestiary');
+    if (bst && S().gmView()) { e.preventDefault(); App.Bestiary.place(bst, toWorld(e)); return; }
     const id = e.dataTransfer.getData('text/x-actor');
     if (!id) return;
     e.preventDefault();
@@ -2987,6 +3007,11 @@
     const z = B.maxZ(sc) + 1;
     const token = { id: U.uid('t_'), actorId: a.id, name, size, x, y, z, linked,
       bars: linked ? null : U.clone(a.bars || []), conditions: [], hidden: false };
+    if (Number(a.darkvision) > 0) token.darkvision = Number(a.darkvision);
+    // Bestiário (Plano 24): cada token com o PV rolado pelos dados de vida
+    if (!linked && a.rollHp && a.hpDice && token.bars && token.bars.length) {
+      try { const hp = Math.max(1, Math.round(App.Dice.roll(a.hpDice).total)); token.bars[0].value = hp; token.bars[0].max = hp; } catch { /* fica com o PV da ficha */ }
+    }
     S().dispatch({ type: 'token.add', sceneId: sc.id, token });
     B.selected = token.id;
     B.requestRender();

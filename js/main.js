@@ -263,7 +263,7 @@
     $('#lb-host').onclick = () => startGM(true);
     $('#lb-join-open').onclick = openJoin;
     $('#lb-offline').onclick = () => startGM(false);
-    $('#lb-sheet').onclick = () => startGM(false, () => { App.UI.leftTab = 'actors'; App.UI.newActor('pc'); });
+    $('#lb-sheet').onclick = () => { location.href = 'ficha.html'; };
     $('#lb-join').onclick = startPlayer;
     $('#lb-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
     $('#mn-bg-pick').onclick = pickBg;

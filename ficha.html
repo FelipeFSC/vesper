@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vésper · Criar ficha</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ficha.css">
+</head>
+<body class="fp">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="brand-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M16 3 27 7v8.5c0 6.6-4.6 11.4-11 13.5C9.6 26.9 5 22.1 5 15.5V7z"/>
+      <path d="m11 11 5 11 5-11"/>
+      <path d="M13.5 11h5" opacity=".6"/>
+    </symbol>
+  </svg>
+
+  <header class="fp-top">
+    <a class="brand fp-brand" href="index.html" title="Voltar ao menu inicial"><svg class="brand-mark"><use href="#brand-mark"/></svg><span>VÉSPER</span></a>
+    <span class="fp-title">Criar ficha</span>
+    <span class="fp-saved" id="fp-saved" aria-live="polite"></span>
+    <span class="grow"></span>
+    <a class="btn small ghost" href="index.html" id="fp-back"><span data-icon="undo-2"></span>Voltar ao menu</a>
+  </header>
+
+  <div class="fp-wrap">
+    <aside class="fp-side" id="fp-side" aria-label="Minhas fichas"></aside>
+    <main class="fp-main" id="fp-main"></main>
+  </div>
+
+  <div class="fp-rolls" id="fp-rolls" hidden></div>
+  <div id="toasts"></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/dice.js"></script>
+  <script src="js/images.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/bestiary.js"></script>
+  <script src="js/ficha.js"></script>
+</body>
+</html>

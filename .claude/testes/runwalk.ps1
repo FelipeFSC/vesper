@@ -1,9 +1,10 @@
-param([string]$js = 'walk.js', [string]$out = 'walk_out.html', [int]$budget = 200000, [string]$query = '?tutorial', [string]$shot = '', [string]$size = '1440,900')
+param([string]$js = 'walk.js', [string]$out = 'walk_out.html', [int]$budget = 200000, [string]$query = '?tutorial', [string]$shot = '', [string]$size = '1440,900', [string]$page = 'index.html')
 $sp = $PSScriptRoot
 # Pasta do projeto: dois níveis acima desta (.claude/testes)
 $proj = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$html = Get-Content "$proj\index.html" -Raw -Encoding utf8
-$html = $html.Replace('<script src="js/main.js"></script>', '<script src="js/main.js"></script><script src="_test.js"></script>')
+$html = Get-Content "$proj\$page" -Raw -Encoding utf8
+if ($page -eq 'index.html') { $html = $html.Replace('<script src="js/main.js"></script>', '<script src="js/main.js"></script><script src="_test.js"></script>') }
+else { $html = $html.Replace('</body>', '<script src="_test.js"></script></body>') }
 [IO.File]::WriteAllText("$proj\_test.html", $html, (New-Object Text.UTF8Encoding $false))
 Copy-Item "$sp\$js" "$proj\_test.js" -Force
 $srv = Start-Process node -ArgumentList "`"$sp\srv.js`"", $proj -PassThru -WindowStyle Hidden
