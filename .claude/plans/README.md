@@ -50,3 +50,4 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 24 | [Bestiário embutido](24-bestiario-embutido.md) | Substituído pelo Plano 25 (base e tradução descartadas) |
 | 25 | [Bestiário a partir do 5etools](25-bestiario-5etools.md) | Implementado (testes do usuário) |
 | 26 | [Token pronto no tabuleiro](26-token-pronto-no-tabuleiro.md) | Implementado (testes do usuário) |
+| 27 | [Editor de animação maior e parar som pelo gatilho](27-editor-de-animacao-e-parar-som.md) | Implementado (testes do usuário) |

@@ -1428,6 +1428,7 @@
   UI.closeWindow = function (id) {
     const w = UI.windows.get(id);
     if (w) { w.el.remove(); UI.windows.delete(id); }
+    if (id === 'anim-editor' && UI.animWin) { UI.animWin = null; if (App.Board) App.Board.requestRender(); }
     if (String(id).startsWith('trigger:')) { UI.trigHover = null; UI.trigEdit = null; if (App.Board) App.Board.requestRender(); }
     if (id === 'scan' && App.Board) { App.Board.scan = null; App.Board.requestRender(); }
   };
@@ -2103,6 +2104,150 @@
       h('div', { class: 'seg' }, [['stay', 'Fica onde chegou'], ['back', 'Volta ao início']].map(([k, l]) => h('button', { class: (s.end || 'stay') === k ? 'on' : '', onclick: () => set({ end: k }) }, l)))));
     return out;
   }
+  // ---------- Editor de animação em janela (Plano 27) ----------
+  // ctx = {mode: 'own', sceneId, kind: 'prop'|'light', id}  → a animação do próprio objeto (anim.steps)
+  //     | {mode: 'trig', sceneId, trigId, actId}            → o movimento de uma ação Animar ("Animação nova")
+  UI.animWin = null;
+  function animWinData() {
+    const aw = UI.animWin;
+    if (!aw) return null;
+    const A = App.Anim, c = aw.ctx, sc = S().state && S().state.scenes[c.sceneId];
+    if (!sc) return null;
+    if (c.mode === 'own') {
+      const key = A.keyOf(c.kind, c.id), obj = A.get(sc, key);
+      if (!obj) return null;
+      const an = obj.anim || { steps: [], auto: false };
+      const type = { prop: 'prop.update', light: 'lightpt.update' }[c.kind];
+      return {
+        sc, keys: [key], kinds: [c.kind], ref: { kind: c.kind, obj }, specs: an.steps || [], auto: !!an.auto, many: true,
+        title: (c.kind === 'prop' ? 'Imagem' : 'Luz') + (obj.name ? ' · ' + obj.name : ''),
+        save: (fn) => { const o2 = A.get(S().state.scenes[sc.id], key); if (!o2) return; const a2 = U.clone(o2.anim || { steps: [], auto: false }); a2.steps = a2.steps || []; fn(a2.steps, a2); S().dispatch({ type, sceneId: sc.id, id: c.id, patch: { anim: a2 } }); },
+      };
+    }
+    const tr = (sc.triggers || []).find((x) => x.id === c.trigId), act = tr && (tr.actions || []).find((x) => x.id === c.actId);
+    if (!act) return null;
+    const tl = App.Triggers.targets(sc, act).filter((x) => ['prop', 'light', 'token'].includes(x.kind));
+    const kinds = [...new Set(tl.map((x) => x.kind))];
+    return {
+      sc, keys: tl.map((x) => A.keyOf(x.kind, x.obj.id)), kinds: kinds.length ? kinds : ['prop'], ref: tl[0] ? { kind: tl[0].kind, obj: tl[0].obj } : null,
+      specs: act.spec ? [act.spec] : [], auto: false, many: false, title: 'Gatilho' + (tr.name ? ' · ' + tr.name : '') + ' · Animar',
+      save: (fn) => {
+        const t2 = (S().state.scenes[sc.id].triggers || []).find((x) => x.id === tr.id);
+        if (!t2) return;
+        const list = U.clone(t2.actions || []), x = list.find((q) => q.id === act.id);
+        if (!x) return;
+        const arr = [x.spec || App.Anim.newSpec('move')];
+        fn(arr, null);
+        x.spec = arr[0];
+        S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch: { actions: list } });
+      },
+    };
+  }
+  UI.animWinTargets = function () {
+    const d = animWinData();
+    if (!d) return [];
+    return d.keys.map((key) => { const [kind, id] = key.split(':'); const obj = App.Anim.get(d.sc, key); return obj ? { kind, obj, specs: d.specs } : null; }).filter(Boolean);
+  };
+  UI.openAnimEditor = function (ctx, selId) {
+    UI.closeWindow('anim-editor');
+    UI.animWin = { ctx, sel: selId || null, sig: null };
+    const w = UI.openWindow('anim-editor', 'Animação', (win) => buildAnimWin(win), { w: Math.min(800, window.innerWidth - 24), icon: 'move' });
+    w.el.classList.add('anim-win');
+    App.Board.requestRender();
+    return w;
+  };
+  function buildAnimWin(win) {
+    const A = App.Anim, d = animWinData(), aw = UI.animWin;
+    if (!d || !aw) return false;
+    if (!d.specs.some((s) => s.id === aw.sel)) aw.sel = d.specs[0] ? d.specs[0].id : null;
+    const running = d.keys.some((k) => A.running(d.sc, k).length);
+    const sig = JSON.stringify([d.specs, d.auto, aw.sel, running, d.keys, d.sc.grid]);
+    if (sig === aw.sig && win.body.firstChild) return null;
+    aw.sig = sig;
+    win.titleEl.textContent = 'Animação · ' + d.title;
+    const s = d.specs.find((x) => x.id === aw.sel) || null;
+    const setStep = (p) => d.save((steps) => { const st = s && steps.find((x) => x.id === s.id); if (!st) return; if (typeof p === 'function') p(st); else Object.assign(st, p); });
+    // Esconde a janela enquanto escolhe no mapa
+    const pick = (kind, cb, onEnd, opts = {}) => { win.el.style.visibility = 'hidden'; hudPick(kind, cb, () => { win.el.style.visibility = ''; if (onEnd) onEnd(); }, opts); };
+    const REP = { once: 'uma vez', pingpong: 'vai e volta', loop: 'sem parar' };
+    const KIND_IC = { rotate: 'rotate-cw', fade: 'eye', path: 'map-pin', scale: 'sliders-horizontal', color: 'sun', move: 'move' };
+
+    const head = h('div', { class: 'aw-head' },
+      btnI('play', 'Tocar para todos', { class: 'btn small primary', disabled: !d.specs.length || !d.keys.length, title: 'Os jogadores veem agora', onclick: () => A.play(d.sc.id, d.keys, d.many ? null : d.specs) }),
+      btnI('pause', 'Parar', { class: 'btn small', disabled: !d.keys.length, onclick: () => A.stop(d.sc.id, d.keys, 'stop') }),
+      btnI('undo-2', 'Voltar ao início', { class: 'btn small', disabled: !d.keys.length, onclick: () => A.stop(d.sc.id, d.keys, 'reset') }),
+      btnI('eye', 'Prévia só para mim', { class: 'btn small', disabled: !d.specs.length || !d.keys.length, title: 'Roda só na sua tela, os jogadores não veem', onclick: () => A.preview(d.sc.id, d.keys, d.many ? null : d.specs) }),
+      h('span', { class: 'grow' }),
+      d.many && d.specs.length ? h('label', { class: 'switch-row aw-auto' }, h('input', { type: 'checkbox', checked: d.auto, onchange: (e) => A.setAuto(d.sc.id, d.keys[0], e.target.checked) }), 'Começa sozinha com a cena') : null,
+      running ? h('span', { class: 'badge blue' }, 'Rodando') : null);
+
+    const list = h('div', { class: 'aw-list' },
+      h('div', { class: 'eyebrow' }, d.many ? 'Movimentos (acontecem juntos)' : 'Movimento desta ação'),
+      d.specs.map((x, i) => h('div', { class: 'aw-step' + (x.id === aw.sel ? ' on' : ''), role: 'button', tabindex: 0, onclick: () => { aw.sel = x.id; aw.sig = null; renderWindow(win); App.Board.requestRender(); } },
+        ic(KIND_IC[x.kind] || 'move'),
+        h('span', { class: 'grow' }, h('b', {}, A.KIND_NAME[x.kind] || x.kind), h('small', {}, String(x.dur || 1).replace('.', ',') + ' s · ' + (REP[x.repeat] || 'uma vez'))),
+        d.many ? iconBtn('copy-plus', 'Duplicar', (e) => { e.stopPropagation(); d.save((steps) => { const c = U.clone(steps[i]); c.id = U.uid('am_'); steps.splice(i + 1, 0, c); aw.sel = c.id; }); }) : null,
+        d.many ? iconBtn('trash-2', 'Tirar este movimento', (e) => { e.stopPropagation(); d.save((steps, an) => { steps.splice(i, 1); if (!steps.length && an) an.auto = false; }); }) : null)),
+      !d.specs.length ? h('p', { class: 'hint' }, 'Nenhum movimento ainda.') : null,
+      d.many || !d.specs.length ? btnI('plus', 'Movimento', { class: 'btn small', onclick: () => d.save((steps) => { const ns = A.newSpec(d.kinds[0] === 'light' ? 'rotate' : 'move'); steps.push(ns); aw.sel = ns.id; }) }) : null,
+      !d.keys.length ? h('p', { class: 'hint' }, 'Escolha o alvo da ação no cartão do gatilho para ver a prévia.') : null);
+
+    const form = h('div', { class: 'aw-form' });
+    if (s) {
+      const kinds = d.kinds.filter((k) => A.KINDS[k]);
+      let opts = A.KINDS[kinds[0] || 'prop'];
+      for (const k of kinds.slice(1)) opts = opts.filter(([v]) => A.KINDS[k].some(([w2]) => w2 === v));
+      if (!opts.some(([v]) => v === s.kind)) opts = opts.concat([[s.kind, A.KIND_NAME[s.kind] || s.kind]]);
+      const presets = A.PRESETS.filter((p) => kinds.every((k) => p.for.includes(k)));
+      const g = d.sc.grid, center = d.ref ? App.Board.animCenter(d.sc, d.ref.kind, d.ref.obj) : null;
+      // Barra deslizante + número: arrastar mostra o valor; soltar salva
+      const slider = (label, key, min, max, step, unit, attrs = {}) => {
+        const cur = s[key] == null ? '' : s[key];
+        const num = h('input', { type: 'text', inputmode: 'decimal', class: 'num', value: String(cur).replace('.', ','), placeholder: attrs.placeholder || '', 'data-aw': key, onchange: (e) => { const v = String(e.target.value).trim().replace(',', '.'); setStep({ [key]: v === '' ? null : Number(v) || 0 }); } });
+        const rng = h('input', { type: 'range', min, max, step, value: cur === '' ? (attrs.rest ?? min) : cur, 'data-aw-range': key,
+          oninput: (e) => { num.value = String(e.target.value).replace('.', ','); }, onchange: (e) => setStep({ [key]: Number(e.target.value) }) });
+        return h('label', { class: 'aw-slider', title: attrs.title || '' }, h('span', {}, label), rng, h('span', { class: 'aw-num' }, num, h('small', {}, unit)));
+      };
+      const seg = (value, pairs, onPick) => h('div', { class: 'seg' }, pairs.map(([k, l]) => h('button', { class: value === k ? 'on' : '', onclick: () => onPick(k) }, l)));
+      form.append(h('div', { class: 'aw-row' }, h('label', { class: 'aw-field' }, h('span', {}, 'Movimento'),
+        h('select', { value: s.kind, onchange: (e) => setStep({ kind: e.target.value }) }, opts.map(([v, l]) => h('option', { value: v }, l))))));
+      if (presets.length) form.append(h('div', { class: 'aw-presets' }, h('span', { class: 'eyebrow' }, 'Modelos'),
+        presets.map((p) => h('button', { class: 'btn small', title: 'Troca este movimento pelo modelo', onclick: () => setStep(Object.assign({ from: null, end: 'stay', n: 0 }, U.clone(p.spec))) }, p.label))));
+      if (s.kind === 'move') {
+        form.append(slider('Para a direita', 'dx', -20, 20, 0.5, 'quad.', { title: 'Negativo = para a esquerda', rest: 0 }), slider('Para baixo', 'dy', -20, 20, 0.5, 'quad.', { title: 'Negativo = para cima', rest: 0 }));
+        if (center) form.append(h('div', { class: 'aw-row' }, btnI('map-pin', 'Clicar o destino no mapa', { class: 'btn small', onclick: () => pick('point', (pt) => setStep({ dx: r2((pt.x - center.x) / g), dy: r2((pt.y - center.y) / g) })) })));
+      } else if (s.kind === 'rotate') {
+        form.append(slider('Girar', 'deg', -720, 720, 15, 'graus', { title: '360 com Repetir sem parar = gira sem parar; 120 com Ir e voltar = holofote varrendo', rest: 0 }));
+      } else if (s.kind === 'fade') {
+        form.append(slider('De', 'from', 0, 100, 5, '%', { placeholder: 'como está', title: 'Vazio = começa como o objeto está agora', rest: 100 }), slider('Até', 'to', 0, 100, 5, '%'));
+      } else if (s.kind === 'scale') {
+        form.append(slider('Até', 'to', 5, 400, 5, '% do tamanho', { rest: 100 }));
+      } else if (s.kind === 'color') {
+        form.append(h('label', { class: 'aw-field' }, h('span', {}, 'Cor de destino'), h('input', { type: 'color', value: U.safeColor(s.color, '#ff5040'), onchange: (e) => setStep({ color: e.target.value }) })));
+      } else if (s.kind === 'path') {
+        const n = (s.pts || []).length;
+        form.append(h('div', { class: 'aw-row' }, h('span', { class: 'grow ta-target' + (n ? '' : ' none') }, n ? n + (n === 1 ? ' ponto' : ' pontos') + ' de passagem' : 'Marque os pontos da ronda'),
+          center ? btnI('map-pin', 'Marcar no mapa', { class: 'btn small', title: 'Clique nos pontos em ordem; Enter ou Concluir termina', onclick: () => {
+            let first = true;
+            pick('point', (pt) => { const q = [r2((pt.x - center.x) / g), r2((pt.y - center.y) / g)]; setStep((sp) => { if (first) sp.pts = []; first = false; sp.pts = (sp.pts || []).concat([q]); }); }, null,
+              { multi: true, bar: 'Clique nos pontos da ronda, em ordem. Enter ou Concluir termina.' });
+          } }) : ''));
+      }
+      form.append(slider('Duração', 'dur', 0.1, 30, 0.1, 's', { title: 'Tempo de uma ida' }));
+      // Curva com o desenho dela
+      const ease = s.ease || 'smooth', fn = A.EASE[ease] || A.EASE.smooth;
+      let dpath = '';
+      for (let i = 0; i <= 24; i++) { const u = i / 24; dpath += (i ? 'L' : 'M') + (4 + u * 72).toFixed(1) + ' ' + (44 - fn(u) * 40).toFixed(1); }
+      const curve = h('div', { class: 'aw-curve', html: '<svg viewBox="0 0 80 48" width="96" height="58"><rect x="4" y="4" width="72" height="40" rx="3" fill="none" stroke="currentColor" opacity=".18"/><path d="' + dpath + '" fill="none" stroke="#5fd0c4" stroke-width="2.2" stroke-linecap="round"/></svg>' });
+      form.append(h('div', { class: 'aw-row' }, h('label', { class: 'aw-field grow' }, h('span', {}, 'Curva'), seg(ease, A.EASES.map(([k, l]) => [k, l.replace(/ (.*)/, '')]), (v) => setStep({ ease: v }))), curve));
+      form.append(h('div', { class: 'aw-row' }, h('label', { class: 'aw-field grow' }, h('span', {}, 'Repetir'), seg(s.repeat || 'once', A.REPEATS, (v) => setStep({ repeat: v })))));
+      if (s.repeat === 'pingpong') form.append(slider('Idas e voltas', 'n', 0, 20, 1, '(0 = sem parar)'));
+      if ((s.repeat || 'once') === 'once') form.append(h('div', { class: 'aw-row' }, h('label', { class: 'aw-field grow' }, h('span', {}, 'No fim'), seg(s.end || 'stay', [['stay', 'Fica onde chegou'], ['back', 'Volta ao início']], (v) => setStep({ end: v })))));
+      form.append(h('p', { class: 'hint' }, 'O caminho e o destino aparecem no mapa enquanto esta janela está aberta.'));
+    } else form.append(h('div', { class: 'empty-state' }, h('div', { class: 'bubble' }, ic('move')), h('b', {}, 'Nenhum movimento'), h('p', {}, 'Use + Movimento para começar.')));
+    return h('div', { class: 'aw' }, head, h('div', { class: 'aw-body' }, list, form));
+  }
+
   // Pick para os painéis (sem janela para esconder)
   function hudPick(kind, cb, onEnd, opts = {}) {
     if (opts.bar) pickBar(opts.bar);
@@ -2130,7 +2275,9 @@
     return h('div', { class: 'hud-section anim-sec' },
       h('span', { class: 'eyebrow' }, 'Animação'),
       rows.length ? rows : h('p', { class: 'hint', style: { margin: 0 } }, kind === 'prop' ? 'Faça a imagem se mexer: lâmina indo e voltando, pedra rolando, porta de grade descendo.' : 'Faça a luz se mexer: holofote varrendo, farol girando, tocha pulsando.'),
-      btnI('plus', 'Adicionar movimento', { class: 'btn small', onclick: () => save((a2) => { const ns = A.newSpec(kind === 'light' ? 'rotate' : 'move'); a2.steps.push(ns); UI.animEdit = ns.id; }) }),
+      h('div', { class: 'row wrap' },
+        btnI('sliders-horizontal', 'Abrir editor', { class: 'btn small primary', title: 'Editor grande, com barras e prévia', onclick: () => UI.openAnimEditor({ mode: 'own', sceneId: sc.id, kind, id: o.id }, UI.animEdit) }),
+        btnI('plus', 'Adicionar movimento', { class: 'btn small', onclick: () => save((a2) => { const ns = A.newSpec(kind === 'light' ? 'rotate' : 'move'); a2.steps.push(ns); UI.animEdit = ns.id; }) })),
       steps.length ? h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Começa sozinha com a cena'), h('input', { type: 'checkbox', checked: !!an.auto, onchange: (e) => A.setAuto(sc.id, key, e.target.checked) })) : '',
       steps.length ? h('div', { class: 'hud-btns' },
         btnI('play', 'Tocar', { title: 'Toca para todos agora', onclick: () => A.play(sc.id, [key], null) }),
@@ -2570,6 +2717,7 @@
           const tl = TG.targets(sc, a), kinds = [...new Set(tl.map((x) => x.kind))].filter((k) => ['prop', 'light', 'token'].includes(k));
           const out = [targetsBox(a, 'animable'), field('Fazer', sel(a.op, Object.entries(TG.OPS.anim), (v) => set(v === 'play' && !a.spec ? { op: v, spec: App.Anim.newSpec('move') } : { op: v })))];
           if (a.op === 'play') {
+            out.push(btnI('sliders-horizontal', 'Abrir editor', { class: 'btn small primary', title: 'Editor grande, com barras e prévia', onclick: () => UI.openAnimEditor({ mode: 'trig', sceneId: sc.id, trigId: cur().id, actId: a.id }) }));
             out.push(h('div', { class: 'anim-box' }, animEditor({ sc, spec: a.spec, kinds, ref: tl.find((x) => kinds.includes(x.kind)) || null, pick: winPick,
               set: (p) => editAct(a.id, (x) => { x.spec = x.spec || App.Anim.newSpec('move'); if (typeof p === 'function') p(x.spec); else Object.assign(x.spec, p); }) })));
             out.push(h('p', { class: 'hint', style: { margin: 0 } }, 'O caminho aparece no mapa enquanto este cartão está aberto. Vários alvos fazem o mesmo movimento, cada um a partir de onde está.'));
@@ -2580,13 +2728,19 @@
           return out;
         }
         case 'sound': {
-          const out = [field('Fazer', sel(a.op, [['sfx', 'Tocar um efeito'], ['spot-fire', 'Tocar um som do mapa (uma vez)'], ['spot-on', 'Ligar um som do mapa'], ['spot-off', 'Desligar um som do mapa'],
-            ['music', 'Trocar a música'], ['music-stop', 'Parar a música'], ['ambient', 'Trocar o ambiente'], ['ambient-stop', 'Parar o ambiente']], (v) => set({ op: v })))];
-          if (['sfx', 'music', 'ambient'].includes(a.op)) {
+          const out = [field('Fazer', sel(a.op, [['sfx', 'Tocar um efeito'], ['sfx-stop', 'Parar um efeito'], ['spot-fire', 'Tocar um som do mapa (uma vez)'], ['spot-on', 'Ligar um som do mapa'], ['spot-off', 'Desligar um som do mapa'],
+            ['music', 'Trocar a música'], ['music-stop', 'Parar a música'], ['ambient', 'Trocar o ambiente'], ['ambient-stop', 'Parar o ambiente'], ['all-stop', 'Parar todos os sons']], (v) => set({ op: v })))];
+          if (['sfx', 'sfx-stop', 'music', 'ambient'].includes(a.op)) {
             const list = tracks.includes(a.name) || !a.name ? tracks : [a.name].concat(tracks);
-            out.push(list.length ? field('Faixa', sel(a.name, [['', 'Escolha a faixa…']].concat(list.map((n) => [n, Au.label(n)])), (v) => set({ name: v })))
+            const first = a.op === 'sfx-stop' ? [['', 'Todos os efeitos']] : [['', 'Escolha a faixa…']];
+            out.push(list.length || a.op === 'sfx-stop' ? field(a.op === 'sfx-stop' ? 'Qual efeito' : 'Faixa', sel(a.name, first.concat(list.map((n) => [n, Au.label(n)])), (v) => set({ name: v })))
               : h('p', { class: 'hint', style: { margin: 0 } }, 'Escolha a pasta de músicas no painel Som para listar as faixas.'));
-          } else if (String(a.op).startsWith('spot')) out.push(targetsBox(a, 'any'));
+            // Plano 27: o efeito para sozinho depois de N segundos (vazio = toca até o fim)
+            if (a.op === 'sfx') out.push(field('Parar depois de (s)', h('input', { type: 'number', class: 'num', min: 0, step: 0.5, value: a.stopAfter || '', placeholder: 'toca até o fim',
+              onchange: (e) => { const v = Number(String(e.target.value).replace(',', '.')); set({ stopAfter: v > 0 ? v : null }); } })));
+            if (a.op === 'sfx-stop') out.push(h('p', { class: 'hint', style: { margin: 0 } }, 'Para o efeito que estiver tocando, para todos. Use o atraso da ação para parar depois de um tempo.'));
+          } else if (a.op === 'all-stop') out.push(h('p', { class: 'hint', style: { margin: 0 } }, 'Silêncio: para a música, o ambiente, os efeitos e desliga os sons do mapa desta cena.'));
+          else if (String(a.op).startsWith('spot')) out.push(targetsBox(a, 'any'));
           return out;
         }
         case 'trap': {

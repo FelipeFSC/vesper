@@ -360,10 +360,56 @@
     if (Date.now() - fx.at > 15000) return;
     const url = await urlFor(fx.name, fx.size);
     if (!url) return;
+    if (stoppedSince({ name: fx.name }, fx.at)) return; // mandaram parar enquanto o arquivo carregava
     const a = new Audio(url);
     a.volume = st.audio.vol.sfx ?? 0.8;
+    const item = track({ name: fx.name, el: a });
+    // "Parar depois de (s)": conta desde que o mestre mandou tocar
+    if (Number(fx.stopAfter) > 0) setTimeout(() => stopItem(item), Math.max(0, Number(fx.stopAfter) * 1000 - (Date.now() - fx.at)));
     a.play().catch((e) => { if (e.name === 'NotAllowedError') setBlocked(true); });
   }
+
+  // ---------- Parar efeitos (Plano 27) ----------
+  // Cada computador guarda os efeitos que está tocando (de uma vez, soltos ou presos a um som do mapa)
+  A.fx = [];
+  A.lastStop = null;
+  function track(item) {
+    A.fx.push(item);
+    item.el.addEventListener('ended', () => { A.fx = A.fx.filter((x) => x !== item); }, { once: true });
+    return item;
+  }
+  function stopItem(item) {
+    if (!item || item.stopped) return;
+    item.stopped = true;
+    try { item.el.pause(); } catch { /* */ }
+    if (item.node) { try { item.node.gain.disconnect(); } catch { /* */ } }
+    A.fx = A.fx.filter((x) => x !== item);
+  }
+  // A ordem de parar vale para este efeito? (sem nome nem som do mapa = todos)
+  const stopMatches = (so, item) => (so.spotId ? item.spotId === so.spotId : so.name ? item.name === so.name : true);
+  const stoppedSince = (item, at) => { const so = A.lastStop; return !!so && so.at >= at && stopMatches(so, item); };
+  function syncStop() {
+    const so = S().state.audio.stop;
+    if (A.stopN === undefined) { A.stopN = so ? so.n : 0; return; } // ao entrar, não repete a ordem antiga
+    if (!so || so.n === A.stopN) return;
+    A.stopN = so.n;
+    if (Date.now() - so.at > 15000) return;
+    A.lastStop = so;
+    for (const item of A.fx.slice()) if (stopMatches(so, item)) stopItem(item);
+  }
+  // Mestre: para um efeito pelo nome, o efeito de um som do mapa, ou todos ({} = todos)
+  A.stopFx = function (opts = {}) {
+    const prev = S().state.audio.stop;
+    D({ type: 'audio.stop', stop: { name: opts.name || null, spotId: opts.spotId || null, n: ((prev && prev.n) || 0) + 1, at: Date.now() } });
+  };
+  // Mestre: silêncio — música, ambiente, efeitos e os sons do mapa desta cena
+  A.stopAll = function () {
+    const st = S().state, sc = S().currentScene();
+    if (st.audio.music) A.stop('music');
+    if (st.audio.ambient) A.stop('ambient');
+    A.stopFx({});
+    for (const s of (sc && sc.sounds) || []) if (s.on) D({ type: 'sound.update', sceneId: sc.id, id: s.id, patch: { on: false } });
+  };
 
   // ---------- Sons no mapa (posicionais) ----------
   // Cada token do jogador é um "ouvido": volume pela distância, lado esquerdo/direito, abafado atrás de paredes.
@@ -487,7 +533,9 @@
     if (h.v <= 0.01) return;
     const url = await urlFor(fx.name, fx.size);
     if (!url || !actx()) return;
+    if (stoppedSince({ name: fx.name, spotId: fx.id }, fx.at)) return;
     const el = new Audio(url), n = chain(el);
+    track({ name: fx.name, spotId: fx.id || null, el, node: n });
     n.gain.gain.value = h.v * (fx.vol ?? 1) * (S().state.audio.vol.sfx ?? 0.8);
     n.pan.pan.value = h.pan;
     n.filter.frequency.value = h.occl ? 650 : 20000;
@@ -587,6 +635,7 @@
     syncSfx();
     spotQueue = spotQueue.then(syncSpots).catch((e) => console.warn('audio spots', e));
     syncSpotFx();
+    syncStop();
   };
 
   // Mestre solta uma faixa no mapa: vira um marcador.
@@ -616,7 +665,7 @@
     const sc = S().currentScene();
     if (!sc || !snd) return;
     const prev = S().state.audio.spot;
-    D({ type: 'audio.spot', spot: { sceneId: sc.id, name: snd.name, size: snd.size || A.sizes[snd.name] || 0, x: snd.x, y: snd.y,
+    D({ type: 'audio.spot', spot: { sceneId: sc.id, id: snd.id, name: snd.name, size: snd.size || A.sizes[snd.name] || 0, x: snd.x, y: snd.y,
       r: snd.r, vol: snd.vol ?? 1, n: ((prev && prev.n) || 0) + 1, at: Date.now() } });
     App.Board.addPing({ sceneId: sc.id, x: snd.x, y: snd.y, color: '#d2a24c', name: A.label(snd.name) });
   };
@@ -670,9 +719,10 @@
     const c = A.ch[channel];
     if (c && !c.el.paused) { clearInterval(c.el._fade); c.el.volume = vol * duck(channel); }
   };
-  A.playSfx = function (name) {
-    const fx = S().state.audio.sfx;
-    D({ type: 'audio.sfx', sfx: { name, size: A.sizes[name] || 0, n: ((fx && fx.n) || 0) + 1, at: Date.now() } });
+  // stopAfter (s, opcional): o efeito para sozinho depois desse tempo (Plano 27)
+  A.playSfx = function (name, opts = {}) {
+    const fx = S().state.audio.sfx, stopAfter = Number(opts.stopAfter) > 0 ? Number(opts.stopAfter) : null;
+    D({ type: 'audio.sfx', sfx: { name, size: A.sizes[name] || 0, n: ((fx && fx.n) || 0) + 1, at: Date.now(), stopAfter } });
     A.preload([name]);
   };
   function currentPos(channel, p) {

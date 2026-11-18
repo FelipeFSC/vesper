@@ -8,6 +8,7 @@
 | `ficha_mesa.js` | Plano 23: arquivo da página importado pelo mestre na mesa: tudo igual, imagem, id novo, dono, janela da ficha, variáveis |
 | `bestiario.js` | Plano 25 (precisa de `data/5etools/`): a mesa abre sem carregar a base, botão na aba Fichas, índice inteiro sem nenhum livro, filtros (livro, NPC, tipo, versões antigas, ND, busca), prévia carrega só o livro da criatura, ficha sem marcações, unidades Brasil/originais, abas Descrição e Imagens, token da web (simulado) na ficha, PV/Defesa/atributos, sem ações e com `dados5e`, não duplica, dragão 3×3 com visão no escuro, Rolar PV, pasta local e escolha à mão por cima do token, Meu bestiário, jogador. `#shot` + `-shot` = foto com os tokens de verdade |
 | `tokenpronto.js` | Plano 26: token pronto × retrato pelos pixels (canto, centro, borda), 1×1 e 3×3, trocar na ficha e voltar, seleção com condição, `migrate` das fichas do 5etools |
+| `animsom.js` | Plano 27: editor de animação em janela (barras, vírgula, modelos, curva, adicionar/duplicar/remover, prévia local, tocar/parar, começa sozinha, ação do gatilho) e parar som (efeito + parar com atraso, parar depois de, parar todos os efeitos, som do mapa de uma vez, parar todos os sons, opções no cartão). WAV gerado no teste. `#shot` + `-shot` = foto do editor |
 | `cover.js` | Cobertura: meia/¾, altura do alvo, encostado no muro, bônus no ataque, sombra e vulto |
 | `high.js` | Os quatro tipos de parede com alvos de 1,8 m e 4 m |
 | `eye.js` | Altura de quem olha (personagem baixo atrás de muros) |

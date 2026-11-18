@@ -1050,3 +1050,34 @@ input.grp-name:hover, input.grp-name:focus { border-color: var(--line2) !importa
 .bst-filters .search-box { flex: 1 1 200px; }
 .bst-filters select { flex: 1 1 130px; max-width: 240px; }
 .bst-filters select[data-bf="book"] { flex: 2 1 220px; max-width: 320px; }
+
+/* ---------- Editor de animação em janela (Plano 27) ---------- */
+.anim-win .win-body { padding: 12px 14px 14px; }
+.aw { display: flex; flex-direction: column; gap: 12px; }
+.aw-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.aw-auto { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.aw-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; min-height: 0; }
+.aw-list { display: flex; flex-direction: column; gap: 6px; }
+.aw-step { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--panel2); }
+.aw-step:hover { border-color: var(--line2); }
+.aw-step.on { border-color: rgba(95, 208, 196, .7); background: rgba(95, 208, 196, .08); }
+.aw-step > svg { color: #5fd0c4; width: 16px; height: 16px; flex: none; }
+.aw-step b { display: block; font-size: 12.5px; }
+.aw-step small { color: var(--faint); font-size: 11px; }
+.aw-step .icon-btn { padding: 3px; opacity: .6; }
+.aw-step:hover .icon-btn { opacity: 1; }
+.aw-list > .btn { align-self: flex-start; }
+.aw-form { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border: 1px solid rgba(95, 208, 196, .28); border-radius: 10px; background: rgba(95, 208, 196, .04); min-width: 0; }
+.aw-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.aw-field { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; color: var(--muted); min-width: 0; }
+.aw-field > select { min-width: 220px; }
+.aw-field .seg { flex-wrap: wrap; }
+.aw-slider { display: grid; grid-template-columns: 120px minmax(0, 1fr) 128px; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.aw-slider input[type=range] { width: 100%; }
+.aw-num { display: flex; align-items: center; gap: 6px; }
+.aw-num .num { width: 72px; }
+.aw-num small { color: var(--faint); font-size: 11px; white-space: nowrap; }
+.aw-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.aw-presets .eyebrow { margin-right: 4px; }
+.aw-curve { color: var(--muted); flex: none; }
+@media (max-width: 760px) { .aw-body { grid-template-columns: minmax(0, 1fr); } .aw-slider { grid-template-columns: 1fr; gap: 4px; } }

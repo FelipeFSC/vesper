@@ -687,6 +687,10 @@
         for (const s of specs) drawGuide(ctx, raw, x.kind, x.obj, s);
       }
     }
+    // Editor de animação aberto (Plano 27): caminho e destino de cada movimento
+    if (App.UI && App.UI.animWin && App.UI.animWinTargets) {
+      for (const x of App.UI.animWinTargets()) if (!A.running(raw, A.keyOf(x.kind, x.obj.id)).length) for (const s of x.specs) drawGuide(ctx, raw, x.kind, x.obj, s);
+    }
     if (B.hurtDraft) {
       const d = B.hurtDraft, z = B.cam.z, col = (B.hurtEdit && B.hurtEdit.color) || '#ff6b6b';
       ctx.save(); ctx.setLineDash([6 / z, 4 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = col; ctx.fillStyle = col + '33';

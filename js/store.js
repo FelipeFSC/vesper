@@ -380,6 +380,8 @@
     'audio.vol': (s, a) => { if (!(a.channel in s.audio.vol)) return false; s.audio.vol[a.channel] = Math.max(0, Math.min(1, Number(a.vol) || 0)); },
     'audio.lib': (s, a) => { s.audio.lib[a.name] = Object.assign({}, s.audio.lib[a.name], a.patch); },
     'audio.sfx': (s, a) => { s.audio.sfx = a.sfx; },
+    // Ordem de parar efeitos (Plano 27): {name|null, spotId|null, n, at}; cada computador para os seus
+    'audio.stop': (s, a) => { s.audio.stop = a.stop; },
     // Efeito tocado uma vez num ponto do mapa
     'audio.spot': (s, a) => { s.audio.spot = a.spot; },
     'sound.add': (s, a) => { sceneOf(s, a.sceneId).sounds.push(a.sound); },

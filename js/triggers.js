@@ -26,7 +26,7 @@
     door: { open: 'Abrir', close: 'Fechar', lock: 'Trancar', unlock: 'Destrancar', toggle: 'Alternar' },
     light: { on: 'Acender', off: 'Apagar', toggle: 'Alternar' },
     token: { show: 'Aparecer', hide: 'Sumir', mask: 'Virar vulto' },
-    sound: { sfx: 'Efeito', 'spot-fire': 'Tocar som do mapa', 'spot-on': 'Ligar som do mapa', 'spot-off': 'Desligar som do mapa', music: 'Música', 'music-stop': 'Parar a música', ambient: 'Ambiente', 'ambient-stop': 'Parar o ambiente' },
+    sound: { sfx: 'Efeito', 'spot-fire': 'Tocar som do mapa', 'spot-on': 'Ligar som do mapa', 'spot-off': 'Desligar som do mapa', music: 'Música', 'music-stop': 'Parar a música', ambient: 'Ambiente', 'ambient-stop': 'Parar o ambiente', 'sfx-stop': 'Parar efeito', 'all-stop': 'Parar todos os sons' },
     fog: { reveal: 'Revelar a área', hide: 'Esconder a área' },
     trigger: { enable: 'Ligar', disable: 'Desligar', rearm: 'Rearmar', fire: 'Disparar' },
     anim: { own: 'Tocar a animação do objeto', play: 'Animação nova', stop: 'Parar onde está', reset: 'Voltar ao início' },
@@ -121,8 +121,9 @@
       case 'sound': {
         const needsTrack = ['sfx', 'music', 'ambient'].includes(a.op), spot = String(a.op).startsWith('spot');
         const l = spot ? T.targets(sc, a) : [];
-        const what = needsTrack ? (a.name ? Au.label(a.name) : '') : '';
-        return { target: spot ? targetLabel(sc, a, l, 'Som do mapa') : 'Som' + (what ? ' (' + what + ')' : ''), op, missing: (needsTrack && !a.name) || (spot && !l.length) };
+        const what = needsTrack || a.op === 'sfx-stop' ? (a.name ? Au.label(a.name) : a.op === 'sfx-stop' ? 'todos' : '') : '';
+        const after = a.op === 'sfx' && Number(a.stopAfter) > 0 ? ' · para em ' + String(a.stopAfter).replace('.', ',') + ' s' : '';
+        return { target: spot ? targetLabel(sc, a, l, 'Som do mapa') : 'Som' + (what ? ' (' + what + ')' : ''), op: op + after, missing: (needsTrack && !a.name) || (spot && !l.length) };
       }
       case 'trap': return { target: 'Armadilha', op: (a.save ? `${a.save} CD ${a.dc} · ` : '') + (a.damage || '0') + (a.save ? (a.onSave === 'none' ? ' (passou: nada)' : ' (passou: metade)') : ''), missing: false };
       case 'fog': return { target: 'Névoa', op, missing: false };
@@ -454,14 +455,20 @@
       }
       case 'sound': {
         const A = App.Audio;
-        if (act.op === 'sfx' && act.name) A.playSfx(act.name);
+        if (act.op === 'sfx' && act.name) A.playSfx(act.name, { stopAfter: act.stopAfter });
+        else if (act.op === 'sfx-stop') A.stopFx({ name: act.name || null });
+        else if (act.op === 'all-stop') A.stopAll();
         else if ((act.op === 'music' || act.op === 'ambient') && act.name) A.play(act.op, act.name);
         else if (act.op === 'music-stop') A.stop('music');
         else if (act.op === 'ambient-stop') A.stop('ambient');
         else {
           for (const { obj: snd } of T.targets(sc, act)) {
             if (act.op === 'spot-fire') A.trigger(snd);
-            else D({ type: 'sound.update', sceneId, id: snd.id, patch: act.op === 'spot-on' ? { on: true, at: Date.now() } : { on: false } });
+            else {
+              D({ type: 'sound.update', sceneId, id: snd.id, patch: act.op === 'spot-on' ? { on: true, at: Date.now() } : { on: false } });
+              // Desligar também interrompe o som de uma vez que está tocando daquele ponto (Plano 27)
+              if (act.op === 'spot-off') A.stopFx({ spotId: snd.id });
+            }
           }
         }
         return;
