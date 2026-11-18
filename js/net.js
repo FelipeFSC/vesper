@@ -75,7 +75,7 @@
       entry.playerId = pid;
       entry.name = String(msg.name || 'Jogador').slice(0, 40);
       S().commit({ type: 'player.upsert', id: pid, name: entry.name, color: msg.color, by: S().me.id });
-      conn.send({ t: 'welcome', you: pid, state: S().state, assets: S().assets });
+      conn.send({ t: 'welcome', you: pid, state: N.playerState(), assets: S().assets, now: Date.now() });
       broadcastPresence();
       U.toast(entry.name + ' entrou na mesa');
       return;
@@ -120,8 +120,38 @@
     S().emit('presence');
   }
 
+  // Notas do mestre (Plano 18) não saem daqui: os jogadores recebem o estado sem elas
+  N.playerState = function () {
+    const st = S().state;
+    if (!st) return st;
+    const scenes = {};
+    for (const [id, sc] of Object.entries(st.scenes)) {
+      let out = sc.notes && sc.notes.length ? Object.assign({}, sc, { notes: [] }) : sc;
+      if ((sc.props || []).some((p) => p.hurt)) out = Object.assign({}, out, { props: sc.props.map((p) => (p.hurt ? Object.assign({}, p, { hurt: null }) : p)) });
+      scenes[id] = out;
+    }
+    return Object.assign({}, st, { scenes });
+  };
+  function forPlayers(msg) {
+    if (!msg || msg.t !== 'action' || !msg.a) return msg;
+    const a = msg.a;
+    if (/^note\./.test(a.type)) return null;
+    if (a.type === 'prop.add' && a.prop && a.prop.hurt) return { t: 'action', a: Object.assign({}, a, { prop: Object.assign({}, a.prop, { hurt: null }) }) };
+    if (a.type === 'prop.update' && a.patch && 'hurt' in a.patch) {
+      const patch = Object.assign({}, a.patch);
+      delete patch.hurt;
+      return Object.keys(patch).length ? { t: 'action', a: Object.assign({}, a, { patch }) } : null;
+    }
+    if (a.type === 'undo.apply' && (a.ops || []).some((o) => o.key === 'notes')) {
+      const ops = a.ops.filter((o) => o.key !== 'notes');
+      return ops.length ? { t: 'action', a: Object.assign({}, a, { ops }) } : null;
+    }
+    return msg;
+  }
   N.broadcast = function (msg, exceptPeer) {
     if (S().role !== 'gm') return;
+    msg = forPlayers(msg);
+    if (!msg) return;
     for (const [peerId, e] of N.conns) {
       if (!e.playerId || peerId === exceptPeer || !e.conn.open) continue;
       try { e.conn.send(msg); } catch (err) { console.warn(err); }
@@ -129,11 +159,11 @@
   };
   N.broadcastFull = function () {
     for (const e of N.conns.values()) {
-      if (e.playerId && e.conn.open) e.conn.send({ t: 'welcome', you: e.playerId, state: S().state, assets: S().assets });
+      if (e.playerId && e.conn.open) e.conn.send({ t: 'welcome', you: e.playerId, state: N.playerState(), assets: S().assets, now: Date.now() });
     }
   };
   N.sendStateTo = function (pid) {
-    for (const e of N.conns.values()) if (e.playerId === pid && e.conn.open) e.conn.send({ t: 'state', state: S().state });
+    for (const e of N.conns.values()) if (e.playerId === pid && e.conn.open) e.conn.send({ t: 'state', state: N.playerState(), now: Date.now() });
   };
 
   // ================= JOGADOR =================
@@ -183,9 +213,11 @@
     switch (msg.t) {
       case 'welcome':
         N.everConnected = true;
+        if (App.Anim) App.Anim.setClock(msg.now);
         S().setState(S().migrate(msg.state), msg.assets || {});
         break;
       case 'state':
+        if (App.Anim) App.Anim.setClock(msg.now);
         S().setState(S().migrate(msg.state));
         break;
       case 'action':
@@ -203,6 +235,9 @@
         break;
       case 'ping':
         App.Board.addPing(msg);
+        break;
+      case 'clock':
+        if (App.Anim) App.Anim.setClock(msg.now);
         break;
       case 'audio-chunk':
       case 'audio-preload':

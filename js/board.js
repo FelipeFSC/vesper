@@ -12,7 +12,7 @@
     pings: [], animating: false, spaceDown: false, needs: false, lastSceneId: null,
     fogCache: { key: null, canvas: null },
     style: { color: '#d9574f', width: 4, fill: 0, snap: true },
-    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true, lights: true },
+    layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true, lights: true, triggers: true, notes: true },
     // Pontos de luz: tipo e forma dos próximos (opções da ferramenta), selecionado, arraste e rascunhos
     lightKind: 'light', lightShape: 'circle', selectedLight: null, lightDrag: null, lightDraft: null, lightPoly: null,
     // Imagens no mapa: selecionada e arraste em andamento ({id, mode: move|resize|rotate, start, cur, moved})
@@ -21,6 +21,14 @@
     // Salas de som: modo de desenho, rascunho (retângulo ou polígono) e a sala selecionada
     roomMode: 'rect', roomDraft: null, roomPoly: null, selectedRoom: null,
     wallDraft: null,
+    // Parede: 'line' (reta, de canto a canto) ou 'pencil' (traço livre, vira vários trechos)
+    wallMode: 'line', wallPencil: null,
+    // Portas: as novas nascem trancadas? E a porta selecionada pelo mestre (painel)
+    doorLocked: false, selectedDoor: null,
+    // Gatilhos: forma dos próximos, selecionado, arraste, rascunhos; picking = "Escolher no mapa" do painel
+    trigShape: 'rect', selectedTrigger: null, trigDrag: null, trigDraft: null, trigPoly: null, picking: null,
+    // Notas do mestre: cor das próximas, selecionada, arraste, nota sob o mouse
+    noteColor: 'gold', selectedNote: null, noteDrag: null, hoverNote: null,
     fx: [], fxSeen: undefined, hoverP: null, lastTurnKey: undefined,
   };
 
@@ -135,9 +143,10 @@
   };
 
   B.setTool = function (t) {
-    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light') && !S().gmView()) return;
+    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light' || t === 'trigger' || t === 'note') && !S().gmView()) return;
     if (t !== 'room') B.roomPoly = null;
     if (t !== 'light') { B.lightPoly = null; B.lightDraft = null; }
+    if (t !== 'trigger') { B.trigPoly = null; B.trigDraft = null; }
     B.tool = t;
     B.canvas.style.cursor = CURSORS[t] || 'crosshair';
     if (App.UI) App.UI.renderToolbar();
@@ -231,18 +240,36 @@
     return { segs, total: Math.round(total * 10) / 10 };
   }
   B.pathCost = pathCost;
-  // O trecho a→b atravessa alguma parede ou porta fechada? (só aviso: o movimento é permitido)
+  // O trecho a→b atravessa alguma parede (de qualquer tipo) ou porta fechada? Fica vermelho.
+  // Duas linhas paralelas a 1 px: cortar o canto de uma sala conta; passar rente à ponta de uma parede, não.
   function crossesWall(sc, a, b) {
     const cr = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
-    for (const w of sc.walls || []) {
-      if (w.door && w.open) continue;
-      const d1 = cr(w.x1, w.y1, w.x2, w.y2, a.x, a.y), d2 = cr(w.x1, w.y1, w.x2, w.y2, b.x, b.y);
-      const d3 = cr(a.x, a.y, b.x, b.y, w.x1, w.y1), d4 = cr(a.x, a.y, b.x, b.y, w.x2, w.y2);
-      if (((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6))) return true;
-    }
-    return false;
+    const hit = (ax, ay, bx, by) => (sc.walls || []).some((w) => {
+      if (w.door && (w.open || !w.locked)) return false; // porta aberta ou destrancada: dá para passar
+      const d1 = cr(w.x1, w.y1, w.x2, w.y2, ax, ay), d2 = cr(w.x1, w.y1, w.x2, w.y2, bx, by);
+      const d3 = cr(ax, ay, bx, by, w.x1, w.y1), d4 = cr(ax, ay, bx, by, w.x2, w.y2);
+      return ((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6));
+    });
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!len) return false;
+    const nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
+    return hit(a.x + nx, a.y + ny, b.x + nx, b.y + ny) && hit(a.x - nx, a.y - ny, b.x - nx, b.y - ny);
   }
   B.crossesWall = crossesWall;
+  // Caminho do arraste em centros de quadrado: saída, pontos de passagem e onde o token está (encaixado se o encaixe está ligado)
+  function dragCenters(sc, d, x, y) {
+    const t = sc.tokens[d.id], s = ((t && t.size) || 1) * sc.grid / 2;
+    if (x == null) { x = d.x; y = d.y; if (B.style.snap) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; } }
+    return [{ x: d.sx + s, y: d.sy + s }].concat(d.points || [], [{ x: x + s, y: y + s }]);
+  }
+  // Algum trecho atravessa parede que tapa a visão de quem anda? (o jogador fica cego e não pode soltar ali)
+  function pathBlind(sc, t, pts) {
+    const eye = LT().eyeOf(t);
+    for (let i = 1; i < pts.length; i++) if (LT().moveBlocked(sc, pts[i - 1], pts[i], eye)) return true;
+    return false;
+  }
+  B.pathBlind = pathBlind;
+  B.dragCenters = dragCenters;
   B.posOf = posOf;
   B.movesActive = movesActive;
   // Olhos deste cliente quando a iluminação vale para ele (jogador, ou mestre na prévia); null = vê tudo
@@ -336,7 +363,8 @@
     ctx.fillRect(0, 0, B.w, B.h);
     drawDots(ctx);
 
-    const sc = S().currentScene();
+    // Com animação rodando, desenha a cena como ela está agora (Plano 21)
+    const sc = App.Anim ? App.Anim.view(S().currentScene()) : S().currentScene();
     if (!sc) {
       ctx.fillStyle = '#8f8d9a'; ctx.font = '16px ' + SANS; ctx.textAlign = 'center';
       ctx.fillText(S().state ? 'Nenhuma cena. Crie uma na aba Cenas.' : 'Aguardando a mesa…', B.w / 2, B.h / 2);
@@ -346,7 +374,7 @@
     if (sc.id !== B.lastSceneId) {
       // Jogador levado para outra cena: avisa onde ele está agora
       if (B.lastSceneId && !S().gmView()) U.toast('Você está em "' + sc.name + '"', 'info', 4000);
-      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; fitCam(sc); }
+      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; B.selectedDoor = null; B.selectedTrigger = null; B.trigDrag = null; B.trigPoly = null; B.cancelPick(); B.flashes = []; B.multi.clear(); B.lasso = null; B.multiDrag = null; B.selectedNote = null; B.noteDrag = null; B.hoverNote = null; fitCam(sc); }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
@@ -365,6 +393,14 @@
     if (B.draft) drawShape(ctx, B.draft);
 
     if (B.wallDraft) drawWall(ctx, B.wallDraft, true);
+    if (B.wallPencil && B.wallPencil.pts.length > 1) {
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); B.wallPencil.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.lineWidth = 6 / cam.z; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.stroke();
+      ctx.lineWidth = 3 / cam.z; ctx.strokeStyle = WALL_COLOR[B.wallType] || WALL_COLOR.high; ctx.stroke();
+      ctx.restore();
+    }
 
     const cur = currentTurnTokenId(sc);
     // Começou a vez de um token seu: ele já fica selecionado, com as ações à mão
@@ -392,6 +428,9 @@
     const viewers = lightViewers(sc);
     const eyes = viewers ? new Set(viewers.map((t) => t.id)) : null;
     const asPlayer = !gm;
+    // Jogador arrastando o token através de uma parede que tapa a visão: fica cego até o caminho voltar a ser válido
+    const dragTok = B.drag && B.drag.moved && sc.tokens[B.drag.id];
+    const blind = asPlayer && !!dragTok && pathBlind(sc, dragTok, dragCenters(sc, B.drag));
     const above = [];
     // Imagens e tokens na mesma ordem de nível (empate: a imagem fica embaixo)
     const props = L.props ? (sc.props || []).filter((p) => gm || !p.hidden) : [];
@@ -412,17 +451,29 @@
       const lsc = B.lightDrag ? Object.assign({}, sc, { lights: (sc.lights || []).map(lightNow) }) : sc;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf });
+      LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf, explore: !gm && App.Explore ? App.Explore.maskCanvas(sc) : null });
       ctx.restore();
       if (LT().flickering(sc)) ensureAnim();
-      if (asPlayer) drawWallHints(ctx, sc, viewers);
+      if (asPlayer && !blind) drawWallHints(ctx, sc, viewers);
+    }
+    if (blind) {
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, B.w, B.h);
+      ctx.restore();
     }
     for (const t of above) drawToken(ctx, sc, t, t.id === cur);
     if (gm && L.rooms && (App.UI.mode === 'edit' || B.tool === 'room' || B.selectedRoom)) drawRooms(ctx, sc);
+    if (gm && L.triggers && (App.UI.mode === 'edit' || B.tool === 'trigger' || B.selectedTrigger || B.picking)) drawTriggers(ctx, sc);
     if (gm && L.sounds) drawSounds(ctx, sc);
     if (gm && L.lights) drawLightPoints(ctx, sc);
+    if (gm && L.notes) drawNotes(ctx, sc);
     drawWalls(ctx, sc, gm && L.walls && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door'), viewers);
     if (gm && B.selectedProp) { const sp = (sc.props || []).find((p) => p.id === B.selectedProp); if (sp) drawPropFrame(ctx, propNow(sp)); }
+    if (gm) drawAnimGuides(ctx, S().currentScene(), sc);
+    if (gm && B.scan) drawScan(ctx, sc);
+    if (App.Anim && App.Anim.active(sc)) ensureAnim();
 
     if (B.drag && B.drag.moved) {
       const t = sc.tokens[B.drag.id];
@@ -443,7 +494,9 @@
       ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x, r.y, r.w, r.h);
       ctx.restore();
     }
+    if (gm && (B.multi.size || B.lasso)) drawMulti(ctx, sc);
     drawPings(ctx, sc);
+    if (B.flashes.length && gm) drawFlashes(ctx);
     if (B.targeting) drawTargets(ctx, sc);
     if (B.fx.length) drawFx(ctx, sc);
 
@@ -545,6 +598,147 @@
     }
     ctx.restore();
   }
+  /*
+   * Ajustar a área de dano de uma imagem (Plano 21): o próximo arraste no mapa vira a área.
+   */
+  B.editHurt = function (sc, propId, onEnd) {
+    B.hurtEdit = { sceneId: sc.id, propId, onEnd };
+    B.canvas.style.cursor = 'crosshair';
+    U.toast('Arraste no mapa a parte da imagem que machuca. Esc cancela.', 'info', 4000);
+    B.requestRender();
+  };
+  // Centro de referência de um objeto (para os movimentos em quadrados)
+  B.animCenter = function (sc, kind, o) {
+    if (kind === 'prop') return { x: o.x + o.w / 2, y: o.y + o.h / 2 };
+    if (kind === 'token') return LT().center(sc, o);
+    if (o.shape === 'area' && o.pts) return LT().areaCenter(o.pts);
+    return { x: o.x, y: o.y };
+  };
+  const ANIM_C = '#5fd0c4';
+  // Caminho que o movimento faz (linha tracejada, sombra no fim, arco do giro)
+  function drawGuide(ctx, sc, kind, o, spec) {
+    const z = B.cam.z, g = sc.grid, c = B.animCenter(sc, kind, o);
+    ctx.save();
+    ctx.strokeStyle = ANIM_C; ctx.fillStyle = ANIM_C; ctx.lineWidth = 2 / z; ctx.setLineDash([7 / z, 5 / z]);
+    const ghost = (x, y) => {
+      ctx.save(); ctx.setLineDash([4 / z, 4 / z]); ctx.globalAlpha = 0.8;
+      if (kind === 'prop') { ctx.translate(x, y); ctx.rotate(((o.rot || 0) * Math.PI) / 180); ctx.strokeRect(-o.w / 2, -o.h / 2, o.w, o.h); }
+      else { ctx.beginPath(); ctx.arc(x, y, kind === 'token' ? ((o.size || 1) * g) / 2 : 10 / z, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    };
+    if (spec.kind === 'move' || spec.kind === 'path') {
+      const pts = spec.kind === 'move' ? [[0, 0], [Number(spec.dx) || 0, Number(spec.dy) || 0]] : [[0, 0]].concat((spec.pts || []).map((p) => [Number(p[0]) || 0, Number(p[1]) || 0]));
+      if (spec.kind === 'path' && spec.repeat === 'loop') pts.push([0, 0]);
+      ctx.beginPath();
+      pts.forEach(([dx, dy], i) => (i ? ctx.lineTo(c.x + dx * g, c.y + dy * g) : ctx.moveTo(c.x + dx * g, c.y + dy * g)));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      pts.forEach(([dx, dy], i) => { if (i) { ctx.beginPath(); ctx.arc(c.x + dx * g, c.y + dy * g, 4 / z, 0, Math.PI * 2); ctx.fill(); } });
+      const last = pts[pts.length - (spec.kind === 'path' && spec.repeat === 'loop' ? 2 : 1)];
+      ghost(c.x + last[0] * g, c.y + last[1] * g);
+    } else if (spec.kind === 'rotate') {
+      const r = kind === 'prop' ? Math.max(o.w, o.h) / 2 + 12 / z : kind === 'light' ? Math.max(g, (Number(o.dim) || 2) * g * 0.6) : g;
+      const a0 = (((kind === 'prop' ? o.rot : kind === 'light' ? o.dir : o.facing) || 0) * Math.PI) / 180;
+      const deg = Number(spec.deg) || 0, a1 = a0 + (deg * Math.PI) / 180;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, Math.min(a0, a1), Math.max(a0, a1)); ctx.stroke();
+      ctx.setLineDash([]);
+      for (const a of [a0, a1]) { ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r); ctx.globalAlpha = a === a0 ? 0.35 : 0.9; ctx.stroke(); }
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    const label = (App.Anim.KIND_NAME[spec.kind] || '') + ' · ' + String(spec.dur || 1).replace('.', ',') + ' s' + (spec.repeat === 'loop' ? ' · sem parar' : spec.repeat === 'pingpong' ? ' · vai e volta' : '');
+    ctx.font = '600 ' + 11 / z + 'px ' + SANS;
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3 / z; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+    ctx.strokeText(label, c.x, c.y - (kind === 'prop' ? o.h / 2 : g / 2) - 8 / z);
+    ctx.fillText(label, c.x, c.y - (kind === 'prop' ? o.h / 2 : g / 2) - 8 / z);
+    ctx.restore();
+  }
+  function drawHurt(ctx, p, strong) {
+    const poly = App.Anim.hurtPoly(p);
+    if (!poly) return;
+    const z = B.cam.z;
+    ctx.save();
+    ctx.beginPath(); poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+    ctx.fillStyle = strong ? 'rgba(230,70,70,.28)' : 'rgba(230,70,70,.14)'; ctx.fill();
+    ctx.setLineDash([5 / z, 4 / z]); ctx.lineWidth = 1.6 / z; ctx.strokeStyle = '#ff6b6b'; ctx.stroke();
+    ctx.restore();
+  }
+  // Mestre: caminho das animações do objeto selecionado ou da ação aberta no gatilho; área de dano
+  function drawAnimGuides(ctx, raw, view) {
+    if (!raw || !App.Anim) return;
+    const A = App.Anim;
+    const sel = B.selectedProp ? ['prop', (raw.props || []).find((x) => x.id === B.selectedProp)] : B.selectedLight ? ['light', (raw.lights || []).find((x) => x.id === B.selectedLight)] : null;
+    if (sel && sel[1]) {
+      const [k, o] = sel;
+      if (o.anim && (o.anim.steps || []).length && !A.running(raw, A.keyOf(k, o.id)).length) for (const s of o.anim.steps) drawGuide(ctx, raw, k, o, s);
+      if (k === 'prop' && o.hurt && o.hurt.on) { const pv = (view.props || []).find((x) => x.id === o.id) || o; drawHurt(ctx, pv, true); }
+    }
+    // Áreas de dano de todas as imagens (fraquinhas) na edição
+    if (App.UI && App.UI.mode === 'edit') for (const p of view.props || []) if (p.hurt && p.hurt.on && p.id !== B.selectedProp) drawHurt(ctx, p, false);
+    // Ação "Animar" aberta na janela do gatilho
+    const foc = App.UI && (App.UI.trigHover || App.UI.trigEdit);
+    const tr = foc && B.selectedTrigger && (raw.triggers || []).find((x) => x.id === B.selectedTrigger);
+    const act = tr && (tr.actions || []).find((a) => a.id === foc);
+    if (act && act.type === 'anim' && (act.op === 'play' || act.op === 'own')) {
+      for (const x of TG().targets(raw, act)) {
+        if (!['prop', 'light', 'token'].includes(x.kind)) continue;
+        const specs = act.op === 'play' ? (act.spec ? [act.spec] : []) : (x.obj.anim && x.obj.anim.steps) || [];
+        for (const s of specs) drawGuide(ctx, raw, x.kind, x.obj, s);
+      }
+    }
+    if (B.hurtDraft) {
+      const d = B.hurtDraft, z = B.cam.z, col = (B.hurtEdit && B.hurtEdit.color) || '#ff6b6b';
+      ctx.save(); ctx.setLineDash([6 / z, 4 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = col; ctx.fillStyle = col + '33';
+      const x = Math.min(d.a.x, d.b.x), y = Math.min(d.a.y, d.b.y), w = Math.abs(d.b.x - d.a.x), h = Math.abs(d.b.y - d.a.y);
+      ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); ctx.restore();
+    }
+  }
+  // Arrastar um retângulo no mapa e receber os dois cantos (scan: área, exemplo de porta)
+  B.dragRect = function (msg, cb, onEnd, color) {
+    B.hurtEdit = { cb, onEnd, color };
+    B.canvas.style.cursor = 'crosshair';
+    if (msg) U.toast(msg, 'info', 4000);
+    B.requestRender();
+  };
+  // Sugestão do scan mais perto do ponto
+  function scanHit(p) {
+    const R = B.scan, tol = 9 / B.cam.z;
+    let best = null, bd = tol;
+    for (const s of R.walls.concat(R.doors)) {
+      const dx = s.x2 - s.x1, dy = s.y2 - s.y1, L2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((p.x - s.x1) * dx + (p.y - s.y1) * dy) / L2));
+      const d = Math.hypot(p.x - (s.x1 + dx * t), p.y - (s.y1 + dy * t));
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+  // Prévia do scan: paredes tracejadas (verde-água), portas em laranja, tiradas em vermelho apagado
+  function drawScan(ctx, sc) {
+    const R = B.scan, z = B.cam.z, o = App.UI.scanOpts;
+    if (!R || R.sceneId !== sc.id) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const s of R.walls) {
+      ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2);
+      ctx.setLineDash(s.off ? [3 / z, 5 / z] : [8 / z, 4 / z]);
+      ctx.lineWidth = (s.off ? 1.5 : 3) / z; ctx.strokeStyle = s.off ? 'rgba(255,107,107,.55)' : '#5fd0c4'; ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (const s of R.doors) {
+      ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2);
+      ctx.lineWidth = (s.off ? 2 : 6) / z; ctx.strokeStyle = s.off ? 'rgba(255,107,107,.55)' : s.guess ? 'rgba(232,165,75,.6)' : '#e8a54b'; ctx.stroke();
+      if (s.box && !s.off) { ctx.lineWidth = 1 / z; ctx.strokeStyle = 'rgba(232,165,75,.8)'; ctx.strokeRect(s.box.x, s.box.y, s.box.w, s.box.h); }
+    }
+    if (o) {
+      ctx.lineWidth = 1.5 / z;
+      for (const p of o.seeds) { ctx.beginPath(); ctx.arc(p.x, p.y, 6 / z, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.stroke(); }
+      ctx.setLineDash([6 / z, 4 / z]);
+      for (const t of o.tpls) { ctx.strokeStyle = '#e8a54b'; ctx.lineWidth = 2 / z; ctx.strokeRect(t.x, t.y, t.w, t.h); }
+      if (o.region) { ctx.strokeStyle = '#5fd0c4'; ctx.lineWidth = 2 / z; ctx.strokeRect(o.region.x, o.region.y, o.region.w, o.region.h); }
+    }
+    ctx.restore();
+  }
   const ROT_OFF = 26; // distância da alça de giro (px de tela)
   function drawPropFrame(ctx, q) {
     const z = B.cam.z, c = pCenter(q), hs = 5 / z;
@@ -610,9 +804,13 @@
   B.duplicateProp = function (sc, id) {
     const q = (sc.props || []).find((x) => x.id === id);
     if (!q) return;
-    const c = Object.assign({}, q, { id: U.uid('pr_'), x: q.x + sc.grid, y: q.y + sc.grid, z: (q.z || 0) + 0.5 });
-    S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: c });
-    S().dispatch({ type: 'order.move', sceneId: sc.id, kind: 'prop', id: c.id, dir: 'none' });
+    const c = Object.assign(U.clone(q), { id: U.uid('pr_'), x: q.x + sc.grid, y: q.y + sc.grid, z: (q.z || 0) + 0.5 });
+    delete c.animHome;
+    const run = () => {
+      S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: c });
+      S().dispatch({ type: 'order.move', sceneId: sc.id, kind: 'prop', id: c.id, dir: 'none' });
+    };
+    if (App.History) App.History.batch('duplicar imagem', run); else run();
     B.selectedProp = c.id;
   };
 
@@ -709,6 +907,588 @@
     return null;
   }
   B.soundScreenPos = function (snd) { return toScreen(snd.x, snd.y); };
+
+  // ---------- gatilhos (só o mestre vê) ----------
+  const TRIG_C = '#e0609a';
+  const TG = () => App.Triggers;
+  function trigNow(tr) { return B.trigDrag && B.trigDrag.id === tr.id ? Object.assign({}, tr, B.trigDrag.cur) : tr; }
+  function trigHandle(sc, tr) { return tr.shape === 'circle' ? { x: tr.x + (Number(tr.r) || 0.5) * sc.grid, y: tr.y } : null; }
+  function triggerAt(sc, p) {
+    if (!S().gmView() || !B.layers.triggers || !(App.UI.mode === 'edit' || B.tool === 'trigger' || B.selectedTrigger)) return null;
+    const list = sc.triggers || [], z = B.cam.z;
+    const sel = B.selectedTrigger && list.find((x) => x.id === B.selectedTrigger);
+    const hd = sel && trigHandle(sc, sel);
+    if (hd && Math.hypot(p.x - hd.x, p.y - hd.y) <= 9 / z) return { tr: sel, mode: 'radius' };
+    for (let i = list.length - 1; i >= 0; i--) { const c = TG().center(list[i]); if (Math.hypot(p.x - c.x, p.y - c.y) <= 15 / z) return { tr: list[i], mode: 'move' }; }
+    return null;
+  }
+  function grabTrigger(sc, p) {
+    const hit = triggerAt(sc, p);
+    if (!hit) return false;
+    B.selectedTrigger = hit.tr.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.selectedDoor = null;
+    B.trigDrag = { id: hit.tr.id, sceneId: sc.id, mode: hit.mode, start: U.clone(hit.tr), cur: {}, p0: { x: p.x, y: p.y }, moved: false };
+    return true;
+  }
+  function dragTrigger(sc, d, p, e) {
+    const s0 = d.start, g = sc.grid;
+    if (d.mode === 'radius') {
+      d.cur.r = Math.max(0.5, Math.round((Math.hypot(p.x - s0.x, p.y - s0.y) / g) * 2) / 2);
+      d.moved = true;
+      return;
+    }
+    let dx = p.x - d.p0.x, dy = p.y - d.p0.y;
+    if (B.style.snap && !e.altKey) { const c0 = TG().center(s0), half = g / 2; dx = Math.round((c0.x + dx) / half) * half - c0.x; dy = Math.round((c0.y + dy) / half) * half - c0.y; }
+    d.cur.x = s0.x + dx; d.cur.y = s0.y + dy;
+    if (s0.pts) d.cur.pts = s0.pts.map(([x, y]) => [x + dx, y + dy]);
+    d.moved = d.moved || Math.abs(dx) + Math.abs(dy) > 2;
+  }
+  function trigPath(ctx, sc, tr) {
+    ctx.beginPath();
+    if (tr.shape === 'circle') ctx.arc(tr.x, tr.y, (Number(tr.r) || 0.5) * sc.grid, 0, Math.PI * 2);
+    else if (tr.pts && tr.pts.length) { tr.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); }
+  }
+  // Onde fica cada coisa que um gatilho mexe (para desenhar a ligação no gatilho selecionado)
+  // Cada ponto leva o número da ação (i, começando em 1) e o id dela, para o mapa mostrar "qual ação mexe em quê"
+  function actionTargets(sc, tr) {
+    const out = [];
+    (tr.actions || []).forEach((a, k) => {
+      const add = (p, extra) => out.push(Object.assign({ x: p.x, y: p.y, i: k + 1, id: a.id }, extra));
+      if (a.type === 'teleport') { if ((!a.sceneId || a.sceneId === sc.id) && a.x != null) add({ x: a.x, y: a.y }, { dest: true }); return; }
+      if (a.type === 'sound' && !String(a.op).startsWith('spot')) return;
+      for (const x of TG().targets(sc, a)) { const s = TG().spotOf(sc, x); add(s, x.kind === 'token' ? { r: s.r - 4 } : {}); }
+    });
+    return out;
+  }
+  // Destaque: a ação aberta na janela ou com o mouse em cima do cartão (App.UI.trigHover / trigEdit)
+  const focusAction = () => (App.UI && (App.UI.trigHover || App.UI.trigEdit)) || null;
+  function drawTriggers(ctx, sc) {
+    const z = B.cam.z, showAll = B.tool === 'trigger';
+    for (const tr0 of sc.triggers || []) {
+      const tr = trigNow(tr0), sel = B.selectedTrigger === tr.id, c = TG().center(tr);
+      const st = TG().stateLabel(tr), col = st === 'Pronto' ? TRIG_C : st === 'Esperando' ? C.warn : '#8f8d9a';
+      ctx.save();
+      trigPath(ctx, sc, tr);
+      ctx.fillStyle = sel ? 'rgba(224,96,154,.16)' : st === 'Pronto' ? 'rgba(224,96,154,.07)' : 'rgba(143,141,154,.06)'; ctx.fill();
+      ctx.setLineDash(tr.enabled === false ? [3 / z, 6 / z] : [9 / z, 6 / z]); ctx.lineWidth = (sel ? 2.4 : 1.6) / z; ctx.strokeStyle = sel ? '#fff' : col; ctx.stroke();
+      ctx.setLineDash([]);
+      if (sel) {
+        // Ligações: a imagem do clique e o que cada ação mexe. Cada alvo ganha o número da ação (igual ao do cartão);
+        // a ação em foco (aberta ou com o mouse em cima) fica rosa e grossa, as outras apagadas.
+        const pr = tr.on === 'click' && (sc.props || []).find((x) => x.id === tr.propId);
+        if (pr) {
+          ctx.setLineDash([3 / z, 4 / z]); ctx.lineWidth = 1.3 / z; ctx.strokeStyle = 'rgba(255,255,255,.55)';
+          ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(pr.x + pr.w / 2, pr.y + pr.h / 2); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        const links = actionTargets(sc, tr), foc = focusAction(), hasFoc = foc && links.some((q) => q.id === foc);
+        const ordered = links.filter((q) => q.id !== foc).concat(links.filter((q) => q.id === foc)); // o foco por cima
+        for (const q of ordered) {
+          const on = q.id === foc;
+          ctx.save();
+          ctx.globalAlpha = hasFoc && !on ? 0.28 : 1;
+          ctx.setLineDash(on ? [] : [3 / z, 4 / z]); ctx.lineWidth = (on ? 2.6 : 1.3) / z;
+          ctx.strokeStyle = on ? TRIG_C : 'rgba(255,255,255,.6)';
+          if (on) { ctx.shadowColor = TRIG_C; ctx.shadowBlur = 10; }
+          ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+          if (on && q.r) { ctx.lineWidth = 3 / z; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 3 / z, 0, Math.PI * 2); ctx.stroke(); }
+          if (q.dest) { ctx.beginPath(); ctx.arc(q.x, q.y, 9 / z, 0, Math.PI * 2); ctx.stroke(); }
+          ctx.restore();
+        }
+        // Números nos alvos (um objeto com várias ações mostra "1,3")
+        const spots = new Map();
+        for (const q of links) {
+          const key = Math.round(q.x) + ':' + Math.round(q.y);
+          const s = spots.get(key) || { x: q.x, y: q.y, r: q.r, nums: [], on: false };
+          s.nums.push(q.i); s.on = s.on || q.id === foc; spots.set(key, s);
+        }
+        for (const s of spots.values()) {
+          const txt = [...new Set(s.nums)].join(','), rr = (s.on ? 10 : 8) / z;
+          ctx.save();
+          ctx.globalAlpha = hasFoc && !s.on ? 0.45 : 1;
+          ctx.font = '700 ' + (s.on ? 11.5 : 10) / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const tw = Math.max(rr * 2, ctx.measureText(txt).width + 8 / z);
+          const bx = s.x + (s.r ? s.r * 0.72 : 11 / z), by = s.y - (s.r ? s.r * 0.72 : 11 / z);
+          if (s.on) { ctx.shadowColor = TRIG_C; ctx.shadowBlur = 12; }
+          roundRect(ctx, bx - tw / 2, by - rr, tw, rr * 2, rr);
+          ctx.fillStyle = s.on ? TRIG_C : '#3a2a34'; ctx.fill();
+          ctx.shadowBlur = 0; ctx.lineWidth = 1.4 / z; ctx.strokeStyle = s.on ? '#fff' : TRIG_C; ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.fillText(txt, bx, by + 0.5 / z);
+          ctx.restore();
+        }
+        const hd = trigHandle(sc, tr);
+        if (hd) { const s = 5 / z; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(17,17,20,.9)'; ctx.fillRect(hd.x - s, hd.y - s, s * 2, s * 2); ctx.strokeRect(hd.x - s, hd.y - s, s * 2, s * 2); }
+      }
+      // marcador com o raio
+      const r = 12 / z, u = r / 12;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = st === 'Pronto' ? TRIG_C : '#3a3550'; ctx.fill();
+      ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : 'rgba(17,17,20,.9)'; ctx.stroke();
+      ctx.fillStyle = st === 'Pronto' ? '#fff' : '#9b97ad';
+      ctx.beginPath();
+      ctx.moveTo(c.x + 1.5 * u, c.y - 7 * u); ctx.lineTo(c.x - 4.5 * u, c.y + 1 * u); ctx.lineTo(c.x - 0.5 * u, c.y + 1 * u);
+      ctx.lineTo(c.x - 1.5 * u, c.y + 7 * u); ctx.lineTo(c.x + 4.5 * u, c.y - 1 * u); ctx.lineTo(c.x + 0.5 * u, c.y - 1 * u); ctx.closePath(); ctx.fill();
+      if (sel || showAll) {
+        const label = (tr.name || 'Gatilho') + ' · ' + st.toLowerCase();
+        ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        const tw = ctx.measureText(label).width;
+        roundRect(ctx, c.x - tw / 2 - 6 / z, c.y + r + 4 / z, tw + 12 / z, 17 / z, 4 / z);
+        ctx.fillStyle = C.plate; ctx.fill();
+        ctx.fillStyle = sel ? '#fff' : '#e6c6d6'; ctx.fillText(label, c.x, c.y + r + 7 / z);
+      }
+      ctx.restore();
+    }
+    // rascunhos
+    ctx.save();
+    ctx.setLineDash([9 / z, 6 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = TRIG_C; ctx.fillStyle = 'rgba(224,96,154,.12)';
+    const d = B.trigDraft;
+    if (d && d.shape === 'rect') { const n = norm(d); ctx.fillRect(n.x, n.y, n.w, n.h); ctx.strokeRect(n.x, n.y, n.w, n.h); }
+    if (d && d.shape === 'circle' && d.moved) { ctx.beginPath(); ctx.arc(d.x, d.y, draftRadius(sc, d) * sc.grid, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    if (B.trigPoly && B.trigPoly.pts.length) {
+      const pts = B.trigPoly.pts.concat(B.trigPoly.hover ? [B.trigPoly.hover] : []);
+      ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+      ctx.setLineDash([]);
+      B.trigPoly.pts.forEach(([x, y], i) => { ctx.beginPath(); ctx.arc(x, y, (i ? 4 : 7) / z, 0, Math.PI * 2); ctx.fillStyle = i ? TRIG_C : '#fff'; ctx.fill(); });
+    }
+    ctx.restore();
+  }
+  const draftRadius = (sc, d) => Math.max(0.5, Math.round((Math.hypot(d.p.x - d.x, d.p.y - d.y) / sc.grid) * 2) / 2);
+  B.addTrigger = function (sc, part) {
+    if (!sc || !S().gmView()) return null;
+    const tr = TG().newTrigger(sc, part);
+    if (tr.shape !== 'circle' && tr.pts) { const c = TG().center(tr); tr.x = Math.round(c.x); tr.y = Math.round(c.y); }
+    S().dispatch({ type: 'trigger.add', sceneId: sc.id, trigger: tr });
+    B.selectedTrigger = tr.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.selectedDoor = null;
+    B.requestRender();
+    return tr;
+  };
+  B.duplicateTrigger = function (sc, id) {
+    const o = (sc.triggers || []).find((x) => x.id === id);
+    if (!o) return;
+    const g = sc.grid, c = Object.assign(U.clone(o), { id: U.uid('tg_'), name: o.name + ' (cópia)', x: o.x + g, y: o.y + g, used: 0, lastAt: 0 });
+    if (c.pts) c.pts = c.pts.map(([x, y]) => [x + g, y + g]);
+    c.actions = (c.actions || []).map((a) => Object.assign(a, { id: U.uid('ta_') }));
+    S().dispatch({ type: 'trigger.add', sceneId: sc.id, trigger: c });
+    B.selectedTrigger = c.id;
+    B.requestRender();
+  };
+  function finishTrigPoly(sc) {
+    const pts = [];
+    for (const p of (B.trigPoly && B.trigPoly.pts) || []) { const l = pts[pts.length - 1]; if (!l || l[0] !== p[0] || l[1] !== p[1]) pts.push(p); }
+    B.trigPoly = null;
+    if (pts.length < 3) { U.toast('A área precisa de pelo menos 3 cantos.'); return; }
+    B.addTrigger(sc, { shape: 'poly', pts: pts.map(([x, y]) => [Math.round(x), Math.round(y)]) });
+  }
+  /*
+   * "Escolher no mapa" do painel do gatilho: o próximo clique escolhe uma porta, luz, token, imagem ou ponto.
+   * kind: door|light|token|prop|point; cb(resultado)
+   */
+  const PICK_MSG = { door: 'Clique na porta no mapa.', light: 'Clique no marcador da luz.', token: 'Clique no token.', prop: 'Clique na imagem (alavanca, baú…).', point: 'Clique no ponto de destino.',
+    any: 'Clique numa luz, porta, token, som do mapa ou gatilho.', animable: 'Clique numa imagem, luz ou token.' };
+  // onEnd roda no fim (escolheu ou cancelou): a janela do gatilho some durante a escolha e volta depois.
+  // opts.multi = continua escolhendo (vários objetos seguidos) até Esc ou cancelPick; opts.exclude = id do próprio gatilho
+  B.pick = function (kind, cb, onEnd, opts = {}) {
+    if (B.picking && B.picking.onEnd) B.picking.onEnd();
+    B.picking = Object.assign({ kind, cb, onEnd }, opts);
+    B.canvas.style.cursor = 'crosshair';
+    if (!opts.multi) U.toast(PICK_MSG[kind] + ' Esc cancela.', 'info', 4000);
+    B.requestRender();
+  };
+  B.cancelPick = function () {
+    const P = B.picking;
+    if (!P) return;
+    B.picking = null;
+    B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair';
+    if (P.onEnd) P.onEnd();
+    B.requestRender();
+  };
+  /*
+   * Qualquer objeto que um gatilho pode mexer, reconhecendo o tipo sozinho: {kind, obj}.
+   * Prioridade quando há coisas uma em cima da outra: luz, porta, som, gatilho, token.
+   */
+  function anyObjectAt(sc, p, exclude) {
+    const lh = lightAt(sc, p);
+    if (lh) return { kind: 'light', obj: lh.o };
+    const z = B.cam.z;
+    const door = (sc.walls || []).find((w) => w.door && Math.hypot(p.x - (w.x1 + w.x2) / 2, p.y - (w.y1 + w.y2) / 2) <= 12 / z) || (() => { const w = wallAt(sc, p); return w && w.door ? w : null; })();
+    if (door) return { kind: 'door', obj: door };
+    const snd = soundAt(sc, p);
+    if (snd) return { kind: 'sound', obj: snd };
+    const tg = (sc.triggers || []).find((x) => x.id !== exclude && Math.hypot(p.x - TG().center(x).x, p.y - TG().center(x).y) <= 15 / z);
+    if (tg) return { kind: 'trigger', obj: tg };
+    const t = tokenAt(sc, p);
+    if (t) return { kind: 'token', obj: t };
+    return null;
+  }
+  B.anyObjectAt = anyObjectAt;
+  function pickAt(sc, p) {
+    const P = B.picking;
+    let res = null;
+    if (P.kind === 'door') { const w = wallAt(sc, p); res = w && w.door ? w : null; }
+    else if (P.kind === 'light') { const h = lightAt(sc, p); res = h ? h.o : null; }
+    else if (P.kind === 'token') res = tokenAt(sc, p);
+    else if (P.kind === 'prop') res = propAt(sc, p);
+    else if (P.kind === 'point' && P.raw) res = { x: p.x, y: p.y };
+    else if (P.kind === 'point') res = B.style.snap ? { x: Math.floor(p.x / sc.grid) * sc.grid + sc.grid / 2, y: Math.floor(p.y / sc.grid) * sc.grid + sc.grid / 2 } : { x: Math.round(p.x), y: Math.round(p.y) };
+    else if (P.kind === 'any') { res = anyObjectAt(sc, p, P.exclude); if (!res && P.withProps) { const pr = propAt(sc, p); if (pr) res = { kind: 'prop', obj: pr }; } }
+    else if (P.kind === 'animable') {
+      const lh = lightAt(sc, p);
+      if (lh) res = { kind: 'light', obj: lh.o };
+      else { const t = tokenAt(sc, p), pr = propAt(sc, p); res = t && (!pr || (t.z || 0) >= (pr.z || 0)) ? { kind: 'token', obj: t } : pr ? { kind: 'prop', obj: pr } : null; }
+    }
+    if (!res) { U.toast(PICK_MSG[P.kind] + ' (nada aqui)'); return; }
+    // Vários seguidos: continua escolhendo até Esc ou Concluir
+    if (P.multi) { P.cb(res); if (App.UI) App.UI.refresh(); B.requestRender(); return; }
+    B.picking = null;
+    B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair';
+    P.cb(res);
+    if (P.onEnd) P.onEnd();
+    if (App.UI) App.UI.refresh();
+    B.requestRender();
+  }
+  /*
+   * Simulação do "Testar gatilho": um alvo pisca no mapa com o nome da ação (só na tela do mestre, nada muda de verdade).
+   * {x, y, r, label, at (performance.now de início)}
+   */
+  B.flashes = [];
+  B.flash = function (f) { B.flashes.push(Object.assign({ t: performance.now(), dur: 1600 }, f)); ensureAnim(); };
+  function drawFlashes(ctx) {
+    const now = performance.now(), z = B.cam.z;
+    B.flashes = B.flashes.filter((f) => now - f.t < f.dur);
+    for (const f of B.flashes) {
+      const k = (now - f.t) / f.dur, a = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, a);
+      for (let i = 0; i < 2; i++) {
+        const rr = (f.r || 22 / z) + ((k * 2 + i * 0.5) % 1) * 26 / z;
+        ctx.lineWidth = 3 / z; ctx.strokeStyle = TRIG_C;
+        ctx.beginPath(); ctx.arc(f.x, f.y, rr, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.font = '700 ' + 12 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      const tw = ctx.measureText(f.label).width, ly = f.y - (f.r || 22 / z) - 10 / z;
+      roundRect(ctx, f.x - tw / 2 - 8 / z, ly - 20 / z, tw + 16 / z, 22 / z, 5 / z);
+      ctx.fillStyle = 'rgba(17,17,20,.94)'; ctx.fill(); ctx.lineWidth = 1.2 / z; ctx.strokeStyle = TRIG_C; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillText(f.label, f.x, ly - 4 / z);
+      ctx.restore();
+    }
+  }
+  // Imagem ligada a um gatilho de clique (o que o jogador pode "usar": alavanca, baú…)
+  function clickableAt(sc, p) {
+    const list = (sc.props || []).filter((q) => !q.hidden).sort((a, b) => (b.z || 0) - (a.z || 0));
+    for (const q of list) {
+      const l = pLocal(q, p);
+      if (Math.abs(l.x) > q.w / 2 || Math.abs(l.y) > q.h / 2) continue;
+      const tr = (sc.triggers || []).find((x) => x.on === 'click' && x.propId === q.id);
+      return tr ? { tr, prop: q } : null;
+    }
+    return null;
+  }
+  B.clickableAt = clickableAt;
+
+  // ---------- notas do mestre no mapa (Plano 18) ----------
+  const NOTE_COLORS = { gold: '#d2a24c', red: '#d9574f', green: '#4fb27a', blue: '#5b8be0' };
+  B.NOTE_COLORS = NOTE_COLORS;
+  const notePos = (n) => (B.noteDrag && B.noteDrag.id === n.id ? { x: B.noteDrag.x, y: B.noteDrag.y } : { x: n.x, y: n.y });
+  function noteAt(sc, p) {
+    if (!S().gmView() || !B.layers.notes) return null;
+    const z = B.cam.z, list = sc.notes || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const q = notePos(list[i]);
+      if (Math.hypot(p.x - q.x, p.y - (q.y - 16 / z)) <= 12 / z || Math.hypot(p.x - q.x, p.y - q.y) <= 6 / z) return list[i];
+    }
+    return null;
+  }
+  B.noteAt = noteAt;
+  function wrapText(ctx, text, maxW, maxLines) {
+    const out = [];
+    for (const para of String(text || '').split('\n')) {
+      let line = '';
+      for (const word of para.split(/\s+/)) {
+        const t = line ? line + ' ' + word : word;
+        if (ctx.measureText(t).width > maxW && line) { out.push(line); line = word; } else line = t;
+        if (out.length >= maxLines) break;
+      }
+      if (out.length < maxLines) out.push(line);
+      if (out.length >= maxLines) break;
+    }
+    return out;
+  }
+  function drawNotes(ctx, sc) {
+    const z = B.cam.z;
+    for (const n of sc.notes || []) {
+      const q = notePos(n), sel = B.selectedNote === n.id, col = NOTE_COLORS[n.color] || NOTE_COLORS.gold;
+      const hx = q.x, hy = q.y - 16 / z, r = 10 / z;
+      ctx.save();
+      // alfinete: cabeça redonda e ponta no lugar exato
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2 / z;
+      ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(hx - r * 0.62, hy + r * 0.75); ctx.arc(hx, hy, r, Math.PI * 0.72, Math.PI * 0.28); ctx.closePath();
+      ctx.fillStyle = col; ctx.fill();
+      ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.lineWidth = (sel ? 2.4 : 1.3) / z; ctx.strokeStyle = sel ? '#fff' : 'rgba(17,17,20,.85)'; ctx.stroke();
+      ctx.strokeStyle = '#17130a'; ctx.lineWidth = 1.4 / z; ctx.lineCap = 'round';
+      for (const dy of [-3, 0, 3]) { ctx.beginPath(); ctx.moveTo(hx - 4 / z, hy + dy / z); ctx.lineTo(hx + 4 / z, hy + dy / z); ctx.stroke(); }
+      // título ao lado
+      const title = String(n.title || 'Nota').slice(0, 28);
+      ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(title).width;
+      roundRect(ctx, hx + r + 4 / z, hy - 9 / z, tw + 12 / z, 18 / z, 4 / z);
+      ctx.fillStyle = 'rgba(17,17,20,.88)'; ctx.fill();
+      ctx.lineWidth = 1 / z; ctx.strokeStyle = sel ? '#fff' : col; ctx.stroke();
+      ctx.fillStyle = '#ece9f2'; ctx.fillText(title, hx + r + 10 / z, hy + 0.5 / z);
+      // mouse em cima: o começo do texto
+      if (B.hoverNote === n.id && n.text && !B.noteDrag) {
+        ctx.font = '400 ' + 11.5 / z + 'px ' + SANS;
+        const lines = wrapText(ctx, n.text, 240 / z, 5), lh = 15 / z, w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 18 / z, hgt = lines.length * lh + 14 / z;
+        const bx = hx + r + 4 / z, by = hy + 13 / z;
+        roundRect(ctx, bx, by, w, hgt, 6 / z);
+        ctx.fillStyle = 'rgba(17,17,20,.95)'; ctx.fill(); ctx.strokeStyle = col; ctx.stroke();
+        ctx.fillStyle = '#d8d5e2'; ctx.textBaseline = 'top';
+        lines.forEach((l, i) => ctx.fillText(l, bx + 9 / z, by + 7 / z + i * lh));
+      }
+      ctx.restore();
+    }
+  }
+  B.addNote = function (sc, p) {
+    if (!sc || !S().gmView()) return null;
+    const used = new Set((sc.notes || []).map((n) => n.title));
+    let k = (sc.notes || []).length + 1;
+    while (used.has('Nota ' + k)) k++;
+    const g = sc.grid, q = B.style.snap ? { x: Math.floor(p.x / g) * g + g / 2, y: Math.floor(p.y / g) * g + g / 2 } : p;
+    const n = { id: U.uid('nt_'), x: Math.round(q.x), y: Math.round(q.y), title: 'Nota ' + k, text: '', color: B.noteColor || 'gold' };
+    S().dispatch({ type: 'note.add', sceneId: sc.id, note: n });
+    B.selectedNote = n.id; B.selected = null; B.selectedLight = null; B.selectedProp = null; B.selectedTrigger = null; B.selectedSound = null; B.selectedDoor = null;
+    if (App.UI.openNote) App.UI.openNote(sc.id, n.id, true);
+    B.requestRender();
+    return n;
+  };
+  B.duplicateNote = function (sc, id) {
+    const n = (sc.notes || []).find((x) => x.id === id);
+    if (!n) return;
+    const c = Object.assign(U.clone(n), { id: U.uid('nt_'), x: n.x + sc.grid, y: n.y + sc.grid, title: n.title + ' (cópia)' });
+    S().dispatch({ type: 'note.add', sceneId: sc.id, note: c });
+    B.selectedNote = c.id;
+    B.requestRender();
+  };
+  function grabNote(sc, p) {
+    const n = noteAt(sc, p);
+    if (!n) return false;
+    B.selectedNote = n.id; B.selected = null; B.selectedLight = null; B.selectedProp = null; B.selectedTrigger = null; B.selectedSound = null; B.selectedDoor = null;
+    B.noteDrag = { id: n.id, sceneId: sc.id, x: n.x, y: n.y, ox: p.x - n.x, oy: p.y - n.y, moved: false };
+    return true;
+  }
+
+  // ---------- seleção múltipla, copiar e colar (Plano 20, só o mestre) ----------
+  // B.multi: chaves "tipo:id" (token, prop, light, trigger, sound, note, wall)
+  B.multi = new Set();
+  B.lasso = null; B.multiDrag = null; B.clipboard = null; B.mouseWorld = null;
+  const MKIND = { token: 'token', prop: 'imagem', light: 'luz', trigger: 'gatilho', sound: 'som', note: 'nota', wall: 'parede' };
+  B.MKIND = MKIND;
+  function getItem(sc, kind, id) {
+    if (kind === 'token') return sc.tokens[id];
+    const coll = { prop: sc.props, light: sc.lights, trigger: sc.triggers, sound: sc.sounds, note: sc.notes, wall: sc.walls }[kind];
+    return (coll || []).find((x) => x.id === id) || null;
+  }
+  B.multiItems = (sc) => [...B.multi].map((k) => { const i = k.indexOf(':'); const kind = k.slice(0, i), id = k.slice(i + 1); return { kind, id, o: getItem(sc, kind, id) }; }).filter((x) => x.o);
+  // Ponto que representa o objeto (para o laço e para a caixa da seleção)
+  function itemPoint(sc, kind, o) {
+    if (kind === 'token') { const s = (o.size || 1) * sc.grid; return { x: o.x + s / 2, y: o.y + s / 2 }; }
+    if (kind === 'prop') return { x: o.x + o.w / 2, y: o.y + o.h / 2 };
+    if (kind === 'light') return lightCenter(o);
+    if (kind === 'trigger') return TG().center(o);
+    if (kind === 'wall') return { x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 };
+    return { x: o.x, y: o.y };
+  }
+  // Objeto do mestre sob o ponteiro, de qualquer tipo (para Shift + clique)
+  function objectAtAny(sc, p) {
+    const lh = lightAt(sc, p);
+    if (lh) return { kind: 'light', id: lh.o.id };
+    const z = B.cam.z;
+    const tg = B.layers.triggers && (App.UI.mode === 'edit' || B.tool === 'trigger') && (sc.triggers || []).find((x) => { const c = TG().center(x); return Math.hypot(p.x - c.x, p.y - c.y) <= 15 / z; });
+    if (tg) return { kind: 'trigger', id: tg.id };
+    const snd = soundAt(sc, p);
+    if (snd) return { kind: 'sound', id: snd.id };
+    const nt = B.noteAt ? B.noteAt(sc, p) : null;
+    if (nt) return { kind: 'note', id: nt.id };
+    const t = tokenAt(sc, p), pr = propAt(sc, p);
+    if (pr && (!t || (pr.z || 0) > (t.z || 0))) return { kind: 'prop', id: pr.id };
+    if (t) return { kind: 'token', id: t.id };
+    if (pr) return { kind: 'prop', id: pr.id };
+    if (B.layers.walls) { const w = wallAt(sc, p); if (w) return { kind: 'wall', id: w.id }; }
+    return null;
+  }
+  B.objectAtAny = objectAtAny;
+  // A primeira vez que soma com Shift, o que já estava selecionado sozinho entra junto
+  function seedMulti() {
+    if (B.multi.size) return;
+    if (B.selected) B.multi.add('token:' + B.selected);
+    if (B.selectedProp) B.multi.add('prop:' + B.selectedProp);
+    if (B.selectedLight) B.multi.add('light:' + B.selectedLight);
+    if (B.selectedTrigger) B.multi.add('trigger:' + B.selectedTrigger);
+    if (B.selectedSound) B.multi.add('sound:' + B.selectedSound);
+    if (B.selectedNote) B.multi.add('note:' + B.selectedNote);
+  }
+  function clearSingles() { B.selected = null; B.selectedProp = null; B.selectedLight = null; B.selectedTrigger = null; B.selectedSound = null; B.selectedRoom = null; B.selectedDoor = null; B.selectedNote = null; }
+  function toggleMulti(hit) {
+    seedMulti();
+    const k = hit.kind + ':' + hit.id;
+    if (B.multi.has(k)) B.multi.delete(k); else B.multi.add(k);
+    clearSingles();
+    B.requestRender();
+  }
+  // Laço: o ponto de cada objeto dentro do retângulo; paredes com as duas pontas dentro
+  function lassoSelect(sc, r) {
+    const inR = (x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    const add = (kind, o) => { const p = itemPoint(sc, kind, o); if (inR(p.x, p.y)) B.multi.add(kind + ':' + o.id); };
+    if (B.layers.tokens) for (const t of Object.values(sc.tokens)) add('token', t);
+    if (B.layers.props) for (const o of sc.props || []) add('prop', o);
+    if (B.layers.lights) for (const o of sc.lights || []) add('light', o);
+    if (B.layers.triggers) for (const o of sc.triggers || []) add('trigger', o);
+    if (B.layers.sounds) for (const o of sc.sounds || []) add('sound', o);
+    if (B.layers.notes !== false) for (const o of sc.notes || []) add('note', o);
+    if (B.layers.walls) for (const w of sc.walls || []) if (inR(w.x1, w.y1) && inR(w.x2, w.y2)) B.multi.add('wall:' + w.id);
+  }
+  const batch = (label, fn) => (App.History ? App.History.batch(label, fn) : fn());
+  const countLabel = (n) => n + (n === 1 ? ' item' : ' itens');
+  // Move tudo da seleção dx, dy (px)
+  function moveMulti(sc, dx, dy) {
+    if (!dx && !dy) return;
+    const items = B.multiItems(sc), walls = [];
+    batch('mover ' + countLabel(items.length), () => {
+      for (const { kind, id, o } of items) {
+        const D2 = (a) => S().dispatch(Object.assign({ sceneId: sc.id, id }, a));
+        if (kind === 'token') D2({ type: 'token.move', x: o.x + dx, y: o.y + dy });
+        else if (kind === 'prop') D2({ type: 'prop.update', patch: { x: o.x + dx, y: o.y + dy } });
+        else if (kind === 'light' || kind === 'trigger') D2({ type: kind === 'light' ? 'lightpt.update' : 'trigger.update', patch: Object.assign({ x: o.x + dx, y: o.y + dy }, o.pts ? { pts: o.pts.map(([x, y]) => [x + dx, y + dy]) } : {}) });
+        else if (kind === 'sound') D2({ type: 'sound.update', patch: { x: o.x + dx, y: o.y + dy } });
+        else if (kind === 'note') D2({ type: 'note.update', patch: { x: o.x + dx, y: o.y + dy } });
+        else if (kind === 'wall') walls.push(id);
+      }
+      if (walls.length) S().dispatch({ type: 'wall.shift', sceneId: sc.id, ids: walls, dx, dy });
+    });
+  }
+  B.moveMulti = moveMulti;
+  function deleteMulti(sc) {
+    const items = B.multiItems(sc), walls = [];
+    batch('apagar ' + countLabel(items.length), () => {
+      for (const { kind, id } of items) {
+        if (kind === 'wall') { walls.push(id); continue; }
+        const type = { token: 'token.delete', prop: 'prop.delete', light: 'lightpt.delete', trigger: 'trigger.delete', sound: 'sound.delete', note: 'note.delete' }[kind];
+        S().dispatch({ type, sceneId: sc.id, id });
+      }
+      if (walls.length) S().dispatch({ type: 'wall.delete', sceneId: sc.id, ids: walls });
+    });
+    B.multi.clear();
+    B.requestRender();
+  }
+  B.deleteMulti = deleteMulti;
+  // Copiar: guarda cópias e o canto do grid de cima à esquerda do conjunto
+  function copyItems(sc, list) {
+    if (!list.length) return false;
+    let x0 = Infinity, y0 = Infinity;
+    for (const { kind, o } of list) {
+      const pts = kind === 'wall' ? [[o.x1, o.y1], [o.x2, o.y2]] : kind === 'token' || kind === 'prop' ? [[o.x, o.y]] : o.pts ? o.pts : [[o.x, o.y]];
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); }
+    }
+    B.clipboard = { sceneId: sc.id, grid: sc.grid, ox: Math.floor(x0 / sc.grid) * sc.grid, oy: Math.floor(y0 / sc.grid) * sc.grid, items: list.map(({ kind, o }) => ({ kind, o: U.clone(o) })) };
+    U.toast('Copiado: ' + countLabel(list.length) + '. Ctrl+V cola onde estiver o mouse (em qualquer cena).', 'info', 3000);
+    return true;
+  }
+  // Seleção atual (vários ou um só) como lista para copiar
+  function currentItems(sc) {
+    if (B.multi.size) return B.multiItems(sc);
+    const one = B.selected ? ['token', B.selected] : B.selectedProp ? ['prop', B.selectedProp] : B.selectedLight ? ['light', B.selectedLight] : B.selectedTrigger ? ['trigger', B.selectedTrigger]
+      : B.selectedSound ? ['sound', B.selectedSound] : B.selectedNote ? ['note', B.selectedNote] : null;
+    const o = one && getItem(sc, one[0], one[1]);
+    return o ? [{ kind: one[0], id: one[1], o }] : [];
+  }
+  B.copySelection = (sc) => copyItems(sc, currentItems(sc));
+  /*
+   * Colar na cena atual, com o canto do conjunto no quadrado do ponto `at`. Ids novos; gatilhos colados passam a
+   * apontar para as cópias coladas junto (porta, luz, token, som, outro gatilho, imagem). Grid diferente: escala.
+   */
+  B.paste = function (sc, at) {
+    const C = B.clipboard;
+    if (!C || !sc) return 0;
+    const g = sc.grid, k = g / C.grid, tx = Math.floor(at.x / g) * g, ty = Math.floor(at.y / g) * g;
+    const X = (x) => Math.round(tx + (x - C.ox) * k), Y = (y) => Math.round(ty + (y - C.oy) * k);
+    const ids = new Map(), strokes = new Map(), same = C.sceneId === sc.id;
+    for (const { o } of C.items) ids.set(o.id, U.uid('c_'));
+    const nid = (id) => ids.get(id) || (same ? id : null);
+    const walls = [], added = [];
+    let z = B.maxZ(sc);
+    batch('colar ' + countLabel(C.items.length), () => {
+      for (const { kind, o: src } of C.items) {
+        const o = U.clone(src);
+        o.id = ids.get(src.id);
+        if (kind === 'wall') {
+          Object.assign(o, { x1: X(src.x1), y1: Y(src.y1), x2: X(src.x2), y2: Y(src.y2) });
+          if (src.stroke) { if (!strokes.has(src.stroke)) strokes.set(src.stroke, U.uid('st_')); o.stroke = strokes.get(src.stroke); }
+          walls.push(o); added.push('wall:' + o.id); continue;
+        }
+        delete o.animHome;
+        if (kind === 'token') { Object.assign(o, { x: X(src.x), y: Y(src.y), z: ++z, lastMove: null }); if (!same) delete o.group; S().dispatch({ type: 'token.add', sceneId: sc.id, token: o }); }
+        else if (kind === 'prop') { Object.assign(o, { x: X(src.x), y: Y(src.y), w: Math.round(src.w * k), h: Math.round(src.h * k), z: ++z }); S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: o }); }
+        else if (kind === 'light') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); if (src.pts) o.pts = src.pts.map(([x, y]) => [X(x), Y(y)]); S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: o }); }
+        else if (kind === 'sound') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); S().dispatch({ type: 'sound.add', sceneId: sc.id, sound: o }); }
+        else if (kind === 'note') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); S().dispatch({ type: 'note.add', sceneId: sc.id, note: o }); }
+        else if (kind === 'trigger') {
+          Object.assign(o, { x: X(src.x), y: Y(src.y), used: 0, lastAt: 0 });
+          if (src.pts) o.pts = src.pts.map(([x, y]) => [X(x), Y(y)]);
+          o.propId = src.propId ? nid(src.propId) : null;
+          o.whoIds = (src.whoIds || []).map(nid).filter(Boolean);
+          o.actions = (src.actions || []).map((a0) => {
+            const a = Object.assign(U.clone(a0), { id: U.uid('ta_') });
+            if (Array.isArray(a.ids)) {
+              a.ids = a.ids.map((ref) => {
+                const s = String(ref);
+                if (s.startsWith('g:')) return same ? s : null;
+                const m = /^(t|prop|light|token):(.*)$/.exec(s);
+                if (m) { const n = nid(m[2]); return n ? m[1] + ':' + n : null; }
+                return nid(s);
+              }).filter(Boolean);
+            }
+            if (a.wallId) a.wallId = nid(a.wallId);
+            if (a.lightId) a.lightId = nid(a.lightId);
+            if (a.soundId) a.soundId = nid(a.soundId);
+            if (a.triggerId) a.triggerId = nid(a.triggerId);
+            if (String(a.target || '').startsWith('t:')) { const t2 = nid(a.target.slice(2)); a.target = t2 ? 't:' + t2 : null; }
+            else if (String(a.target || '').startsWith('g:') && !same) a.target = null;
+            if (a.type === 'teleport' && !a.sceneId && a.x != null) { a.x = X(a.x); a.y = Y(a.y); }
+            return a;
+          });
+          S().dispatch({ type: 'trigger.add', sceneId: sc.id, trigger: o });
+        }
+        added.push(kind + ':' + o.id);
+      }
+      if (walls.length) S().dispatch({ type: 'wall.add', sceneId: sc.id, walls });
+    });
+    clearSingles();
+    B.multi = new Set(added);
+    B.requestRender();
+    U.toast('Colado: ' + countLabel(added.length) + '.', 'info', 2000);
+    return added.length;
+  };
+  // Desenho: destaque de cada selecionado, o laço e a prévia do arraste
+  function drawMulti(ctx, sc) {
+    const z = B.cam.z, d = B.multiDrag, dx = d ? d.dx : 0, dy = d ? d.dy : 0;
+    ctx.save();
+    for (const { kind, o } of B.multiItems(sc)) {
+      ctx.strokeStyle = C.sel; ctx.lineWidth = 2 / z; ctx.setLineDash(d && d.moved ? [6 / z, 4 / z] : []);
+      ctx.shadowColor = C.sel; ctx.shadowBlur = 8;
+      if (kind === 'wall') { ctx.lineWidth = 6 / z; ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.moveTo(o.x1 + dx, o.y1 + dy); ctx.lineTo(o.x2 + dx, o.y2 + dy); ctx.stroke(); ctx.globalAlpha = 1; continue; }
+      if (kind === 'token') { const s = (o.size || 1) * sc.grid; ctx.strokeRect(o.x + dx - 2 / z, o.y + dy - 2 / z, s + 4 / z, s + 4 / z); continue; }
+      if (kind === 'prop') { ctx.strokeRect(o.x + dx, o.y + dy, o.w, o.h); continue; }
+      const p = itemPoint(sc, kind, o);
+      ctx.beginPath(); ctx.arc(p.x + dx, p.y + dy, 17 / z, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+    if (B.lasso) {
+      const r = norm(B.lasso);
+      ctx.save();
+      ctx.fillStyle = 'rgba(139,114,240,.10)'; ctx.strokeStyle = C.sel; ctx.lineWidth = 1.5 / z; ctx.setLineDash([6 / z, 4 / z]);
+      ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
+  }
 
   // ---------- pontos de luz e de escuridão (marcadores do mestre) ----------
   const DARK_C = '#9a8cff';
@@ -814,7 +1594,12 @@
   // Ponto de luz completo, com os valores padrão
   B.newLight = function (sc, part) {
     const dark = part.kind === 'dark', shape = part.shape || 'circle';
-    const name = dark ? 'Escuridão' : shape === 'cone' ? 'Holofote' : shape === 'area' ? 'Área de luz' : 'Luz';
+    // Nome numerado ("Luz 3"): com várias luzes, dá para saber qual é qual nos gatilhos
+    const base = dark ? 'Escuridão' : shape === 'cone' ? 'Holofote' : shape === 'area' ? 'Área de luz' : 'Luz';
+    const used = new Set((sc.lights || []).map((o) => o.name));
+    let k = 1;
+    while (used.has(base + ' ' + k)) k++;
+    const name = base + ' ' + k;
     const o = Object.assign({ id: U.uid('lt_'), name, kind: dark ? 'dark' : 'light', shape, x: 0, y: 0,
       bright: dark ? 3 : 4, dim: dark ? 4 : 8, dir: 0, angle: 60, pts: null, edge: 0, color: LT().WARM, tint: 0.4, flicker: false, on: true }, part);
     if (o.shape === 'area' && o.pts) { const c = LT().areaCenter(o.pts); o.x = Math.round(c.x); o.y = Math.round(c.y); }
@@ -833,6 +1618,7 @@
     const o = (sc.lights || []).find((x) => x.id === id);
     if (!o) return;
     const g = sc.grid, c = Object.assign(U.clone(o), { id: U.uid('lt_'), x: o.x + g, y: o.y + g });
+    delete c.animHome;
     if (c.pts) c.pts = c.pts.map(([x, y]) => [x + g, y + g]);
     S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: c });
     B.selectedLight = c.id;
@@ -905,12 +1691,22 @@
   }
   function drawDoorMark(ctx, w) {
     const z = B.cam.z, mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2, r = 9 / z;
+    const sel = B.selectedDoor === w.id && S().gmView();
     ctx.save();
     roundRect(ctx, mx - r, my - r, r * 2, r * 2, 3 / z);
     ctx.fillStyle = w.open ? 'rgba(17,17,20,.85)' : C.gold; ctx.fill();
-    ctx.lineWidth = 1.5 / z; ctx.strokeStyle = w.open ? C.gold : 'rgba(17,17,20,.9)'; ctx.stroke();
+    ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : w.open ? C.gold : 'rgba(17,17,20,.9)'; ctx.stroke();
     ctx.fillStyle = w.open ? C.gold : '#17130a';
     ctx.beginPath(); ctx.arc(mx + r * 0.35, my, 1.6 / z, 0, Math.PI * 2); ctx.fill();
+    // Cadeado: só o mestre vê que a porta está trancada
+    if (w.locked && S().gmView()) {
+      const u = 1 / z, cx = mx + r * 0.95, cy = my - r * 0.95;
+      ctx.beginPath(); ctx.arc(cx, cy, 6.5 * u, 0, Math.PI * 2); ctx.fillStyle = C.danger; ctx.fill();
+      ctx.lineWidth = 1.2 * u; ctx.strokeStyle = 'rgba(17,17,20,.9)'; ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * u;
+      ctx.beginPath(); ctx.arc(cx, cy - 1 * u, 2 * u, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 2.8 * u, cy - 1 * u, 5.6 * u, 4 * u);
+    }
     ctx.restore();
   }
   // Mestre (modo edição) vê as paredes; portas aparecem para todos que as enxergam
@@ -956,6 +1752,20 @@
       x.beginPath(); x.moveTo(w.x1, w.y1); x.lineTo(w.x2, w.y2); x.stroke();
     }
     x.restore();
+    // Memória de exploração: as paredes das áreas já vistas também ficam com o contorno (Plano 19)
+    if (App.Explore && App.Explore.on(sc)) {
+      x.save();
+      x.lineCap = 'round'; x.lineWidth = 2.4 / z;
+      const off = sc.grid / 8;
+      for (const w of walls) {
+        const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2, len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+        const nx = (-(w.y2 - w.y1) / len) * off, ny = ((w.x2 - w.x1) / len) * off;
+        if (!App.Explore.seen(sc, mx + nx, my + ny) && !App.Explore.seen(sc, mx - nx, my - ny)) continue;
+        x.strokeStyle = w.door ? 'rgba(226,186,110,.3)' : 'rgba(225,223,235,.16)';
+        x.beginPath(); x.moveTo(w.x1, w.y1); x.lineTo(w.x2, w.y2); x.stroke();
+      }
+      x.restore();
+    }
     // Debaixo da névoa de guerra não aparece nada
     if (sc.fog && sc.fog.enabled && B.fogCache.canvas) {
       x.globalCompositeOperation = 'destination-out';
@@ -981,6 +1791,38 @@
     }
     return null;
   }
+  // Paredes do mesmo traço de lápis (ou só ela, se for reta)
+  function wallGroup(sc, w) { return w.stroke ? (sc.walls || []).filter((x) => x.stroke === w.stroke).map((x) => x.id) : [w.id]; }
+  /*
+   * Traço do lápis → paredes: simplifica (Ramer-Douglas-Peucker, tolerância de ~8% do quadrado), junta as pontas se
+   * o traço terminar perto de onde começou, e cada trecho vira uma parede do tipo escolhido, todas com o mesmo `stroke`.
+   */
+  function pencilWalls(sc, raw) {
+    if (!raw || raw.length < 2) return [];
+    let len = 0;
+    for (let i = 1; i < raw.length; i++) len += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
+    if (len < sc.grid * 0.25) return [];
+    const tol = Math.max(2, sc.grid * 0.08);
+    const rdp = (pts) => {
+      if (pts.length < 3) return pts;
+      const [ax, ay] = pts[0], [bx, by] = pts[pts.length - 1];
+      let idx = -1, best = tol;
+      for (let i = 1; i < pts.length - 1; i++) { const d = distSeg(pts[i][0], pts[i][1], ax, ay, bx, by); if (d > best) { best = d; idx = i; } }
+      if (idx < 0) return [pts[0], pts[pts.length - 1]];
+      return rdp(pts.slice(0, idx + 1)).slice(0, -1).concat(rdp(pts.slice(idx)));
+    };
+    const pts = rdp(raw).map(([x, y]) => [Math.round(x), Math.round(y)]);
+    const [fx, fy] = pts[0], last = pts[pts.length - 1];
+    if (pts.length > 2 && Math.hypot(last[0] - fx, last[1] - fy) <= sc.grid * 0.5) pts[pts.length - 1] = [fx, fy]; // terminou perto do começo: fecha o contorno
+    const stroke = U.uid('st_'), out = [];
+    for (let i = 1; i < pts.length; i++) {
+      const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
+      if (Math.hypot(x2 - x1, y2 - y1) < 2) continue;
+      out.push({ id: U.uid('w_'), x1, y1, x2, y2, cover: B.wallType, stroke });
+    }
+    return out;
+  }
+  B.pencilWalls = pencilWalls;
   function wallAt(sc, p) {
     const tol = 8 / B.cam.z;
     let best = null, bd = tol;
@@ -1436,7 +2278,7 @@
   // ---------- efeitos do resultado: números subindo, golpe, explosão ----------
   function animActive() {
     const sc = S().currentScene();
-    return B.pings.length || B.fx.length || B.targeting || (sc && (movesActive(sc) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
+    return B.pings.length || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
   }
   function ensureAnim() {
     if (B.animating) return;
@@ -1604,18 +2446,39 @@
       return;
     }
 
+    if (B.hurtEdit) { if (gm) B.hurtDraft = { a: p, b: p }; return; }
+    // Prévia do scan (Plano 22): clique tira/põe uma sugestão; Shift + arrastar tira várias
+    if (B.scan && gm && !B.picking && (B.scan.walls.length || B.scan.doors.length)) {
+      if (e.shiftKey) {
+        B.hurtEdit = { cb: (a, b) => { const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y); for (const s of B.scan ? B.scan.walls.concat(B.scan.doors) : []) { const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2; if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) s.off = true; } if (App.UI.refreshScan) App.UI.refreshScan(); }, color: '#ff6b6b' };
+        B.hurtDraft = { a: p, b: p };
+        return;
+      }
+      const hit = scanHit(p);
+      if (hit) { hit.off = !hit.off; if (App.UI.refreshScan) App.UI.refreshScan(); B.requestRender(); return; }
+    }
+    if (B.picking) { if (gm) pickAt(App.Anim ? App.Anim.view(sc) : sc, p); else B.picking = null; return; }
+
     if (B.tool === 'select' || B.tool === 'wall' || B.tool === 'door') {
       const door = doorAt(sc, p);
       if (door && (B.tool === 'select' || B.tool === 'door')) {
-        S().dispatch({ type: 'wall.door', sceneId: sc.id, id: door.id, open: !door.open });
+        if (gm) {
+          // Mestre: Shift + clique tranca/destranca; clique abre ou fecha. Os dois mostram o painel da porta.
+          B.selectedDoor = door.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null;
+          if (e.shiftKey) { S().dispatch({ type: 'wall.lock', sceneId: sc.id, id: door.id, locked: !door.locked }); U.toast(door.locked ? 'Porta destrancada.' : 'Porta trancada.'); }
+          else S().dispatch({ type: 'wall.door', sceneId: sc.id, id: door.id, open: !door.open });
+        } else if (door.locked) U.toast('A porta está trancada.');
+        else S().dispatch({ type: 'wall.door', sceneId: sc.id, id: door.id, open: !door.open });
         B.requestRender();
         return;
       }
     }
+    B.selectedDoor = null;
 
     switch (B.tool) {
       case 'wall': case 'door': {
         if (!gm) break;
+        if (B.tool === 'wall' && B.wallMode === 'pencil') { B.wallPencil = { pts: [[p.x, p.y]], p0: { x: p.x, y: p.y } }; break; }
         const q = st.snap && !e.altKey ? snapVertex(sc, p) : p;
         B.wallDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, door: B.tool === 'door', p0: { x: p.x, y: p.y } };
         break;
@@ -1652,9 +2515,66 @@
         B.lightDraft = { shape: B.lightShape, x: Math.round(q.x), y: Math.round(q.y), p: { x: q.x, y: q.y }, moved: false };
         break;
       }
+      case 'note': {
+        if (!gm) break;
+        if (grabNote(sc, p)) break;
+        B.addNote(sc, p);
+        break;
+      }
+      case 'trigger': {
+        if (!gm) break;
+        if (grabTrigger(sc, p)) break;
+        B.selectedTrigger = null;
+        if (B.trigShape === 'poly') {
+          const q = st.snap && !e.altKey ? snapVertex(sc, p) : { x: Math.round(p.x), y: Math.round(p.y) };
+          const P = B.trigPoly;
+          if (!P) { B.trigPoly = { pts: [[q.x, q.y]], hover: null }; break; }
+          const [fx, fy] = P.pts[0];
+          if (P.pts.length >= 3 && Math.hypot(q.x - fx, q.y - fy) <= 10 / B.cam.z) { finishTrigPoly(sc); break; }
+          P.pts.push([q.x, q.y]);
+          break;
+        }
+        if (B.trigShape === 'rect') {
+          const q = st.snap && !e.altKey ? snapVertex(sc, p) : p;
+          B.trigDraft = { shape: 'rect', x1: q.x, y1: q.y, x2: q.x, y2: q.y, p0: { x: p.x, y: p.y } };
+          break;
+        }
+        const q = st.snap && !e.altKey ? { x: Math.floor(p.x / sc.grid) * sc.grid + sc.grid / 2, y: Math.floor(p.y / sc.grid) * sc.grid + sc.grid / 2 } : p;
+        B.trigDraft = { shape: 'circle', x: Math.round(q.x), y: Math.round(q.y), p: { x: p.x, y: p.y }, moved: false };
+        break;
+      }
       case 'select': case 'prop': {
+        // Seleção múltipla (mestre): Shift + clique soma/tira; Shift + arrastar no vazio faz o laço;
+        // clicar num item selecionado arrasta todos; clicar fora limpa
+        if (gm && B.tool === 'select') {
+          if (e.shiftKey) {
+            const hit = objectAtAny(sc, p);
+            if (hit) { toggleMulti(hit); break; }
+            B.lasso = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+            break;
+          }
+          if (B.multi.size) {
+            const hit = objectAtAny(sc, p);
+            if (hit && B.multi.has(hit.kind + ':' + hit.id)) { B.multiDrag = { p0: { x: p.x, y: p.y }, dx: 0, dy: 0, moved: false }; break; }
+            B.multi.clear();
+          }
+        }
+        if (gm && grabNote(sc, p)) break;
+        B.selectedNote = null;
         if (gm && grabLight(sc, p)) break;
         B.selectedLight = null;
+        if (gm && B.tool === 'select' && grabTrigger(sc, p)) break;
+        B.selectedTrigger = null;
+        // Jogador (ou mestre vendo como jogador) clicando numa imagem ligada a um gatilho: alavanca, baú…
+        if (!gm) {
+          const ck = clickableAt(sc, p), vw = lightViewers(sc);
+          const mine = Object.values(sc.tokens).filter((t) => S().canControl(t));
+          if (ck && mine.length && (!vw || LT().pointVisible(sc, { x: ck.prop.x + ck.prop.w / 2, y: ck.prop.y + ck.prop.h / 2 }, vw, posOf))) {
+            const who = (B.selected && mine.find((t) => t.id === B.selected)) || mine[0];
+            S().dispatch({ type: 'trigger.click', sceneId: sc.id, id: ck.tr.id, tokenId: who.id });
+            break;
+          }
+        }
         const snd = soundAt(sc, p);
         if (snd) {
           B.selected = null; B.selectedSound = snd.id; B.selectedProp = null;
@@ -1724,7 +2644,7 @@
     if (snd) { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); if (B.selectedSound === snd.id) B.selectedSound = null; return; }
     if (S().gmView()) {
       const w = wallAt(sc, p);
-      if (w) { S().dispatch({ type: 'wall.delete', sceneId: sc.id, id: w.id }); return; }
+      if (w) { S().dispatch({ type: 'wall.delete', sceneId: sc.id, ids: wallGroup(sc, w) }); return; } // traço de lápis: sai inteiro
     }
     const d = drawingAt(sc, p);
     if (d && (S().gmView() || d.by === S().me.id)) S().dispatch({ type: 'drawing.delete', sceneId: sc.id, id: d.id });
@@ -1738,12 +2658,19 @@
       return;
     }
     if (B.targeting && e.target === B.canvas) { B.hoverP = toWorld(e); B.requestRender(); }
-    for (const P of [B.roomPoly, B.lightPoly]) {
+    if (e.target === B.canvas) {
+      B.mouseWorld = toWorld(e); // onde colar (Ctrl+V)
+      // nota sob o mouse: mostra o começo do texto
+      const sc0 = S().currentScene(), hn = sc0 && !B.noteDrag ? noteAt(sc0, B.mouseWorld) : null, hid = hn ? hn.id : null;
+      if (hid !== B.hoverNote) { B.hoverNote = hid; B.requestRender(); }
+    }
+    for (const P of [B.roomPoly, B.lightPoly, B.trigPoly]) {
       if (!P || e.target !== B.canvas) continue;
       const sc0 = S().currentScene();
       if (sc0) { const w = toWorld(e), q = B.style.snap && !e.altKey ? snapVertex(sc0, w) : w; P.hover = [q.x, q.y]; B.requestRender(); }
     }
-    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag && !B.lightDrag && !B.lightDraft) return;
+    if (B.hurtDraft) { B.hurtDraft.b = toWorld(e); B.requestRender(); return; }
+    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag && !B.lightDrag && !B.lightDraft && !B.wallPencil && !B.trigDrag && !B.trigDraft && !B.lasso && !B.multiDrag && !B.noteDrag) return;
     const sc = S().currentScene();
     if (!sc) return;
     const p = toWorld(e), snap = B.style.snap;
@@ -1763,9 +2690,28 @@
     }
     if (B.fogDraft) { const q = snap ? snapPt(sc, p) : p; B.fogDraft.x2 = q.x; B.fogDraft.y2 = q.y; }
     if (B.wallDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.wallDraft.x2 = q.x; B.wallDraft.y2 = q.y; }
+    if (B.wallPencil) {
+      const pts = B.wallPencil.pts, [lx, ly] = pts[pts.length - 1];
+      if (Math.hypot(p.x - lx, p.y - ly) > 3 / B.cam.z) pts.push([p.x, p.y]);
+    }
     if (B.roomDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.roomDraft.x2 = q.x; B.roomDraft.y2 = q.y; }
     if (B.propDrag) dragProp(B.propDrag, p, e);
     if (B.lightDrag) dragLight(sc, B.lightDrag, p, e);
+    if (B.trigDrag) dragTrigger(sc, B.trigDrag, p, e);
+    if (B.lasso) { B.lasso.x2 = p.x; B.lasso.y2 = p.y; }
+    if (B.noteDrag) { const d = B.noteDrag, nx = p.x - d.ox, ny = p.y - d.oy; if (Math.abs(nx - d.x) + Math.abs(ny - d.y) > 2 / B.cam.z) d.moved = true; d.x = nx; d.y = ny; }
+    if (B.multiDrag) {
+      // Move de quadrado em quadrado (Alt: livre), para tudo continuar alinhado
+      const d = B.multiDrag, g = sc.grid;
+      let dx = p.x - d.p0.x, dy = p.y - d.p0.y;
+      if (B.style.snap && !e.altKey) { dx = Math.round(dx / g) * g; dy = Math.round(dy / g) * g; }
+      d.dx = dx; d.dy = dy; d.moved = d.moved || Math.abs(p.x - d.p0.x) + Math.abs(p.y - d.p0.y) > 3;
+    }
+    if (B.trigDraft) {
+      const d = B.trigDraft;
+      if (d.shape === 'rect') { const q = snap && !e.altKey ? snapVertex(sc, p) : p; d.x2 = q.x; d.y2 = q.y; }
+      else { d.p = { x: p.x, y: p.y }; if (Math.hypot(p.x - d.x, p.y - d.y) > 6 / B.cam.z) d.moved = true; }
+    }
     if (B.lightDraft) {
       const d = B.lightDraft;
       d.p = { x: p.x, y: p.y }; if (Math.hypot(p.x - d.x, p.y - d.y) > 6 / B.cam.z) d.moved = true;
@@ -1782,6 +2728,20 @@
   function onUp(e) {
     const sc = S().currentScene();
     if (B.pan) { B.pan = null; B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair'; }
+    if (B.hurtDraft) {
+      const d = B.hurtDraft, he = B.hurtEdit;
+      B.hurtDraft = null; B.hurtEdit = null;
+      B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair';
+      const rsc = he && S().state.scenes[he.sceneId], pr = rsc && (rsc.props || []).find((x) => x.id === he.propId);
+      if (he && he.cb) { if (Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) > 4) he.cb(d.a, d.b); }
+      else if (pr && Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) > 4) {
+        S().dispatch({ type: 'prop.update', sceneId: he.sceneId, id: pr.id, patch: { hurt: Object.assign({}, pr.hurt || App.Anim.newHurt(), { on: true, box: App.Anim.boxFrom(pr, d.a, d.b) }) } });
+        U.toast('Área de dano ajustada.', 'info', 2000);
+      }
+      if (he && he.onEnd) he.onEnd();
+      B.requestRender();
+      return;
+    }
     if (B.drag) {
       const d = B.drag;
       B.drag = null;
@@ -1790,7 +2750,9 @@
         if (B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
         const t = sc.tokens[d.id], s = ((t && t.size) || 1) * sc.grid / 2;
         const path = [[d.sx, d.sy]].concat((d.points || []).map((p) => [p.x - s, p.y - s]), [[x, y]]);
-        S().dispatch({ type: 'token.move', sceneId: d.sceneId, id: d.id, x, y, path, at: Date.now() });
+        // Jogador: caminho que atravessa parede que tapa a visão não vale; o token volta para onde estava
+        if (t && !S().gmView() && pathBlind(sc, t, dragCenters(sc, d, x, y))) U.toast('O caminho atravessa uma parede: o token voltou. Marque pontos para contornar (botão direito).', 'info', 4500);
+        else S().dispatch({ type: 'token.move', sceneId: d.sceneId, id: d.id, x, y, path, at: Date.now() });
       }
     }
     if (B.propDrag) {
@@ -1802,6 +2764,42 @@
         if (d.mode === 'move' && B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
         S().dispatch({ type: 'prop.update', sceneId: d.sceneId, id: d.id, patch: { x: Math.round(x), y: Math.round(y), w: Math.round(c.w), h: Math.round(c.h), rot: c.rot } });
       }
+    }
+    if (B.noteDrag) {
+      const d = B.noteDrag;
+      B.noteDrag = null;
+      if (d.moved && sc) S().dispatch({ type: 'note.update', sceneId: d.sceneId, id: d.id, patch: { x: Math.round(d.x), y: Math.round(d.y) } });
+      else if (sc && App.UI.openNote) App.UI.openNote(d.sceneId, d.id); // clique: abre a nota
+    }
+    if (B.lasso && sc) {
+      const r = norm(B.lasso);
+      B.lasso = null;
+      if (r.w > 4 || r.h > 4) { seedMulti(); lassoSelect(sc, r); clearSingles(); }
+    }
+    if (B.multiDrag && sc) {
+      const d = B.multiDrag;
+      B.multiDrag = null;
+      if (d.moved) moveMulti(sc, d.dx, d.dy);
+    }
+    if (B.trigDrag) {
+      const d = B.trigDrag;
+      B.trigDrag = null;
+      if (d.moved && sc) {
+        const patch = Object.assign({}, d.cur);
+        if ('x' in patch) { patch.x = Math.round(patch.x); patch.y = Math.round(patch.y); }
+        if (patch.pts) patch.pts = patch.pts.map(([x, y]) => [Math.round(x), Math.round(y)]);
+        S().dispatch({ type: 'trigger.update', sceneId: d.sceneId, id: d.id, patch });
+      } else if (sc && d.mode === 'move' && App.UI.openTrigger) App.UI.openTrigger(d.sceneId, d.id); // clique no marcador: abre a configuração
+    }
+    if (B.trigDraft && sc) {
+      const d = B.trigDraft, g = sc.grid;
+      B.trigDraft = null;
+      if (d.shape === 'rect') {
+        let r = norm(d);
+        // Clique sem arrastar: a área é o quadrado clicado (placa de pressão)
+        if (r.w < g / 2 || r.h < g / 2) { const cx = Math.floor(d.p0.x / g) * g, cy = Math.floor(d.p0.y / g) * g; r = { x: cx, y: cy, w: g, h: g }; }
+        B.addTrigger(sc, { shape: 'rect', pts: [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]].map(([x, y]) => [Math.round(x), Math.round(y)]) });
+      } else B.addTrigger(sc, { shape: 'circle', x: d.x, y: d.y, r: d.moved ? draftRadius(sc, d) : 0.5 });
     }
     if (B.lightDrag) {
       const d = B.lightDrag;
@@ -1836,18 +2834,32 @@
       B.soundDrag = null;
       if (d.moved && sc) S().dispatch({ type: 'sound.update', sceneId: d.sceneId, id: d.id, patch: { x: Math.round(d.x), y: Math.round(d.y) } });
     }
+    if (B.wallPencil && sc) {
+      const P = B.wallPencil;
+      B.wallPencil = null;
+      const walls = pencilWalls(sc, P.pts);
+      if (walls.length) S().dispatch({ type: 'wall.add', sceneId: sc.id, walls });
+      else {
+        // Clique sem desenhar em cima de uma parede: aplica o tipo escolhido (no traço inteiro, se for de lápis)
+        const hit = wallAt(sc, P.p0);
+        if (hit && !hit.door && CB().wallType(hit) !== B.wallType) {
+          S().dispatch({ type: 'wall.update', sceneId: sc.id, ids: wallGroup(sc, hit), patch: { cover: B.wallType } });
+          U.toast('Parede agora é: ' + CB().COVER_TYPES.find((x) => x[0] === B.wallType)[1]);
+        }
+      }
+    }
     if (B.wallDraft && sc) {
       const w = B.wallDraft;
       B.wallDraft = null;
       if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) > 4) {
         const wall = { id: U.uid('w_'), x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 };
-        if (w.door) { wall.door = true; wall.open = false; } else wall.cover = B.wallType;
+        if (w.door) { wall.door = true; wall.open = false; wall.locked = !!B.doorLocked; } else wall.cover = B.wallType;
         S().dispatch({ type: 'wall.add', sceneId: sc.id, walls: [wall] });
       } else if (!w.door) {
         // Clique sem arrastar em cima de uma parede: aplica o tipo escolhido
         const hit = w.p0 && wallAt(sc, w.p0);
         if (hit && !hit.door && CB().wallType(hit) !== B.wallType) {
-          S().dispatch({ type: 'wall.update', sceneId: sc.id, id: hit.id, patch: { cover: B.wallType } });
+          S().dispatch({ type: 'wall.update', sceneId: sc.id, ids: wallGroup(sc, hit), patch: { cover: B.wallType } });
           U.toast('Parede agora é: ' + CB().COVER_TYPES.find((x) => x[0] === B.wallType)[1]);
         }
       }
@@ -1922,6 +2934,7 @@
     if (!sc) return;
     if (B.tool === 'room' && B.roomPoly) { finishRoomPoly(sc); B.requestRender(); return; }
     if (B.tool === 'light' && B.lightPoly) { finishLightPoly(sc); B.requestRender(); return; }
+    if (B.tool === 'trigger' && B.trigPoly) { finishTrigPoly(sc); B.requestRender(); return; }
     // Dois cliques no marcador de luz: acende ou apaga
     const lh = lightAt(sc, toWorld(e));
     if (lh && lh.mode === 'move') { S().dispatch({ type: 'lightpt.update', sceneId: sc.id, id: lh.o.id, patch: { on: lh.o.on === false } }); return; }
@@ -1983,6 +2996,12 @@
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
     if (!S().state) return;
     if (e.code === 'Space') { B.spaceDown = true; e.preventDefault(); return; }
+    // Desfazer / refazer a montagem do mapa (só o mestre)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && S().isGM() && App.History && !B.drag && !B.propDrag && !B.lightDrag && !B.trigDrag) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); App.History.undoLast(); return; }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); App.History.redoLast(); return; }
+    }
     if (e.key === 'Backspace' && ((B.drag && (B.drag.points || []).length) || (B.ruler && (B.ruler.points || []).length))) {
       e.preventDefault(); (B.drag || B.ruler).points.pop(); B.requestRender(); return;
     }
@@ -1994,6 +3013,41 @@
       if (e.key === 'Enter') { finishRoomPoly(sc); B.requestRender(); return; }
       if (e.key === 'Escape') { B.roomPoly = null; B.requestRender(); return; }
       if (e.key === 'Backspace') { B.roomPoly.pts.pop(); if (!B.roomPoly.pts.length) B.roomPoly = null; B.requestRender(); return; }
+    }
+    if (B.picking && e.key === 'Escape') { const multi = B.picking.multi; B.cancelPick(); U.toast(multi ? 'Pronto.' : 'Escolha cancelada.'); return; }
+    if (B.picking && B.picking.multi && e.key === 'Enter') { B.cancelPick(); U.toast('Pronto.'); return; }
+    if (B.hurtEdit && e.key === 'Escape') { const he = B.hurtEdit; B.hurtEdit = null; B.hurtDraft = null; B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair'; if (he.onEnd) he.onEnd(); B.requestRender(); return; }
+    // Seleção múltipla: apagar, duplicar, copiar, mover com as setas, Esc limpa
+    if (sc && S().gmView() && (e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'c' && currentItems(sc).length) { e.preventDefault(); B.copySelection(sc); return; }
+      if (k === 'v' && B.clipboard) { e.preventDefault(); B.paste(sc, B.mouseWorld || B.viewCenter()); return; }
+      if (k === 'd' && B.multi.size) {
+        e.preventDefault();
+        const keep = B.clipboard;
+        if (B.copySelection(sc)) { const c = B.clipboard; B.paste(sc, { x: c.ox + sc.grid, y: c.oy + sc.grid }); }
+        B.clipboard = keep;
+        return;
+      }
+    }
+    if (B.multi.size && sc && S().gmView()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { deleteMulti(sc); return; }
+      if (e.key === 'Escape') { B.multi.clear(); B.requestRender(); return; }
+      const ar = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+      if (ar) { e.preventDefault(); moveMulti(sc, ar[0] * sc.grid, ar[1] * sc.grid); return; }
+    }
+    if (B.trigPoly && sc) {
+      if (e.key === 'Enter') { finishTrigPoly(sc); B.requestRender(); return; }
+      if (e.key === 'Escape') { B.trigPoly = null; B.requestRender(); return; }
+      if (e.key === 'Backspace') { B.trigPoly.pts.pop(); if (!B.trigPoly.pts.length) B.trigPoly = null; B.requestRender(); return; }
+    }
+    if (B.selectedNote && sc && S().gmView()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { S().dispatch({ type: 'note.delete', sceneId: sc.id, id: B.selectedNote }); if (App.UI.closeWindow) App.UI.closeWindow('note:' + B.selectedNote); B.selectedNote = null; return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); B.duplicateNote(sc, B.selectedNote); return; }
+    }
+    if (B.selectedTrigger && sc && S().gmView()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: B.selectedTrigger }); B.selectedTrigger = null; return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); B.duplicateTrigger(sc, B.selectedTrigger); return; }
     }
     if (B.lightPoly && sc) {
       if (e.key === 'Enter') { finishLightPoly(sc); B.requestRender(); return; }
@@ -2027,13 +3081,19 @@
       if (e.key === 'Escape') { B.cancelTargeting(); return; }
       if (e.key === 'Enter') { B.confirmTargeting(); return; }
     }
-    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.setTool('select'); B.requestRender(); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && B.selectedDoor && sc && S().gmView()) {
+      S().dispatch({ type: 'wall.delete', sceneId: sc.id, id: B.selectedDoor });
+      B.selectedDoor = null;
+      return;
+    }
+    if (e.key === 'Escape') { B.selected = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.selectedDoor = null; B.selectedTrigger = null; B.selectedNote = null; B.setTool('select'); B.requestRender(); return; }
     const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     if (arrows[e.key] && t && S().canControl(t)) {
       e.preventDefault();
       if (!S().canMoveNow(t)) { U.toast('Aguarde a sua vez para mover.'); return; }
       const [dx, dy] = arrows[e.key];
-      const nx = t.x + dx * sc.grid, ny = t.y + dy * sc.grid;
+      const nx = t.x + dx * sc.grid, ny = t.y + dy * sc.grid, hs = (t.size || 1) * sc.grid / 2;
+      if (!S().gmView() && pathBlind(sc, t, [{ x: t.x + hs, y: t.y + hs }, { x: nx + hs, y: ny + hs }])) { U.toast('Tem uma parede no caminho.'); return; }
       S().dispatch({ type: 'token.move', sceneId: sc.id, id: t.id, x: nx, y: ny, path: [[t.x, t.y], [nx, ny]], at: Date.now() });
       return;
     }
@@ -2043,7 +3103,7 @@
       if (a && (a.actions || [])[i]) { if (B.targeting) B.cancelTargeting(); App.UI.useAction(a, i, t); }
       return;
     }
-    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop', u: 'light' };
+    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop', u: 'light', t: 'trigger', n: 'note' };
     const tool = map[e.key.toLowerCase()];
     if (tool) B.setTool(tool);
   }

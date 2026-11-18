@@ -35,7 +35,7 @@ Para consultar depois, use a **Wiki** (manual com fotos e exemplos, em [wiki/ind
 - **Combate automático:** escolha a ação, clique no alvo e o sistema rola ataque × defesa, aplica o dano e mostra o resultado no mapa. Alcance, áreas de magia, críticos, iniciativa e turnos.
 - **Movimento por caminho:** arrastando o token, o botão direito marca pontos de passagem; a régua mostra cada trecho e o total, e todos veem o rastro.
 - **Dados:** `2d6+3`, vantagem `2d20kh1`, `4d6dl1`, dado explosivo `1d6!`, `@forca` puxa o atributo da ficha.
-- **Luz e visão:** os jogadores só veem o que está iluminado e à vista, em três níveis (luz plena, meia luz e escuridão). Tochas e lanternas em cone com cor, visão no escuro, portas e névoa de guerra. Pontos de luz no mapa (círculo, cone ou área, com cor e tremor) e pontos de escuridão.
+- **Luz e visão:** os jogadores só veem o que está iluminado e à vista, em três níveis (luz plena, meia luz e escuridão). Tochas e lanternas em cone com cor, visão no escuro, portas (trancadas ou não) e névoa de guerra. Pontos de luz no mapa (círculo, cone ou área, com cor e tremor) e pontos de escuridão.
 - **Paredes e cobertura:** parede absoluta, cobertura total, três quartos (+5) e meia (+2). A altura de cada criatura conta, e criaturas podem voar.
 - **Tokens:** visível, vulto (só uma silhueta para os jogadores) ou invisível, e grupos para mudar vários de uma vez.
 - **Música e sons:** música e ambiente para todos, sons presos a um ponto do mapa e salas de som com música própria.

@@ -148,6 +148,7 @@
   A.label = (name) => String(name || '').replace(/^.*\//, '').replace(EXT, '').replace(/[_]+/g, ' ');
 
   // ---------- URLs das faixas ----------
+  A.previewUrl = (name) => urlFor(name); // usado pelo "Testar gatilho" (toca só no mestre)
   async function urlFor(name, size) {
     if (A.urls.has(name)) return A.urls.get(name);
     if (S().role !== 'player') {

@@ -110,6 +110,7 @@
         <ul><li>Segure o token com o <b>botão esquerdo</b> e arraste.</li>
         <li>Sem soltar, clique com o <b>botão direito</b> para fixar um ponto. Continue arrastando e marque quantos quiser.</li>
         <li>Cada trecho mostra a distância, e a régua mostra o <b>total do caminho</b>. Trecho que atravessa parede fica <b>vermelho</b>.</li>
+        <li>Atravessando uma parede que tapa a visão (ou uma porta fechada), o jogador fica <b>sem visão</b> até voltar, e se soltar ali o token volta para onde estava. Nada de espiar o outro lado. Muros baixos só ficam vermelhos.</li>
         <li><b>Backspace</b> (ainda segurando) desfaz o último ponto. Ao soltar, o token vai para o destino e todos veem o rastro do caminho por alguns segundos.</li></ul>
         <p>A <b>Régua</b> ${k('R')} aceita os mesmos pontos, para medir sem mover ninguém. Sem segurar nada, o botão direito continua movendo a câmera.</p>`,
       spot: tokRect('hero') },
@@ -282,7 +283,7 @@
       enter: () => select('hero'),
       done: () => { const t = heroTok(); return !!(t && t.light && t.light.dim > 0); } },
     { ch: 'Luz e paredes', title: 'Erga uma parede',
-      body: 'As paredes bloqueiam a luz e a visão. Quem mostra a parede é o desenho do mapa, mas no escuro o jogador vê uma <b>linha clara</b> nas paredes que o personagem enxerga (e as portas em dourado), para saber o limite da sala.<p>Use a ferramenta <b>Parede</b> ' + k('W') + ' na barra da esquerda e arraste de um canto do grid a outro. A <b>Porta</b> ' + k('O') + ' funciona igual, e qualquer um abre ou fecha clicando no marcador dourado.</p><p>Dica: <b>Paredes dos desenhos</b> transforma as linhas e retângulos já desenhados em paredes de uma vez.</p>',
+      body: 'As paredes bloqueiam a luz e a visão. Quem mostra a parede é o desenho do mapa, mas no escuro o jogador vê uma <b>linha clara</b> nas paredes que o personagem enxerga (e as portas em dourado), para saber o limite da sala.<p>Use a ferramenta <b>Parede</b> ' + k('W') + ' na barra da esquerda e arraste de um canto do grid a outro. Para muros curvos e cavernas, troque para <b>Lápis</b> no quadro ao lado e desenhe à mão livre. A <b>Porta</b> ' + k('O') + ' funciona igual, e qualquer um abre ou fecha clicando no marcador dourado. Porta fechada deixa passar; para segurar o grupo, <b>Shift + clique</b> no marcador <b>tranca</b> a porta: ninguém abre nem passa, e só você vê o cadeado.</p><p>Dica: <b>Paredes dos desenhos</b> transforma as linhas e retângulos já desenhados em paredes de uma vez.</p>',
       task: 'Desenhe uma parede entre a Lyra e os goblins.',
       spot: el('#toolbar [data-tool="wall"]'),
       enter: () => { T.base.walls = (scene().walls || []).length; },

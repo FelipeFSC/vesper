@@ -9,7 +9,7 @@
 
 ## Ordem dos scripts (index.html)
 
-`util → icons → dice → store → storage → images → light → combat → audio → net → board → ui → tutorial → main`
+`util → icons → dice → store → storage → images → scan → light → combat → audio → anim → triggers → history → explore → net → board → ui → tutorial → main`
 
 | Arquivo | Responsabilidade |
 |---|---|
@@ -22,6 +22,11 @@
 | `js/light.js` | Luz e visão: paredes que bloqueiam (`wallsFor(eyeH)`), polígono de visibilidade, fontes (tokens e `sc.lights`), níveis (`levelAt`, `levelFor`), `pointVisible`, desenho da luz, cor e tremor |
 | `js/combat.js` | Alcance, lados, alvos válidos, área, chance de acerto, **cobertura**, sombra, voo (`flyOf`, `topOf`, `sightH`) |
 | `js/audio.js` | Pasta de músicas, canais música/ambiente/efeito, sons no mapa, **salas de som**, envio das faixas aos jogadores |
+| `js/scan.js` | Scan de paredes e portas (Plano 22): imagem reduzida, máscaras (lado de fora, cor, escuro), contorno/afinamento, Douglas-Peucker, endireitar, portas por exemplo (correlação), Web Worker criado do texto de `CORE`; importar `.dd2vtt`/`.uvtt` |
+| `js/anim.js` | Animação (Plano 21): tempo e curvas (`progress`), `view(sc)` = cena como aparece agora, `play`/`stop`/`preview`, relógio do mestre (`now`, `setClock`), área de dano das imagens (`hurtPoly`, golpe no tick do mestre) |
+| `js/triggers.js` | Gatilhos (Plano 14): geometria e caminho (`crossing`), estado (pronto/gasto), detecção no mestre (`beforeMove` no `commit` de `token.move` de jogador; `click`), fila "perguntar", execução das ações com atraso (`fire`) |
+| `js/history.js` | Desfazer/refazer do mestre (Plano 17): `before`/`after` no `commit`, diferença campo a campo, `batch`, ação `undo.apply` |
+| `js/explore.js` | Memória de exploração (Plano 19): cálculo no mestre (`touch`/`flush`), bits por célula 2×2, máscara para o desenho do jogador |
 | `js/net.js` | PeerJS: host, join, envio de ações e estado |
 | `js/board.js` | Canvas do mapa: câmera, ferramentas, tokens, paredes, salas, mira, efeitos |
 | `js/ui.js` | Interface: laterais, dock, painel do token, fichas (abas), combate, cenas, painel Mesa, modais |
@@ -48,13 +53,20 @@ cena
   tokens {id: {actorId, name, x, y, size, linked, bars, conditions, light {bright, dim, shape, angle, color, tint, flicker}, facing, darkvision,
                hidden, masked, group, fly, lastFly, owner, z}}
   drawings [], fog {enabled, shapes, v}
-  walls [{id, x1, y1, x2, y2, cover: full|high|three|half, door, open}], wallsV
+  walls [{id, x1, y1, x2, y2, cover: full|high|three|half, door, open, locked, stroke (traço do lápis)}], wallsV
   light {enabled, global}
   cover {enabled, heights {high, three, half}, shadow {high, three, half}, levels {three, half}, bonus {three, half}, show, lean}
   sounds [{id, name, x, y, r, vol, on, once, at}]
   rooms [{id, name, pts [[x,y]…], music {name,size}, at, vol, ambient stop|muffle|keep}]
   groups [{id, name}]
   props [{id, img, name, x, y, w, h, rot, flip, hidden, opacity, locked, z}]   (z compartilhado com tokens.z)
+  triggers [{id, name, shape circle|rect|poly, x, y, r, pts, on enter|leave|click, propId, who party|foes|any|pick, whoIds,
+             times once|always|n, n, used, cooldown, lastAt, ask, stop, enabled, actions [{id, type, delay, …}]}]
+  notes [{id, x, y, title, text, color}]   (só o mestre: Net.playerState tira das cópias mandadas aos jogadores)
+  anims [{id, key 'prop:id'|'light:id'|'token:id', spec, start (relógio do mestre), from}]   (animações rodando)
+  props/lights/tokens ganham: anim {steps [spec], auto}, animHome (para "voltar ao início"); props: hurt {on, box, when, who, save, dc, damage, bar, onSave}; luzes: power
+  props/lights/sounds/portas: tag (grupo de objetos); ações de gatilho: ids [] + tag (antes: wallId, lightId, soundId, triggerId, target)
+  explored {'*' | idJogador: {w, h, d (bits base64)}}   ; light.explore liga a memória na cena
   lights [{id, name, kind light|dark, shape circle|cone|area, x, y, bright, dim, dir, angle, pts, edge, color, tint, flicker, on}]
 ```
 
@@ -75,4 +87,7 @@ cena
 - `currentScene()`: mestre vê `viewSceneId` ou a cena do grupo; jogador vê `sceneIdOf(seuId)`; "ver como" um jogador mostra a cena dele.
 - O `play()` de áudio **não** pode ser aguardado com `await` (o navegador pode demorar e travar a fila).
 - Nomes de vultos (`t.masked`) não podem vazar para jogadores: usar `UI.seenName(nome, masked)` em textos.
+- **Nada privado do mestre vai pela rede:** use `Net.playerState()` ao mandar o estado e filtre ações em `forPlayers` (hoje: notas e a área de dano das imagens).
+- **Animação:** o estado guarda a posição de verdade; quem desenha usa `App.Anim.view(sc)` (o `B.render`, a exploração e o dano já usam). Nunca mande posição por quadro: `Anim.play` grava uma vez e o mestre termina com `anim.end`.
+- **Ações de montagem entram no Ctrl+Z sozinhas** (`History.wants`: prefixos `wall/prop/lightpt/trigger/sound/room/drawing/fog/note/group/token`, `order.move`). Ações automáticas (gatilhos, cálculo de exploração) passam `noUndo: true`. Várias ações = um passo: `App.History.batch(rótulo, fn)`.
 - Painéis flutuantes precisam caber na tela: limite de altura + rolagem por dentro (`fitToolOpts`, `fitWin`, `max-height` no CSS). Testar com `menus.js` numa tela baixa.

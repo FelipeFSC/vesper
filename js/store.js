@@ -22,7 +22,9 @@
       cellDist: 1.5, unit: 'm', measure: 'cheb',
       tokens: {}, drawings: [], fog: { enabled: false, shapes: [], v: 0 },
       // Iluminação: paredes bloqueiam luz e visão; global = ambiente claro (dia)
-      walls: [], wallsV: 0, light: { enabled: false, global: true },
+      walls: [], wallsV: 0, light: { enabled: false, global: true, explore: true },
+      // Memória de exploração (js/explore.js): o que os jogadores já viram, por chave ('*' = grupo, ou id do jogador)
+      explored: {},
       // Cobertura dos muros baixos (alturas em metros, sombra em quadrados): ver Combat.coverOf
       cover: JSON.parse(JSON.stringify(App.Combat.COVER_DEFAULT)),
       // Sons presos a um ponto do mapa: {id, name, size, x, y, r (alcance em quadrados), vol, on, at}
@@ -39,6 +41,12 @@
       // {id, name, kind: 'light'|'dark', shape: 'circle'|'cone'|'area', x, y, bright, dim (quadrados), dir, angle (graus),
       //  pts [[x,y]…] (área), edge (penumbra em volta da área, quadrados), color, tint (0–1), flicker, on}
       lights: [],
+      // Gatilhos (ver js/triggers.js): áreas que disparam ações quando alguém entra, sai ou clica numa imagem
+      triggers: [],
+      // Notas do mestre presas ao mapa (não vão para os jogadores): {id, x, y, title, text, color}
+      notes: [],
+      // Animações rodando (js/anim.js): {id, key 'prop:id'|'light:id'|'token:id', spec, start (relógio do mestre), from}
+      anims: [],
     };
   }
 
@@ -93,6 +101,7 @@
     actOnTurn: false,   // em combate, jogador só usa ações na própria vez
     hideNumbers: true,  // jogadores não veem Defesa/PV de quem não controlam
     trailSecs: 3,       // segundos que o caminho de um movimento fica no mapa para todos (0 = não mostra)
+    exploreMode: 'group', // memória de exploração: 'group' (o que um viu, todos lembram) | 'player' (cada um a sua)
   };
 
   // Som: biblioteca (categoria por nome de arquivo), o que toca em cada canal e volumes. Só o mestre altera.
@@ -136,6 +145,12 @@
       sc.groups = Array.isArray(sc.groups) ? sc.groups : [];
       sc.props = Array.isArray(sc.props) ? sc.props : [];
       sc.lights = Array.isArray(sc.lights) ? sc.lights : [];
+      sc.triggers = Array.isArray(sc.triggers) ? sc.triggers : [];
+      sc.notes = Array.isArray(sc.notes) ? sc.notes : [];
+      sc.anims = Array.isArray(sc.anims) ? sc.anims : [];
+      // Plano 21: ações de gatilho com um alvo só viram lista (ids)
+      for (const tr of sc.triggers) for (const a of tr.actions || []) upgradeTrigAction(a);
+      sc.explored = sc.explored && typeof sc.explored === 'object' ? sc.explored : {};
       st.scenes[id] = sc;
       if (!st.sceneOrder.includes(id)) st.sceneOrder.push(id);
     }
@@ -161,7 +176,25 @@
     return st;
   }
 
+  function upgradeTrigAction(a) {
+    if (!a || (Array.isArray(a.ids) && a.ids.length)) return;
+    const one = a.type === 'door' ? a.wallId : a.type === 'light' ? a.lightId : a.type === 'sound' ? a.soundId : a.type === 'trigger' ? a.triggerId : a.type === 'token' ? a.target : null;
+    a.ids = one ? [one] : Array.isArray(a.ids) ? a.ids : [];
+    delete a.wallId; delete a.lightId; delete a.soundId; delete a.triggerId; if (a.type === 'token') delete a.target;
+    if (a.tag == null) a.tag = '';
+  }
+
   // ---------------- Reducer ----------------
+  // Grava no objeto o resultado de uma animação: [{key: 'prop:id', patch}]
+  function animCommit(sc, commits) {
+    let n = 0;
+    for (const c of commits || []) {
+      const i = String(c.key).indexOf(':'), k = c.key.slice(0, i), id = c.key.slice(i + 1);
+      const o = k === 'prop' ? (sc.props || []).find((x) => x.id === id) : k === 'light' ? (sc.lights || []).find((x) => x.id === id) : k === 'token' ? sc.tokens[id] : null;
+      if (o && c.patch) { Object.assign(o, c.patch); n++; }
+    }
+    return n;
+  }
   function sceneOf(s, id) {
     const sc = s.scenes[id];
     if (!sc) throw new Error('Cena não encontrada');
@@ -313,11 +346,15 @@
 
     // Paredes e portas: {id, x1, y1, x2, y2, door?, open?}
     'wall.add': (s, a) => { const sc = sceneOf(s, a.sceneId); for (const w of a.walls || []) sc.walls.push(w); sc.wallsV++; },
-    'wall.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.walls = sc.walls.filter((w) => w.id !== a.id); sc.wallsV++; },
+    // Apaga uma parede (id) ou várias de uma vez (ids: o traço inteiro do lápis)
+    'wall.delete': (s, a) => { const sc = sceneOf(s, a.sceneId), ids = new Set(Array.isArray(a.ids) ? a.ids : [a.id]); sc.walls = sc.walls.filter((w) => !ids.has(w.id)); sc.wallsV++; },
     'wall.update': (s, a) => {
-      const sc = sceneOf(s, a.sceneId), w = sc.walls.find((x) => x.id === a.id);
-      if (!w || !a.patch) return;
-      if ('cover' in a.patch && ['full', 'high', 'three', 'half'].includes(a.patch.cover)) w.cover = a.patch.cover;
+      const sc = sceneOf(s, a.sceneId), ids = new Set(Array.isArray(a.ids) ? a.ids : [a.id]);
+      const ws = sc.walls.filter((x) => ids.has(x.id));
+      if (!ws.length || !a.patch) return;
+      if ('cover' in a.patch && ['full', 'high', 'three', 'half'].includes(a.patch.cover)) for (const w of ws) w.cover = a.patch.cover;
+      // Grupo de objetos da porta (Plano 21)
+      if ('tag' in a.patch) { for (const w of ws) w.tag = String(a.patch.tag || '').slice(0, 40); if (!('cover' in a.patch)) return; }
       sc.wallsV++;
     },
     'wall.clear': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.walls = []; sc.wallsV++; },
@@ -325,6 +362,15 @@
       const sc = sceneOf(s, a.sceneId), w = sc.walls.find((x) => x.id === a.id);
       if (!w || !w.door) return false;
       w.open = !!a.open; sc.wallsV++;
+      if (w.open) w.locked = false; // só o mestre abre porta trancada (permit); aberta, deixa de estar trancada
+    },
+    // Trancar (fecha a porta) ou destrancar. Só o mestre.
+    'wall.lock': (s, a) => {
+      const sc = sceneOf(s, a.sceneId), w = sc.walls.find((x) => x.id === a.id);
+      if (!w || !w.door) return false;
+      w.locked = !!a.locked;
+      if (w.locked) w.open = false;
+      sc.wallsV++;
     },
 
     // Som (o mestre calcula posição e horário; aqui só guarda)
@@ -355,6 +401,67 @@
     'lightpt.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = sc.lights || []; if (a.light && a.light.id) sc.lights.push(a.light); },
     'lightpt.update': (s, a) => { const x = (sceneOf(s, a.sceneId).lights || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
     'lightpt.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = (sc.lights || []).filter((y) => y.id !== a.id); },
+    // Memória de exploração (calculada pelo mestre em js/explore.js)
+    'explore.set': (s, a) => {
+      const sc = sceneOf(s, a.sceneId), d = a.data;
+      if (!a.key || !d || !Number.isFinite(d.w) || !Number.isFinite(d.h) || typeof d.d !== 'string') return false;
+      sc.explored = sc.explored || {};
+      sc.explored[a.key] = { w: d.w, h: d.h, d: d.d };
+    },
+    'explore.clear': (s, a) => { sceneOf(s, a.sceneId).explored = {}; },
+    // Notas do mestre no mapa (só o mestre; não vão para os jogadores — ver Net.playerState)
+    'note.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.notes = sc.notes || []; if (a.note && a.note.id) sc.notes.push(a.note); },
+    'note.update': (s, a) => { const x = (sceneOf(s, a.sceneId).notes || []).find((y) => y.id === a.id); if (!x || !a.patch) return false; Object.assign(x, a.patch); },
+    'note.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.notes = (sc.notes || []).filter((y) => y.id !== a.id); },
+    // Mover várias paredes juntas (seleção múltipla)
+    'wall.shift': (s, a) => {
+      const sc = sceneOf(s, a.sceneId), ids = new Set(a.ids || []), dx = Number(a.dx) || 0, dy = Number(a.dy) || 0;
+      let n = 0;
+      for (const w of sc.walls) if (ids.has(w.id)) { w.x1 += dx; w.x2 += dx; w.y1 += dy; w.y2 += dy; n++; }
+      if (!n) return false;
+      sc.wallsV++;
+    },
+    // Desfazer/refazer do mestre (js/history.js): põe de volta objetos ou campos de objetos da cena
+    'undo.apply': (s, a) => {
+      const sc = sceneOf(s, a.sceneId);
+      for (const op of a.ops || []) {
+        if (op.key === 'fog') { sc.fog = op.whole ? U.clone(op.whole) : { enabled: false, shapes: [], v: 0 }; sc.fog.v = (sc.fog.v || 0) + 1; continue; }
+        if (op.key === 'tokens') {
+          const t = sc.tokens[op.id];
+          if (op.keys) { if (t) for (const [k, v] of Object.entries(op.keys)) { if (v === null) delete t[k]; else t[k] = U.clone(v); } }
+          else if (op.set === null) delete sc.tokens[op.id];
+          else sc.tokens[op.id] = U.clone(op.set);
+          continue;
+        }
+        if (!Array.isArray(sc[op.key])) sc[op.key] = [];
+        const arr = sc[op.key], i = arr.findIndex((x) => x && x.id === op.id);
+        if (op.keys) { if (i >= 0) for (const [k, v] of Object.entries(op.keys)) { if (v === null) delete arr[i][k]; else arr[i][k] = U.clone(v); } }
+        else if (op.set === null) { if (i >= 0) arr.splice(i, 1); }
+        else if (i >= 0) arr[i] = U.clone(op.set);
+        else if (Number.isInteger(op.index) && op.index >= 0 && op.index <= arr.length) arr.splice(op.index, 0, U.clone(op.set));
+        else arr.push(U.clone(op.set));
+      }
+      sc.wallsV = (sc.wallsV || 0) + 1;
+    },
+    // Gatilhos (só o mestre)
+    'trigger.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.triggers = sc.triggers || []; if (a.trigger && a.trigger.id) { for (const x of a.trigger.actions || []) upgradeTrigAction(x); sc.triggers.push(a.trigger); } },
+    'trigger.update': (s, a) => { const x = (sceneOf(s, a.sceneId).triggers || []).find((y) => y.id === a.id); if (!x || !a.patch) return false; for (const y of a.patch.actions || []) upgradeTrigAction(y); Object.assign(x, a.patch); },
+    'trigger.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.triggers = (sc.triggers || []).filter((y) => y.id !== a.id); },
+    // Animação (Plano 21): começa (gravando antes o que parou) e termina (gravando o resultado)
+    'anim.start': (s, a) => {
+      const sc = sceneOf(s, a.sceneId);
+      animCommit(sc, a.commits);
+      const stop = new Set(a.stop || []);
+      sc.anims = (sc.anims || []).filter((e) => !stop.has(e.id)).concat(a.entries || []);
+    },
+    'anim.end': (s, a) => {
+      const sc = sceneOf(s, a.sceneId);
+      const ids = new Set(a.ids || []);
+      const before = (sc.anims || []).length;
+      sc.anims = (sc.anims || []).filter((e) => !ids.has(e.id));
+      if (!animCommit(sc, a.commits) && before === sc.anims.length) return false;
+    },
+    'trigger.rearmAll': (s, a) => { for (const x of sceneOf(s, a.sceneId).triggers || []) { x.used = 0; x.lastAt = 0; } },
     // Níveis: imagens e tokens numa só ordem. dir = front | up | down | back (none = só renumera). Renumera tudo de 0 a n.
     'order.move': (s, a) => {
       const sc = sceneOf(s, a.sceneId);
@@ -456,7 +563,7 @@
     online: [],
     viewSceneId: null,   // cena que o mestre está vendo (pode diferir da ativa)
     listeners: new Set(),
-    newScene, newCampaign, migrate, DEFAULT_CONDITIONS,
+    newScene, newCampaign, migrate, upgradeTrigAction, DEFAULT_CONDITIONS,
 
     isGM() { return this.role !== 'player'; },
     // Mestre vendo a mesa como um jogador ('*' = todos os jogadores, ou o id de um jogador).
@@ -475,6 +582,8 @@
     dispatch(a) {
       a.by = this.me.id;
       if (a.type === 'act.use' && this.isGM()) return this.useAction(a, null);
+      // Clique numa imagem ligada a um gatilho: o mestre (vendo como jogador) resolve na hora
+      if (a.type === 'trigger.click' && this.isGM()) return App.Triggers.click(a, null);
       if (this.isGM()) return this.commit(a);
       if (!this.state) return false;
       // Movimento é aplicado localmente na hora (o mestre corrige se recusar)
@@ -485,11 +594,22 @@
 
     // Mestre: aplica, transmite e salva
     commit(a) {
+      // Movimento de jogador (ou do mestre vendo como jogador): confere os gatilhos antes (um deles pode parar o movimento)
+      let fires = null;
+      if (a.type === 'token.move' && !a.fromTrigger && App.Triggers && this.state && (a.by !== this.me.id || !this.gmView())) {
+        try { fires = App.Triggers.beforeMove(this.state, a); } catch (e) { console.warn(e); }
+      }
+      // Desfazer (Plano 17): guarda o "antes" do que a ação de montagem do mestre vai mexer
+      let hist = null;
+      if (App.History && App.History.wants(a)) { try { hist = App.History.before(this.state, a); } catch (e) { console.warn(e); } }
       try { if (!reduce(this.state, a)) return false; }
       catch (e) { console.warn(e); return false; }
+      if (hist) { try { App.History.after(this.state, a, hist); } catch (e) { console.warn(e); } }
+      if (App.Explore) App.Explore.touch(this.state, a); // memória de exploração: recalcula o que os jogadores veem
       App.Net.broadcast({ t: 'action', a });
       this.emit(a.type);
       App.Storage.autosave();
+      if (fires) App.Triggers.afterMove(fires);
       return true;
     },
 
@@ -498,6 +618,7 @@
       if (!a || typeof a.type !== 'string') return;
       a.by = pid;
       if (a.type === 'act.use') { this.useAction(a, pid); return; }
+      if (a.type === 'trigger.click') { try { App.Triggers.click(a, pid); } catch (e) { console.warn(e); } return; }
       let ok = false;
       try { ok = permit(this.state, a, pid); } catch (e) { console.warn(e); }
       if (!ok || !this.commit(a)) App.Net.sendStateTo(pid);
@@ -598,14 +719,17 @@
         else U.toast(text, 'error');
         return false;
       };
-      const actor = st.actors[a.actorId];
-      if (!actor) return fail('Ficha não encontrada.');
-      const act = (actor.actions || [])[a.index];
+      // Armadilha de um gatilho (a.trap): ação sem ficha nem token de origem, só o mestre dispara
+      const trap = a.trap && !pid ? a.trap : null;
+      if (a.trap && pid) return fail('Ação não encontrada.');
+      const actor = trap ? null : st.actors[a.actorId];
+      if (!trap && !actor) return fail('Ficha não encontrada.');
+      const act = trap || (actor.actions || [])[a.index];
       if (!act) return fail('Ação não encontrada.');
       if (pid && !this.ownsActor(actor, pid)) return fail('Essa ficha não é sua.');
       const sc = st.scenes[a.sceneId];
       if (!sc) return fail('Cena não encontrada.');
-      const src = a.attackerId ? sc.tokens[a.attackerId] : null;
+      const src = !trap && a.attackerId ? sc.tokens[a.attackerId] : null;
       if (src && src.actorId !== actor.id) return fail('Token de origem inválido.');
       if (pid && rules.actOnTurn && src && st.combat.active) {
         const idx = st.combat.entries.findIndex((e) => e.tokenId === src.id);
@@ -633,7 +757,7 @@
       }
       if (!targets.length) return fail(area > 0 ? 'Ninguém dentro da área.' : 'Escolha pelo menos um alvo.');
 
-      const vars = this.vars(actor, src);
+      const vars = actor ? this.vars(actor, src) : {};
       const findBar = (bars, name) => {
         if (!name) return bars.length ? 0 : -1;
         const k = U.slug(name);
@@ -642,7 +766,7 @@
       const pick = (r) => ({ formula: r.formula, total: r.total, detail: r.detail });
       const applied = [];
       const msg = { id: U.uid('m_'), ts: Date.now(), kind: 'action', mode, sceneId: sc.id,
-        from: src ? src.name : actor.name, fromMasked: !!(src && src.masked), srcId: src ? src.id : null, point: area > 0 ? point : null, area: area > 0 ? area : 0,
+        from: src ? src.name : trap ? act.name || 'Armadilha' : actor.name, trap: !!trap, fromMasked: !!(src && src.masked), srcId: src ? src.id : null, point: area > 0 ? point : null, area: area > 0 ? area : 0,
         playerId: pid || this.me.id, label: act.name, targets: [], applied };
 
       // Aplica a mudança na barra do alvo e registra (para poder desfazer)
@@ -673,7 +797,7 @@
       try {
         // Custo (ex.: 3 de Mana) — verifica antes de rolar qualquer coisa
         let costCh = null;
-        if (Number(act.cost) > 0 && act.costBar) {
+        if (!trap && Number(act.cost) > 0 && act.costBar) {
           const bars = src ? this.barsOf(src) : actor.bars;
           const bi = findBar(bars, act.costBar);
           if (bi < 0) return fail(`${actor.name} não tem a barra "${act.costBar}".`);
@@ -772,7 +896,13 @@
     switch (a.type) {
       case 'token.move': {
         const t = tokenOk(a.sceneId, a.id);
-        return !!t && S.canMoveNow(t, pid) && Number.isFinite(a.x) && Number.isFinite(a.y);
+        if (!t || !S.canMoveNow(t, pid) || !Number.isFinite(a.x) || !Number.isFinite(a.y)) return false;
+        // O caminho não pode atravessar parede que tapa a visão de quem anda (da posição atual, pelos pontos, até o destino)
+        const sc = s.scenes[a.sceneId], hs = (t.size || 1) * sc.grid / 2, L = App.Light;
+        if (!L || !L.moveBlocked) return true;
+        const pts = [[t.x, t.y]].concat(Array.isArray(a.path) ? a.path.slice(0, 64) : [], [[a.x, a.y]]).map((p) => ({ x: (Number(p[0]) || 0) + hs, y: (Number(p[1]) || 0) + hs }));
+        for (let i = 1; i < pts.length; i++) if (L.moveBlocked(sc, pts[i - 1], pts[i], L.eyeOf(t))) return false;
+        return true;
       }
       case 'token.update': {
         const t = tokenOk(a.sceneId, a.id);
@@ -807,9 +937,9 @@
         return !d || d.by === pid;
       }
       case 'wall.door': {
-        // Jogadores podem abrir e fechar portas (não paredes)
+        // Jogadores podem abrir e fechar portas (não paredes), menos as trancadas
         const sc = s.scenes[a.sceneId], w = sc && sc.walls.find((x) => x.id === a.id);
-        return !!w && !!w.door;
+        return !!w && !!w.door && !w.locked;
       }
       case 'combat.next': {
         const c = s.combat, e = c.entries[c.turn];

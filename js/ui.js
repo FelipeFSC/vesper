@@ -36,10 +36,12 @@
     { sep: true, gm: true, edit: true },
     { id: 'fog-reveal', icon: 'sun', title: 'Névoa: revelar área (F)', gm: true, edit: true },
     { id: 'fog-hide', icon: 'cloud-fog', title: 'Névoa: esconder área (G)', gm: true, edit: true },
-    { id: 'wall', icon: 'brick-wall', title: 'Parede (W): absoluta, total, três quartos ou meia\nArraste de um canto do grid a outro', gm: true, edit: true },
+    { id: 'wall', icon: 'brick-wall', title: 'Parede (W): absoluta, total, três quartos ou meia\nReta (de um canto do grid a outro) ou Lápis (à mão livre)', gm: true, edit: true },
     { id: 'door', icon: 'door-closed', title: 'Porta (O): parede que abre e fecha\nClique no marcador dourado para abrir', gm: true, edit: true },
     { id: 'light', icon: 'lightbulb', title: 'Luz (U): pontos de luz e de escuridão no mapa\nCírculo, cone ou área, com cor', gm: true, edit: true },
     { id: 'prop', icon: 'image', title: 'Imagem (I): coloque imagens soltas no mapa\nArraste arquivos do computador para o mapa ou use a biblioteca', gm: true, edit: true },
+    { id: 'note', icon: 'file-text', title: 'Nota (N): alfinete com anotações só suas (os jogadores nunca veem)\nClique no mapa para criar; clique no alfinete para abrir', gm: true, edit: true },
+    { id: 'trigger', icon: 'zap', title: 'Gatilho (T): o mapa reage quando alguém entra, sai ou clica numa imagem\nPortas, luzes, tokens, sons, armadilhas, névoa, teletransporte', gm: true, edit: true },
     { id: 'room', icon: 'music', title: 'Sala de som (M): área à prova de som, com música própria\nArraste um retângulo (ou clique nos cantos no modo polígono)', gm: true, edit: true },
   ];
   const DOCK = [
@@ -102,6 +104,7 @@
     $('#props-slot').prepend(h('div', { id: 'props-empty', class: 'empty-state' },
       h('div', { class: 'bubble' }, ic('mouse-pointer-2')), h('b', {}, 'Nada selecionado'),
       h('p', {}, 'Selecione um token no mapa para ver barras, condições e ações.')));
+    applyCollapsed();
     UI.setMode(UI.mode, true);
   }
 
@@ -113,14 +116,42 @@
     b.innerHTML = '';
     if (mode === 'edit') { b.className = 'btn primary'; b.append(ic('play'), 'Apresentar'); b.title = 'Esconde os painéis e mostra só a mesa de jogo'; }
     else { b.className = 'btn'; b.append(ic('pen-line'), S().gmView() ? 'Editar' : 'Painéis'); b.title = 'Mostra os painéis laterais (fichas, propriedades)'; }
-    const hud = $('#token-hud');
-    hud.classList.toggle('floating', mode === 'play');
-    if (mode === 'play') $('#board-wrap').append(hud); else $('#props-slot').append(hud);
-    hud._sig = null;
+    placeHud();
     if (mode === 'play' && ['path', 'line', 'rect', 'ellipse', 'erase', 'fog-reveal', 'fog-hide'].includes(App.Board.tool)) App.Board.tool = 'select';
     toolbarKey = null;
     if (!silent) { UI.refresh(); setTimeout(() => { App.Board.resize(); App.Board.fit(); }, 0); }
   };
+
+  // ---------- Barras laterais recolhidas (Plano 15) ----------
+  // Recolhida, a barra vira uma faixa fina com ícones. O navegador lembra (só nesta máquina).
+  UI.collapsed = { left: false, right: false };
+  try { Object.assign(UI.collapsed, JSON.parse(localStorage.getItem('vesper.paineis') || '{}')); } catch { /* sem armazenamento */ }
+  // Painel do token flutua sobre o mapa no modo Apresentar e quando a barra da direita está recolhida
+  function hudFloats() { return UI.mode === 'play' || !!UI.collapsed.right; }
+  function placeHud() {
+    const hud = $('#token-hud');
+    if (!hud) return;
+    const fl = hudFloats();
+    hud.classList.toggle('floating', fl);
+    if (fl) $('#board-wrap').append(hud); else $('#props-slot').append(hud);
+    hud._sig = null;
+  }
+  UI.setCollapsed = function (side, v) {
+    UI.collapsed[side] = !!v;
+    try { localStorage.setItem('vesper.paineis', JSON.stringify(UI.collapsed)); } catch { /* sem armazenamento */ }
+    applyCollapsed();
+    placeHud();
+    for (const sel of ['#left-tabs', '#right-tabs']) { const e = $(sel); if (e) e._sig = null; }
+    UI.refresh();
+    setTimeout(() => { App.Board.resize(); UI.fitToolOpts(); }, 0);
+  };
+  function applyCollapsed() {
+    const app = $('#app');
+    if (!app) return;
+    app.classList.toggle('left-min', !!UI.collapsed.left);
+    app.classList.toggle('right-min', !!UI.collapsed.right);
+  }
+  UI.applyCollapsed = applyCollapsed;
 
   // Mestre vendo a mesa exatamente como um jogador (null = voltar a ser mestre)
   UI.setViewAs = function (pid) {
@@ -330,14 +361,16 @@
   function renderToolOpts() {
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
-    if (!t || !(t.draw || t.id === 'wall' || t.id === 'room' || t.id === 'prop' || t.id === 'light') || UI.mode !== 'edit') { box.hidden = true; return; }
+    if (!t || !(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'room' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'note') || UI.mode !== 'edit') { box.hidden = true; return; }
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
     fitToolOpts(box);
     const rsc = S().currentScene();
-    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom
-      + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled);
+    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.wallMode + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom
+      + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled) + B.doorLocked + B.trigShape + B.selectedTrigger
+      + JSON.stringify(((rsc && rsc.triggers) || []).map((x) => [x.id, x.name, App.Triggers.stateLabel(x)]))
+      + B.noteColor + JSON.stringify(((rsc && rsc.notes) || []).map((n) => [n.id, n.title, n.color])) + B.selectedNote;
     box.hidden = false;
     if (box._sig === sig) return;
     box._sig = sig;
@@ -361,8 +394,56 @@
         })) : h('p', { class: 'hint', style: { margin: 0 } }, 'As imagens que você colocar aparecem aqui para usar de novo em qualquer cena.'));
       return;
     }
+    if (t.id === 'note') {
+      const notes = (rsc && rsc.notes) || [];
+      const listBox = h('div', { class: 'note-list' });
+      const fill = (q) => {
+        listBox.innerHTML = '';
+        const k = U.slug(q || '');
+        const shown = notes.filter((n) => !k || U.slug(n.title + ' ' + n.text).includes(k));
+        if (!shown.length) { listBox.append(h('p', { class: 'hint', style: { margin: 0 } }, notes.length ? 'Nada encontrado.' : 'Nenhuma nota ainda.')); return; }
+        for (const n of shown) listBox.append(h('button', { class: 'note-item' + (B.selectedNote === n.id ? ' on' : ''), title: 'Centraliza no mapa e abre', onclick: () => { B.centerOn(n.x, n.y); UI.openNote(rsc.id, n.id); } },
+          h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[n.color] || B.NOTE_COLORS.gold } }), h('span', { class: 'grow' }, h('b', {}, n.title || 'Nota'), n.text ? h('small', {}, String(n.text).split('\n')[0].slice(0, 60)) : '')));
+      };
+      const search = h('input', { type: 'search', placeholder: 'Buscar nas notas…', oninput: (e) => fill(e.target.value) });
+      fill('');
+      box.append(h('span', { class: 'eyebrow' }, 'Cor das novas notas'),
+        h('div', { class: 'seg note-colors' }, [['gold', 'Sala'], ['red', 'Perigo'], ['green', 'Tesouro'], ['blue', 'NPC']].map(([k, l]) =>
+          h('button', { class: B.noteColor === k ? 'on' : '', onclick: () => { B.noteColor = k; redo(); } }, h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[k] } }), l))),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique no mapa para espetar uma nota. Só você vê; os jogadores nem recebem o texto.'),
+        h('span', { class: 'eyebrow' }, 'Notas desta cena'), search, listBox);
+      return;
+    }
+    if (t.id === 'trigger') {
+      const list = (rsc && rsc.triggers) || [], TG = App.Triggers;
+      const hint = { rect: 'Clique num quadrado (placa de pressão) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
+        poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
+      box.append(h('span', { class: 'eyebrow' }, 'Área do gatilho'),
+        h('div', { class: 'seg' }, [['rect', 'Retângulo'], ['circle', 'Círculo'], ['poly', 'Polígono']].map(([k, l]) =>
+          h('button', { class: B.trigShape === k ? 'on' : '', onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }, l))),
+        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Clicar no marcador abre a configuração. Os jogadores nunca veem a área.'),
+        h('span', { class: 'eyebrow' }, 'Gatilhos da cena'),
+        list.length ? h('div', { class: 'trig-list' }, list.map((x) => {
+          const stl = TG.stateLabel(x), on = x.enabled !== false;
+          return h('div', { class: 'trig-row' + (B.selectedTrigger === x.id ? ' on' : '') },
+            h('span', { class: 'tr-dot ' + trigStateClass(stl), title: stl }),
+            h('button', { class: 'tr-name', title: 'Configurar', onclick: () => { UI.openTrigger(rsc.id, x.id); redo(); } }, x.name || 'Gatilho'),
+            iconBtn(on ? 'eye' : 'eye-off', on ? 'Ligado (clique para desligar)' : 'Desligado (clique para ligar)', () => S().dispatch({ type: 'trigger.update', sceneId: rsc.id, id: x.id, patch: { enabled: !on } })),
+            iconBtn('play', 'Testar (simula no mapa)', () => TG.simulate(rsc.id, x.id), { class: 'icon-btn tr-test' }));
+        })) : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhum ainda.'),
+        list.length ? h('button', { class: 'btn primary small block', title: 'Volta todos a Pronto (para testar de novo)', onclick: () => { S().dispatch({ type: 'trigger.rearmAll', sceneId: rsc.id }); U.toast('Todos os gatilhos rearmados.'); } }, ic('refresh-cw'), 'Rearmar todos') : '');
+      return;
+    }
+    if (t.id === 'door') {
+      box.append(h('span', { class: 'eyebrow' }, 'Novas portas'),
+        h('div', { class: 'seg vis-seg' },
+          h('button', { class: B.doorLocked ? '' : 'on', onclick: () => { B.doorLocked = false; redo(); } }, ic('lock-open'), 'Destrancada'),
+          h('button', { class: B.doorLocked ? 'on' : '', onclick: () => { B.doorLocked = true; redo(); } }, ic('lock'), 'Trancada')),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Arraste de um canto do grid a outro. Clique no marcador para abrir ou fechar; Shift + clique tranca ou destranca. Porta destrancada deixa passar mesmo fechada; a trancada, ninguém abre nem passa (só você). O cadeado só você vê.'));
+      return;
+    }
     if (t.id === 'light') {
-      const pick = (k, v) => { B[k] = v; if (k !== 'lightKind') B.lightPoly = null; redo(); App.Board.requestRender(); };
+      const pick =(k, v) => { B[k] = v; if (k !== 'lightKind') B.lightPoly = null; redo(); App.Board.requestRender(); };
       const shapeHint = { circle: 'Clique para pôr uma luz, ou arraste para escolher o alcance.', cone: 'Clique na origem e arraste para a direção e o alcance.',
         area: 'Clique em cada canto da área. Feche clicando no primeiro ponto, com dois cliques ou Enter. Backspace desfaz o último ponto e Esc cancela.' };
       box.append(h('span', { class: 'eyebrow' }, 'Tipo'),
@@ -399,10 +480,17 @@
       // Tipo de parede: vale para as próximas; clicar numa parede pronta aplica o tipo nela
       const sc = S().currentScene(), cfg = App.Combat.coverCfg(sc);
       const info = { full: 'casa com telhado · nunca deixa ver', high: `${fmtM(cfg.heights.high)} · tapa a luz e quem é mais baixo`, three: `${fmtM(cfg.heights.three)} · altura do ombro`, half: `${fmtM(cfg.heights.half)} · altura da cintura` };
-      box.append(h('span', { class: 'eyebrow' }, 'Tipo de parede'),
+      box.append(h('span', { class: 'eyebrow' }, 'Desenhar'),
+        h('div', { class: 'seg vis-seg' },
+          h('button', { class: B.wallMode === 'pencil' ? '' : 'on', title: 'Arraste de um canto do grid a outro', onclick: () => { B.wallMode = 'line'; redo(); } }, ic('slash'), 'Reta'),
+          h('button', { class: B.wallMode === 'pencil' ? 'on' : '', title: 'Desenhe à mão livre: muros curvos, cavernas, rochas', onclick: () => { B.wallMode = 'pencil'; redo(); } }, ic('pencil'), 'Lápis')),
+        B.wallMode === 'pencil' ? h('p', { class: 'hint', style: { margin: 0 } }, 'Segure e desenhe a parede à mão livre. Terminando perto de onde começou, o contorno se fecha. A borracha apaga o traço inteiro.') : '',
+        h('span', { class: 'eyebrow' }, 'Tipo de parede'),
         h('div', { class: 'wall-types' }, App.Combat.COVER_TYPES.map(([k, label]) => h('button', { class: 'wall-type' + (B.wallType === k ? ' on' : ''), onclick: () => { B.wallType = k; redo(); } },
           h('i', { class: 'wt-line wt-' + k }), h('span', {}, h('b', {}, label), h('small', {}, info[k]))))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura.'));
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura.'),
+        h('span', { class: 'eyebrow' }, 'Ajuda'),
+        btnI('scan', 'Procurar paredes no mapa', { class: 'btn primary block', title: 'O sistema lê a imagem do mapa e sugere paredes e portas; você confere e cria', onclick: () => UI.openScan() }));
       return;
     }
     box.append(h('span', { class: 'eyebrow' }, 'Cor'),
@@ -433,13 +521,26 @@
     if (box._sig === sig) return;
     box._sig = sig;
     box.innerHTML = '';
+    if (gm && sc) box.append(h('div', { class: 'undo-btns' },
+      iconBtn('undo-2', 'Desfazer (Ctrl+Z)', () => App.History.undoLast(), { id: 'btn-undo' }),
+      iconBtn('redo-2', 'Refazer (Ctrl+Y)', () => App.History.redoLast(), { id: 'btn-redo' })));
     if (gm && sc) box.append(btnI('image', 'Trocar mapa', { title: 'Enviar imagem de mapa e configurar a cena', onclick: () => sceneSettings(S().currentScene().id) }));
     box.append(btnI('grid-3x3', B.style.snap ? 'Encaixe ativo' : 'Encaixe desligado', {
       class: 'btn' + (B.style.snap ? ' on' : ''), title: 'Encaixar tokens e desenhos no grid (segure Alt ao soltar para ignorar)',
       onclick: () => { B.style.snap = !B.style.snap; box._sig = null; renderBoardActions(); },
     }));
     requestAnimationFrame(placeZoom);
+    UI.renderUndo();
   }
+  // Botões ↶ ↷: apagados quando não há o que desfazer/refazer; o título diz o quê
+  UI.renderUndo = function () {
+    const H = App.History, u = $('#btn-undo'), r = $('#btn-redo');
+    if (!H || !u || !r) return;
+    const lu = H.undo[H.undo.length - 1], lr = H.redo[H.redo.length - 1];
+    u.disabled = !lu; r.disabled = !lr;
+    u.title = lu ? 'Desfazer: ' + lu.label + ' (Ctrl+Z)' : 'Nada para desfazer';
+    r.title = lr ? 'Refazer: ' + lr.label + ' (Ctrl+Y)' : 'Nada para refazer';
+  };
 
   // =============== Faixa de iniciativa ===============
   function renderInitStrip() {
@@ -484,12 +585,22 @@
     if (!gm && UI.leftTab === 'scenes') UI.leftTab = 'actors';
     const list = [{ id: 'actors', icon: 'users', label: 'Fichas' }];
     if (gm) list.push({ id: 'scenes', icon: 'map', label: 'Cenas' });
-    const sig = gm + UI.leftTab;
+    const min = !!UI.collapsed.left, sig = gm + UI.leftTab + min;
     if (tabs._sig !== sig) {
       tabs._sig = sig;
       tabs.innerHTML = '';
-      for (const t of list) tabs.append(h('button', { class: 'side-tab' + (UI.leftTab === t.id ? ' on' : ''), onclick: () => { UI.leftTab = t.id; renderLeft(); } }, ic(t.icon), t.label));
+      tabs.classList.toggle('rail', min);
+      if (min) {
+        // Faixa fina: abrir, e cada aba abre a barra já nela
+        tabs.append(h('button', { class: 'rail-btn', title: 'Abrir a barra', onclick: () => UI.setCollapsed('left', false) }, ic('panel-left-open')));
+        for (const t of list) tabs.append(h('button', { class: 'rail-btn' + (UI.leftTab === t.id ? ' on' : ''), title: t.label, onclick: () => { UI.leftTab = t.id; UI.setCollapsed('left', false); } }, ic(t.icon)));
+        tabs.append(h('button', { class: 'rail-btn', title: gm ? 'Importar campanha, cena ou ficha' : 'Importar ficha', onclick: () => UI.importDialog() }, ic('upload')));
+      } else {
+        for (const t of list) tabs.append(h('button', { class: 'side-tab' + (UI.leftTab === t.id ? ' on' : ''), onclick: () => { UI.leftTab = t.id; renderLeft(); } }, ic(t.icon), t.label));
+        tabs.append(h('button', { class: 'side-min', title: 'Recolher a barra (mais espaço para o mapa)', onclick: () => UI.setCollapsed('left', true) }, ic('panel-left-close')));
+      }
     }
+    if (min) return;
     if (UI.leftTab === 'scenes') renderScenes(); else renderActors();
   }
 
@@ -609,6 +720,15 @@
       body._sig = sig; body._tab = 'scenes';
       body.innerHTML = '';
       body.append(h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Cenas da campanha'),
+        iconBtn('upload', 'Importar mapa com paredes (.dd2vtt / .uvtt do Dungeondraft, Dungeon Alchemist…)', async () => {
+          const f = await U.pickFile('.dd2vtt,.uvtt,.df2vtt,.json');
+          if (!f) return;
+          try {
+            const r = await App.Scan.importUVTT(f);
+            S().viewSceneId = r.scene.id; S().emit('local');
+            U.toast('Mapa importado: ' + r.walls + ' paredes, ' + r.doors + ' portas, ' + r.lights + ' luzes.', 'info', 4500);
+          } catch (e) { U.toast(e.message, 'error', 5000); }
+        }),
         iconBtn('plus', 'Nova cena', () => {
           const sc = S().newScene('Cena ' + (st.sceneOrder.length + 1));
           S().dispatch({ type: 'scene.add', scene: sc });
@@ -685,14 +805,21 @@
 
   // =============== Lateral direita: propriedades e camadas ===============
   function renderRight() {
-    const tabs = $('#right-tabs');
-    if (tabs._sig !== UI.rightTab) {
-      tabs._sig = UI.rightTab;
+    const tabs = $('#right-tabs'), min = !!UI.collapsed.right, sig = UI.rightTab + min;
+    const list = [{ id: 'props', icon: 'sliders-horizontal', label: 'Propriedades' }, { id: 'layers', icon: 'layers', label: 'Camadas' }];
+    if (tabs._sig !== sig) {
+      tabs._sig = sig;
       tabs.innerHTML = '';
-      for (const t of [{ id: 'props', icon: 'sliders-horizontal', label: 'Propriedades' }, { id: 'layers', icon: 'layers', label: 'Camadas' }]) {
-        tabs.append(h('button', { class: 'side-tab' + (UI.rightTab === t.id ? ' on' : ''), onclick: () => { UI.rightTab = t.id; renderRight(); } }, ic(t.icon), t.label));
+      tabs.classList.toggle('rail', min);
+      if (min) {
+        tabs.append(h('button', { class: 'rail-btn', title: 'Abrir a barra', onclick: () => UI.setCollapsed('right', false) }, ic('panel-right-open')));
+        for (const t of list) tabs.append(h('button', { class: 'rail-btn', title: t.label, onclick: () => { UI.rightTab = t.id; UI.setCollapsed('right', false); } }, ic(t.icon)));
+      } else {
+        tabs.append(h('button', { class: 'side-min', title: 'Recolher a barra (o painel do que estiver selecionado passa a flutuar no mapa)', onclick: () => UI.setCollapsed('right', true) }, ic('panel-right-close')));
+        for (const t of list) tabs.append(h('button', { class: 'side-tab' + (UI.rightTab === t.id ? ' on' : ''), onclick: () => { UI.rightTab = t.id; renderRight(); } }, ic(t.icon), t.label));
       }
     }
+    if (min) return;
     $('#props-slot').hidden = UI.rightTab !== 'props';
     renderLayers();
   }
@@ -701,7 +828,7 @@
     const box = $('#layers'), sc = S().currentScene(), gm = S().gmView(), L = App.Board.layers;
     if (!sc) { box.innerHTML = ''; return; }
     const sig = JSON.stringify([L, gm, Object.keys(sc.tokens).length, sc.drawings.length, sc.fog.enabled, sc.fog.shapes.length, !!sc.bg, UI.rightTab,
-      sc.light, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, (sc.props || []).length, (sc.lights || []).length, S().viewAs,
+      sc.light, (S().state.rules || {}).exploreMode, (sc.walls || []).length, (sc.sounds || []).length, (sc.rooms || []).length, (sc.props || []).length, (sc.lights || []).length, (sc.triggers || []).length, (sc.notes || []).length, S().viewAs,
       sc.groups, Object.values(sc.tokens).map((t) => [t.group, t.hidden, t.masked]), App.Board.selected]);
     if (box._sig === sig) return;
     box._sig = sig;
@@ -722,6 +849,8 @@
     if (gm) box.append(row('rooms', 'music', 'Salas de som', (sc.rooms || []).length));
     box.append(row('props', 'image', 'Imagens', (sc.props || []).filter((p) => gm || !p.hidden).length));
     if (gm) box.append(row('lights', 'lightbulb', 'Pontos de luz (marcadores)', (sc.lights || []).length));
+    if (gm) box.append(row('triggers', 'zap', 'Gatilhos', (sc.triggers || []).length));
+    if (gm) box.append(row('notes', 'file-text', 'Notas (só você)', (sc.notes || []).length));
     if (gm && sc.light.enabled) box.append(row('light', 'moon', 'Escuridão', sc.light.global ? 'dia' : 'noite'));
     if (UI.rightTab === 'layers') box.append(h('p', { class: 'hint' }, 'Esconder uma camada vale só para a sua tela: os outros continuam vendo.'));
     if (gm) box.append(groupsSection(sc));
@@ -743,6 +872,13 @@
           h('button', { class: li.global ? '' : 'on', title: 'Só se vê o que alguma luz ilumina', onclick: () => setLight({ global: false }) }, ic('moon'), 'Escuro')),
         h('button', { class: 'btn small block', id: 'btn-preview', title: 'Mostra a mesa exatamente como os jogadores veem e ouvem', onclick: () => UI.setViewAs('*') },
           ic('scan-eye'), 'Ver como os jogadores'),
+        // Memória de exploração (Plano 19): o que já foi visto fica escurecido no mapa dos jogadores
+        h('label', { class: 'switch-row', title: 'O que os jogadores já viram continua no mapa deles, escurecido e sem criaturas. O nunca visto fica preto.' },
+          ic('map'), h('span', { class: 'grow' }, 'Memória de exploração'),
+          h('input', { type: 'checkbox', id: 'explore-on', checked: !!li.explore, onchange: (e) => { setLight({ explore: e.target.checked }); if (e.target.checked) setTimeout(() => App.Explore.recompute(sc.id), 50); } })),
+        li.explore ? h('div', { class: 'row' },
+          h('span', { class: 'muted small-text grow' }, (S().state.rules || {}).exploreMode === 'player' ? 'De cada jogador (Mesa → Regras)' : 'Do grupo (Mesa → Regras)'),
+          btnI('refresh-cw', 'Esquecer o explorado', { class: 'btn small', title: 'Recomeça: tudo volta a ficar preto para os jogadores', onclick: () => { if (confirm('Esquecer tudo o que os jogadores já exploraram nesta cena?')) { S().dispatch({ type: 'explore.clear', sceneId: sc.id }); setTimeout(() => App.Explore.recompute(sc.id), 50); } } })) : '',
         h('div', { class: 'row' },
           btnI('brick-wall', 'Paredes dos desenhos', { class: 'btn small grow', title: 'Transforma linhas, retângulos e círculos desenhados em paredes', onclick: () => {
             const walls = App.Light.wallsFromDrawings(sc);
@@ -1291,12 +1427,107 @@
   UI.closeWindow = function (id) {
     const w = UI.windows.get(id);
     if (w) { w.el.remove(); UI.windows.delete(id); }
+    if (String(id).startsWith('trigger:')) { UI.trigHover = null; UI.trigEdit = null; if (App.Board) App.Board.requestRender(); }
+    if (id === 'scan' && App.Board) { App.Board.scan = null; App.Board.requestRender(); }
   };
+
+  // =============== Scan de paredes e portas (Plano 22) ===============
+  UI.scanOpts = null;
+  UI.openScan = function () {
+    const sc = S().currentScene();
+    if (!sc || !S().gmView()) return;
+    if (!sc.bg) { U.toast('Esta cena ainda não tem imagem de mapa. Troque o mapa primeiro.'); return; }
+    if (!UI.scanOpts || UI.scanOpts.sceneId !== sc.id) UI.scanOpts = { sceneId: sc.id, by: 'outside', seeds: [], sens: 0.5, mode: 'straight', region: null, tpls: [], doorThr: 0.86, gaps: false };
+    const B = App.Board;
+    B.scan = B.scan && B.scan.sceneId === sc.id ? B.scan : { sceneId: sc.id, walls: [], doors: [], busy: false };
+    UI.openWindow('scan', 'Procurar paredes no mapa', (win) => buildScanWin(win), { w: 360, icon: 'scan' });
+    UI.runScan();
+  };
+  let scanTimer = null, scanSeq = 0;
+  UI.runScan = function (now) {
+    clearTimeout(scanTimer);
+    const go = async () => {
+      const o = UI.scanOpts, B = App.Board, sc = o && S().state.scenes[o.sceneId];
+      if (!sc || !B.scan) return;
+      const my = ++scanSeq;
+      B.scan.busy = true; UI.refreshScan();
+      try {
+        const res = await App.Scan.run(sc, o);
+        if (my !== scanSeq || !B.scan) return;
+        Object.assign(B.scan, { walls: res.walls, doors: res.doors, need: !!res.need, error: null, doorWarn: res.doorWarn || null });
+      } catch (e) { if (B.scan) B.scan.error = e.message; }
+      if (B.scan) B.scan.busy = false;
+      UI.refreshScan(); B.requestRender();
+    };
+    if (now) go(); else scanTimer = setTimeout(go, 250);
+  };
+  UI.refreshScan = () => { const w = UI.windows.get('scan'); if (w) { w._sig = null; renderWindow(w); } };
+  function buildScanWin(win) {
+    const o = UI.scanOpts, B = App.Board, sc = o && S().state.scenes[o.sceneId], R = B.scan;
+    if (!sc || !R || !S().gmView()) return false;
+    const sig = JSON.stringify([o, R.walls.length, R.doors.length, R.walls.filter((s) => s.off).length, R.doors.filter((s) => s.off).length, R.busy, R.error, R.need, R.doorWarn]);
+    if (win._sig === sig) return null;
+    win._sig = sig;
+    win.el.classList.add('scan-win');
+    const set = (patch, run = true) => { Object.assign(o, patch); UI.refreshScan(); if (run) UI.runScan(); };
+    const hide = (fn) => { win.el.style.display = 'none'; fn(() => { win.el.style.display = ''; }); };
+    const P = App.Scan.cache;
+    const swatch = (p) => h('i', { class: 'scan-dot', style: { background: P ? App.Scan.colorAt(P, p) : '#888' } });
+    const pickSeeds = () => hide((back) => {
+      pickBar(o.by === 'wall' ? 'Clique num pedaço de parede da imagem (pode clicar em mais de uma cor). Enter ou Concluir termina.' : 'Clique no vazio de fora das salas (pode clicar em mais de um lugar). Enter ou Concluir termina.');
+      B.pick('point', (p) => { o.seeds = o.seeds.concat([{ x: Math.round(p.x), y: Math.round(p.y) }]); UI.runScan(true); }, () => { pickBar(null); back(); UI.refreshScan(); }, { multi: true, raw: true });
+    });
+    const W = R.walls.filter((s) => !s.off).length, Dn = R.doors.filter((s) => !s.off).length;
+    const status = R.error ? h('div', { class: 'warn-box' }, R.error)
+      : R.need ? h('p', { class: 'hint scan-status' }, o.by === 'wall' ? 'Clique numa parede da imagem para começar.' : 'Clique no vazio de fora das salas para começar.')
+        : h('p', { class: 'scan-status' }, R.busy ? 'Procurando…' : W + (W === 1 ? ' parede' : ' paredes') + ' · ' + Dn + (Dn === 1 ? ' porta' : ' portas') + ' sugeridas'
+          + ((R.walls.length - W) + (R.doors.length - Dn) ? ' (' + ((R.walls.length - W) + (R.doors.length - Dn)) + ' tiradas)' : ''));
+    const BY = { outside: 'Clique no vazio de fora das salas: a borda das salas vira parede. Bom para mapas em que as salas ficam "soltas" num fundo.',
+      wall: 'Clique na cor das paredes desenhadas: o meio da linha vira parede. Bom para mapas com paredes pretas ou de pedra.',
+      dark: 'Sem clique: o que for bem escuro vira parede. Bom para mapas simples em preto e branco.' };
+    return h('div', { class: 'scan' },
+      h('p', { class: 'hint', style: { margin: 0 } }, 'As sugestões aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta); Shift + arrastar tira várias. Depois ajuste com o lápis e a borracha.'),
+      h('span', { class: 'eyebrow' }, '1. O que separa as salas'),
+      h('div', { class: 'seg scan-by' }, [['outside', 'Lado de fora'], ['wall', 'Cor da parede'], ['dark', 'Escuro']].map(([k, l]) =>
+        h('button', { class: o.by === k ? 'on' : '', onclick: () => set({ by: k, seeds: k === o.by ? o.seeds : [] }) }, l))),
+      h('p', { class: 'hint', style: { margin: 0 } }, BY[o.by]),
+      o.by !== 'dark' ? h('div', { class: 'row' }, h('div', { class: 'grow scan-seeds' }, o.seeds.length ? o.seeds.map(swatch) : h('span', { class: 'ta-target none' }, 'Nenhum clique ainda')),
+        btnI('map-pin', o.seeds.length ? 'Mais' : 'Clicar no mapa', { class: 'btn small primary', onclick: pickSeeds }),
+        o.seeds.length ? iconBtn('x', 'Limpar os cliques', () => set({ seeds: [] })) : '') : '',
+      h('div', { class: 'snd-row' }, h('span', {}, 'Sensibilidade'), h('span', {}, Math.round(o.sens * 100) + '%')),
+      h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.sens, onchange: (e) => set({ sens: Number(e.target.value) }) }),
+      h('span', { class: 'eyebrow' }, '2. Paredes'),
+      h('div', { class: 'seg' }, [['straight', 'Retas (grid e 45°)'], ['free', 'Livre (cavernas)']].map(([k, l]) => h('button', { class: o.mode === k ? 'on' : '', onclick: () => set({ mode: k }) }, l))),
+      h('span', { class: 'eyebrow' }, '3. Onde'),
+      h('div', { class: 'row' }, h('div', { class: 'seg grow' },
+        h('button', { class: o.region ? '' : 'on', onclick: () => set({ region: null }) }, 'Mapa inteiro'),
+        h('button', { class: o.region ? 'on' : '', onclick: () => hide((back) => B.dragRect('Arraste o retângulo onde procurar. Esc cancela.', (a, b) => set({ region: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) } }), back, '#5fd0c4')) }, o.region ? 'Só a área (trocar)' : 'Só uma área'))),
+      h('span', { class: 'eyebrow' }, '4. Portas'),
+      h('div', { class: 'row' }, h('div', { class: 'grow chips' }, o.tpls.map((t, i) => h('span', { class: 'chip', title: 'Clique para tirar este exemplo', onclick: () => set({ tpls: o.tpls.filter((_, j) => j !== i) }) }, 'Exemplo ' + (i + 1), ic('x')))),
+        btnI('door-closed', o.tpls.length ? 'Outra porta' : 'Mostrar uma porta', { class: 'btn small', title: 'Arraste um retângulo em volta de uma porta da imagem: o sistema procura as parecidas (giradas também)', onclick: () => hide((back) => B.dragRect('Arraste um retângulo bem justo em volta de uma porta da imagem. Esc cancela.', (a, b) => {
+          const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+          if (r.w > 3 && r.h > 3) set({ tpls: o.tpls.concat([r]) });
+        }, back, '#e8a54b')) })),
+      o.tpls.length ? h('div', { class: 'snd-row' }, h('span', {}, 'Quão parecida'), h('span', {}, Math.round(o.doorThr * 100) + '%')) : '',
+      o.tpls.length ? h('input', { type: 'range', min: 0.7, max: 0.98, step: 0.01, value: o.doorThr, onchange: (e) => set({ doorThr: Number(e.target.value) }) }) : '',
+      h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Palpite: aberturas de 1 quadrado viram porta'), h('input', { type: 'checkbox', checked: !!o.gaps, onchange: (e) => set({ gaps: e.target.checked }) })),
+      status,
+      R.doorWarn ? h('div', { class: 'warn-box' }, R.doorWarn) : '',
+      h('div', { class: 'hud-btns' },
+        btnI('check', 'Criar', { class: 'btn primary grow', title: 'Cria as paredes e portas sugeridas (um Ctrl+Z desfaz tudo)', disabled: !(W + Dn) || R.busy, onclick: () => {
+          const n = App.Scan.apply(sc, R);
+          U.toast('Criadas: ' + W + ' paredes e ' + Dn + ' portas. Ctrl+Z desfaz.', 'info', 3500);
+          if (n) { R.walls = []; R.doors = []; App.Scan.cache = App.Scan.cache; UI.runScan(true); }
+        } }),
+        iconBtn('refresh-cw', 'Procurar de novo', () => UI.runScan(true)),
+        iconBtn('x', 'Fechar', () => UI.closeWindow('scan'))));
+  }
   function renderWindow(w) {
     safeRender(w.body, () => {
       if (!UI.windows.has(w.id)) return;
       const r = w.build(w);
       if (r === false) { UI.closeWindow(w.id); return; }
+      if (r === null) return; // nada mudou: mantém o que está na tela
       const scroll = w.body.scrollTop;
       w.body.innerHTML = '';
       if (r) w.body.append(r);
@@ -1729,6 +1960,16 @@
     const hud = $('#token-hud'), empty = $('#props-empty');
     if (!hud) return;
     const csc = S().currentScene(), B = App.Board;
+    if (S().gmView() && B.multi && B.multi.size && csc) { multiHud(hud, empty, csc); return; }
+    const note = S().gmView() && B.selectedNote && csc && (csc.notes || []).find((x) => x.id === B.selectedNote);
+    if (note) { noteHud(hud, empty, csc, note); return; }
+    if (B.selectedNote && !note) B.selectedNote = null;
+    const trg = S().gmView() && B.selectedTrigger && csc && (csc.triggers || []).find((x) => x.id === B.selectedTrigger);
+    if (trg) { triggerHud(hud, empty, csc, trg); return; }
+    if (B.selectedTrigger && !trg) B.selectedTrigger = null;
+    const door = S().gmView() && B.selectedDoor && csc && (csc.walls || []).find((x) => x.id === B.selectedDoor && x.door);
+    if (door) { doorHud(hud, empty, csc, door); return; }
+    if (B.selectedDoor && !door) B.selectedDoor = null;
     const lpt = S().gmView() && B.selectedLight && csc && (csc.lights || []).find((x) => x.id === B.selectedLight);
     if (lpt) { lightHud(hud, empty, csc, lpt); return; }
     if (B.selectedLight && !lpt) B.selectedLight = null;
@@ -1753,7 +1994,7 @@
       sc.groups, t.group && Object.values(sc.tokens).filter((x) => x.group === t.group).map((x) => [x.hidden, x.masked])]);
     if (hud._sig !== sig && !isTyping(hud)) { buildHud(hud, sc, t); hud._sig = sig; }
     hud.hidden = false;
-    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    if (!hudFloats()) { hud.style.transform = ''; return; }
     const r = App.Board.tokenScreenRect(t, sc);
     const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
     const hw = hud.offsetWidth, hh = hud.offsetHeight;
@@ -1778,10 +2019,133 @@
   }
   UI.orderBtns = orderBtns;
 
+  // =============== Animação e grupos de objetos (Plano 21) ===============
+  const tfield = (label, ...kids) => h('label', { class: 'ta-field' }, h('span', {}, label), ...kids);
+  const r2 = (v) => Math.round(v * 2) / 2;
+  // Campo "Grupo de objetos": nome livre; o gatilho pode mirar o grupo inteiro
+  function tagField(sc, o, onSet) {
+    const id = 'tags-' + o.id;
+    return h('label', { class: 'ta-field tag-field', title: 'Objetos com o mesmo nome de grupo obedecem juntos a um gatilho (ex.: acender todas as tochas do salão)' },
+      h('span', {}, 'Grupo de objetos'),
+      h('input', { list: id, value: o.tag || '', placeholder: 'ex.: tochas do salão', onchange: (e) => onSet(e.target.value.trim().slice(0, 40)) }),
+      h('datalist', { id }, App.Triggers.allTags(sc).map((t) => h('option', { value: t }))));
+  }
+  /*
+   * Editor de um movimento (spec). o = {sc, spec, set(patch | fn), kinds: ['prop'|'light'|'token'…], ref: {kind, obj} | null, pick(kind, cb, onEnd, opts)}
+   */
+  function animEditor(o) {
+    const A = App.Anim, s = o.spec || A.newSpec('move'), set = o.set, g = o.sc.grid;
+    const kinds = (o.kinds && o.kinds.length ? o.kinds : ['prop']).filter((k) => A.KINDS[k]);
+    let list = A.KINDS[kinds[0] || 'prop'];
+    for (const k of kinds.slice(1)) list = list.filter(([v]) => A.KINDS[k].some(([w]) => w === v));
+    if (!list.some(([v]) => v === s.kind)) list = list.concat([[s.kind, A.KIND_NAME[s.kind] || s.kind]]);
+    const presets = A.PRESETS.filter((p) => kinds.every((k) => p.for.includes(k)));
+    const num = (label, key, attrs = {}) => tfield(label, h('input', Object.assign({ type: 'number', class: 'num', value: s[key] ?? '', onchange: (e) => {
+      const v = String(e.target.value).trim().replace(',', '.');
+      set({ [key]: v === '' ? null : Number(v) || 0 });
+    } }, attrs)));
+    const sel = (value, opts, onchange) => h('select', { value: value == null ? '' : String(value), onchange: (e) => onchange(e.target.value) }, opts.map(([v, l]) => h('option', { value: v }, l)));
+    const center = o.ref ? App.Board.animCenter(o.sc, o.ref.kind, o.ref.obj) : null;
+    const out = [];
+    if (presets.length) out.push(h('select', { class: 'anim-preset', value: '', onchange: (e) => { const p = presets.find((x) => x.id === e.target.value); if (p) set(Object.assign({ from: null, end: 'stay', n: 0 }, U.clone(p.spec))); } },
+      h('option', { value: '' }, 'Usar um modelo…'), presets.map((p) => h('option', { value: p.id }, p.label))));
+    out.push(tfield('Movimento', sel(s.kind, list, (v) => set({ kind: v }))));
+    const grid = [];
+    if (s.kind === 'move') {
+      grid.push(num('Para a direita (quad.)', 'dx', { step: 0.5, title: 'Negativo = para a esquerda' }), num('Para baixo (quad.)', 'dy', { step: 0.5, title: 'Negativo = para cima' }));
+    } else if (s.kind === 'rotate') {
+      grid.push(num('Graus', 'deg', { step: 15, title: '360 com "Repetir sem parar" = gira sem parar; 120 com "Ir e voltar" = holofote varrendo' }));
+    } else if (s.kind === 'fade') {
+      grid.push(num('De (%)', 'from', { min: 0, max: 100, step: 10, placeholder: 'como está', title: 'Vazio = começa como o objeto está agora' }), num('Até (%)', 'to', { min: 0, max: 100, step: 10 }));
+    } else if (s.kind === 'scale') {
+      grid.push(num('Até (% do tamanho)', 'to', { min: 5, step: 10 }));
+    }
+    grid.push(num('Duração (s)', 'dur', { min: 0.1, step: 0.1, title: 'Tempo de uma ida' }));
+    out.push(h('div', { class: 'ta-grid' }, grid));
+    if (s.kind === 'move' && center && o.pick) {
+      out.push(h('div', { class: 'row' }, h('span', { class: 'grow muted small-text' }, 'Ou clique no destino:'),
+        btnI('map-pin', 'Destino no mapa', { class: 'btn small', onclick: () => o.pick('point', (pt) => set({ dx: r2((pt.x - center.x) / g), dy: r2((pt.y - center.y) / g) })) })));
+    }
+    if (s.kind === 'path') {
+      const n = (s.pts || []).length;
+      out.push(h('div', { class: 'row' }, h('span', { class: 'grow ta-target' + (n ? '' : ' none') }, n ? n + (n === 1 ? ' ponto' : ' pontos') + ' de passagem' : 'Marque os pontos da ronda'),
+        center && o.pick ? btnI('map-pin', 'Marcar no mapa', { class: 'btn small', title: 'Clique nos pontos em ordem; Enter ou Concluir termina', onclick: () => {
+          let first = true;
+          o.pick('point', (pt) => {
+            const q = [r2((pt.x - center.x) / g), r2((pt.y - center.y) / g)];
+            set((sp) => { if (first) sp.pts = []; first = false; sp.pts = (sp.pts || []).concat([q]); });
+          }, null, { multi: true, bar: 'Clique nos pontos da ronda, em ordem. Enter ou Concluir termina.' });
+        } }) : ''));
+    }
+    if (s.kind === 'color') out.push(tfield('Cor de destino', h('input', { type: 'color', value: U.safeColor(s.color, '#ff5040'), onchange: (e) => set({ color: e.target.value }) })));
+    out.push(tfield('Curva', sel(s.ease || 'smooth', A.EASES, (v) => set({ ease: v }))));
+    out.push(h('div', { class: 'seg anim-rep' }, A.REPEATS.map(([k, l]) => h('button', { class: (s.repeat || 'once') === k ? 'on' : '', onclick: () => set({ repeat: k }) }, l))));
+    if (s.repeat === 'pingpong') out.push(h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Quantas idas e voltas (0 = sem parar)'),
+      h('input', { type: 'number', class: 'num', min: 0, value: s.n || 0, onchange: (e) => set({ n: Math.max(0, Math.round(Number(e.target.value) || 0)) }) })));
+    if ((s.repeat || 'once') === 'once') out.push(h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'No fim'),
+      h('div', { class: 'seg' }, [['stay', 'Fica onde chegou'], ['back', 'Volta ao início']].map(([k, l]) => h('button', { class: (s.end || 'stay') === k ? 'on' : '', onclick: () => set({ end: k }) }, l)))));
+    return out;
+  }
+  // Pick para os painéis (sem janela para esconder)
+  function hudPick(kind, cb, onEnd, opts = {}) {
+    if (opts.bar) pickBar(opts.bar);
+    App.Board.pick(kind, cb, () => { if (opts.bar) pickBar(null); if (onEnd) onEnd(); }, opts);
+  }
+  // Seção "Animação" do painel da imagem e da luz: os movimentos do próprio objeto
+  UI.animEdit = null;
+  function ownAnimSection(sc, kind, o) {
+    const A = App.Anim, key = A.keyOf(kind, o.id), type = { prop: 'prop.update', light: 'lightpt.update' }[kind];
+    const cur = () => { const s2 = S().state.scenes[sc.id]; return s2 && A.get(s2, key); };
+    const save = (fn) => { const ob = cur(); if (!ob) return; const an = U.clone(ob.anim || { steps: [], auto: false }); an.steps = an.steps || []; fn(an); S().dispatch({ type, sceneId: sc.id, id: o.id, patch: { anim: an } }); };
+    const an = o.anim || { steps: [], auto: false }, steps = an.steps || [];
+    const running = A.running(sc, key).length > 0;
+    const REP = { once: 'uma vez', pingpong: 'vai e volta', loop: 'sem parar' };
+    const rows = steps.map((s, i) => {
+      const open = UI.animEdit === s.id;
+      return h('div', { class: 'anim-step' + (open ? ' open' : '') },
+        h('div', { class: 'row' }, ic(s.kind === 'rotate' ? 'rotate-cw' : s.kind === 'fade' ? 'eye' : s.kind === 'path' ? 'map-pin' : 'move'),
+          h('span', { class: 'grow' }, (A.KIND_NAME[s.kind] || s.kind) + ' · ' + String(s.dur || 1).replace('.', ',') + ' s · ' + (REP[s.repeat] || 'uma vez')),
+          iconBtn(open ? 'chevron-up' : 'pencil', open ? 'Fechar' : 'Editar', () => { UI.animEdit = open ? null : s.id; UI.refresh(); App.Board.requestRender(); }),
+          iconBtn('trash-2', 'Tirar este movimento', () => save((a2) => { a2.steps.splice(i, 1); if (!a2.steps.length) a2.auto = false; }))),
+        open ? h('div', { class: 'anim-box' }, animEditor({ sc, spec: s, kinds: [kind], ref: { kind, obj: o }, pick: hudPick,
+          set: (p) => save((a2) => { const st2 = a2.steps.find((x) => x.id === s.id); if (!st2) return; if (typeof p === 'function') p(st2); else Object.assign(st2, p); }) })) : null);
+    });
+    return h('div', { class: 'hud-section anim-sec' },
+      h('span', { class: 'eyebrow' }, 'Animação'),
+      rows.length ? rows : h('p', { class: 'hint', style: { margin: 0 } }, kind === 'prop' ? 'Faça a imagem se mexer: lâmina indo e voltando, pedra rolando, porta de grade descendo.' : 'Faça a luz se mexer: holofote varrendo, farol girando, tocha pulsando.'),
+      btnI('plus', 'Adicionar movimento', { class: 'btn small', onclick: () => save((a2) => { const ns = A.newSpec(kind === 'light' ? 'rotate' : 'move'); a2.steps.push(ns); UI.animEdit = ns.id; }) }),
+      steps.length ? h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Começa sozinha com a cena'), h('input', { type: 'checkbox', checked: !!an.auto, onchange: (e) => A.setAuto(sc.id, key, e.target.checked) })) : '',
+      steps.length ? h('div', { class: 'hud-btns' },
+        btnI('play', 'Tocar', { title: 'Toca para todos agora', onclick: () => A.play(sc.id, [key], null) }),
+        btnI('pause', 'Parar', { title: 'Para onde está', onclick: () => A.stop(sc.id, [key], 'stop') }),
+        iconBtn('undo-2', 'Voltar ao início', () => A.stop(sc.id, [key], 'reset'))) : '',
+      steps.length ? h('p', { class: 'hint', style: { margin: 0 } }, (running || an.auto ? 'Rodando agora. ' : '') + 'Num gatilho: ação Animar → "Tocar a animação do objeto".') : '');
+  }
+  // Seção "Machuca quem tocar" (área de dano da imagem)
+  function hurtSection(sc, p) {
+    const hz = p.hurt, on = !!(hz && hz.on), st2 = S().state;
+    const upd = (patch) => S().dispatch({ type: 'prop.update', sceneId: sc.id, id: p.id, patch: { hurt: Object.assign({}, p.hurt || App.Anim.newHurt(), patch) } });
+    const sel = (value, opts, onchange) => h('select', { value: value == null ? '' : String(value), onchange: (e) => onchange(e.target.value) }, opts.map(([v, l]) => h('option', { value: v }, l)));
+    return h('div', { class: 'hud-section hurt-sec' },
+      h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Machuca quem tocar'), h('input', { type: 'checkbox', checked: on, onchange: (e) => upd({ on: e.target.checked }) })),
+      on ? [
+        btnI('scan', 'Ajustar a área no mapa', { class: 'btn small', title: 'Arraste no mapa a parte da imagem que machuca (a lâmina, não o cabo)', onclick: () => App.Board.editHurt(sc, p.id) }),
+        h('div', { class: 'seg' }, [['moving', 'Só em movimento'], ['always', 'Sempre']].map(([k, l]) => h('button', { class: (hz.when || 'moving') === k ? 'on' : '', onclick: () => upd({ when: k }) }, l))),
+        h('div', { class: 'ta-grid' },
+          tfield('Quem', sel(hz.who || 'any', [['any', 'Qualquer token'], ['party', 'Personagens do grupo'], ['foes', 'Criaturas']], (v) => upd({ who: v }))),
+          tfield('Teste', sel(hz.save, [['', 'Sem teste (só dano)']].concat((st2.attrs || []).map((n) => [n, n])), (v) => upd({ save: v }))),
+          hz.save ? tfield('CD', h('input', { type: 'number', class: 'num', min: 1, value: hz.dc ?? 13, onchange: (e) => upd({ dc: Number(e.target.value) || 10 }) })) : '',
+          tfield('Dano', h('input', { class: 'num', value: hz.damage || '', placeholder: '2d6', onchange: (e) => upd({ damage: e.target.value.trim() || '0' }) })),
+          tfield('Barra', sel(hz.bar, [['', (st2.barNames || [])[0] || 'Primeira']].concat((st2.barNames || []).slice(1).map((n) => [n, n])), (v) => upd({ bar: v }))),
+          hz.save ? tfield('Se passar', sel(hz.onSave, [['half', 'Metade'], ['none', 'Nada']], (v) => upd({ onSave: v }))) : ''),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'A área vermelha no mapa é o que machuca. Cada token leva um golpe por passagem (precisa sair e entrar de novo). Os jogadores não veem a área.'),
+      ] : '');
+  }
+
   // Imagem solta no mapa: nome, visibilidade, nível, tamanho, giro, opacidade, travar, espelhar
   function propHud(hud, empty, sc, p) {
     if (empty) empty.hidden = true;
-    const sig = JSON.stringify(['prop', p, UI.mode, sc.grid]);
+    const sig = JSON.stringify(['prop', p, UI.mode, sc.grid, UI.animEdit, App.Anim.running(sc, 'prop:' + p.id).length, App.Triggers.allTags(sc)]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -1813,7 +2177,10 @@
           h('p', { class: 'hint', style: { margin: 0 } }, 'Largura e altura em quadrados (mudar uma mantém a proporção).'),
           h('div', { class: 'snd-row' }, h('span', {}, 'Opacidade'), opLbl),
           h('input', { type: 'range', min: 0.1, max: 1, step: 0.05, value: p.opacity ?? 1, oninput: (e) => { opLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ opacity: Number(e.target.value) }); e.target.blur(); } }),
-          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.locked, onchange: (e) => upd({ locked: e.target.checked }) }), 'Travar (não move sem querer)')),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.locked, onchange: (e) => upd({ locked: e.target.checked }) }), 'Travar (não move sem querer)'),
+          tagField(sc, p, (v) => upd({ tag: v }))),
+        ownAnimSection(sc, 'prop', p),
+        hurtSection(sc, p),
         h('div', { class: 'hud-btns' },
           btnI('flip-horizontal-2', 'Espelhar', { onclick: () => upd({ flip: !p.flip }) }),
           btnI('copy-plus', 'Duplicar', { title: 'Duplicar (Ctrl+D)', onclick: () => App.Board.duplicateProp(sc, p.id) }),
@@ -1840,7 +2207,7 @@
   // Ponto de luz ou de escuridão no mapa: tipo, aceso, forma, alcance, cor, tremular
   function lightHud(hud, empty, sc, o) {
     if (empty) empty.hidden = true;
-    const sig = JSON.stringify(['light', o, UI.mode, sc.grid, sc.light.enabled]);
+    const sig = JSON.stringify(['light', o, UI.mode, sc.grid, sc.light.enabled, UI.animEdit, App.Anim.running(sc, 'light:' + o.id).length, App.Triggers.allTags(sc)]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -1900,6 +2267,8 @@
           h('div', { class: 'snd-row' }, h('span', {}, 'Intensidade da cor'), tintLbl),
           h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.tint ?? 0.4, oninput: (e) => { tintLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ tint: Number(e.target.value) }); e.target.blur(); } }),
           h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!o.flicker, onchange: (e) => upd({ flicker: e.target.checked }) }), 'Tremular (vela, tocha, fogueira)')),
+        h('div', { class: 'hud-section' }, tagField(sc, o, (v) => upd({ tag: v }))),
+        ownAnimSection(sc, 'light', o),
         sc.light.enabled ? '' : h('div', { class: 'warn-box' }, h('span', {}, 'A iluminação está desligada nesta cena: esta luz não faz efeito.'),
           btnI('lightbulb', 'Ligar iluminação', { class: 'btn small primary', onclick: () => S().dispatch({ type: 'scene.update', id: sc.id, patch: { light: Object.assign({}, sc.light, { enabled: true, global: false }) } }) })),
         h('div', { class: 'hud-btns' },
@@ -1908,9 +2277,450 @@
           btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'lightpt.delete', sceneId: sc.id, id: o.id }); B.selectedLight = null; B.requestRender(); } })));
     }
     hud.hidden = false;
-    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    if (!hudFloats()) { hud.style.transform = ''; return; }
     const c = o.shape === 'area' && o.pts ? App.Light.areaCenter(o.pts) : o, p = App.Board.toScreen(c.x, c.y);
     const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
+  }
+
+  // =============== Notas do mestre (Plano 18) ===============
+  const NOTE_C = [['gold', 'Sala'], ['red', 'Perigo'], ['green', 'Tesouro'], ['blue', 'NPC']];
+  // Janela da nota (arrastável, pode ficar aberta durante a cena)
+  UI.openNote = function (sceneId, id, isNew) {
+    const B = App.Board;
+    B.selectedNote = id;
+    const w = UI.openWindow('note:' + id, 'Nota', (win) => {
+      const sc = S().state && S().state.scenes[sceneId], n = sc && (sc.notes || []).find((x) => x.id === id);
+      if (!n || !S().gmView()) return false;
+      const sig = JSON.stringify(n);
+      if (win._sig === sig) return null;
+      win._sig = sig;
+      win.el.classList.add('note-win');
+      const upd = (patch) => S().dispatch({ type: 'note.update', sceneId, id, patch });
+      const title = h('input', { class: 'note-title', value: n.title || '', placeholder: 'Título (ex.: Sala 3)', onchange: (e) => upd({ title: e.target.value.trim() || 'Nota' }) });
+      const root = h('div', { class: 'note-edit' },
+        title,
+        h('div', { class: 'seg note-colors' }, NOTE_C.map(([k, l]) => h('button', { class: (n.color || 'gold') === k ? 'on' : '', onclick: () => upd({ color: k }) }, h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[k] } }), l))),
+        h('textarea', { class: 'note-text', rows: 8, placeholder: 'O que você precisa lembrar aqui: descrição, tesouro, CD do teste, o que o NPC sabe…', onchange: (e) => upd({ text: e.target.value }) }, n.text || ''),
+        h('div', { class: 'hud-btns' },
+          btnI('scan', 'Centralizar', { onclick: () => { B.centerOn(n.x, n.y); B.selectedNote = id; B.requestRender(); } }),
+          btnI('copy-plus', 'Duplicar', { onclick: () => B.duplicateNote(sc, id) }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'note.delete', sceneId, id }); B.selectedNote = null; UI.closeWindow('note:' + id); B.requestRender(); } })),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Só você vê esta nota. Os jogadores nem recebem o texto.'));
+      if (isNew) setTimeout(() => { title.focus(); title.select(); isNew = false; }, 30);
+      return root;
+    }, { w: 360, icon: 'file-text' });
+    B.requestRender();
+    return w;
+  };
+  function noteHud(hud, empty, sc, n) {
+    if (empty) empty.hidden = true;
+    const sig = JSON.stringify(['note', n, UI.mode]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const B = App.Board;
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble', style: { background: B.NOTE_COLORS[n.color] || B.NOTE_COLORS.gold, color: '#17130a' } }, ic('file-text')),
+          h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, n.title || 'Nota'), h('div', { class: 'hud-sub' }, 'Nota · só você vê'))),
+        n.text ? h('p', { class: 'note-preview' }, String(n.text).slice(0, 400)) : h('p', { class: 'hint', style: { margin: 0 } }, 'Sem texto ainda.'),
+        h('div', { class: 'hud-btns' },
+          btnI('pencil', 'Abrir', { class: 'btn primary', onclick: () => UI.openNote(sc.id, n.id) }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Delete', onclick: () => { S().dispatch({ type: 'note.delete', sceneId: sc.id, id: n.id }); B.selectedNote = null; UI.closeWindow('note:' + n.id); B.requestRender(); } })));
+    }
+    hud.hidden = false;
+    hud.style.transform = '';
+    if (hudFloats()) { const p = App.Board.toScreen(n.x, n.y); hud.style.transform = `translate(${Math.max(14, p.x + 30)}px, ${Math.max(66, p.y - 40)}px)`; }
+  }
+
+  // Seleção múltipla (Plano 20): o que está selecionado e o que dá para fazer com tudo junto
+  function multiHud(hud, empty, sc) {
+    if (empty) empty.hidden = true;
+    const B = App.Board, items = B.multiItems(sc);
+    const counts = {};
+    for (const it of items) counts[it.kind] = (counts[it.kind] || 0) + 1;
+    const PL = { token: 'tokens', prop: 'imagens', light: 'luzes', trigger: 'gatilhos', sound: 'sons', note: 'notas', wall: 'paredes' };
+    const parts = Object.entries(counts).map(([k, n]) => n + ' ' + (n === 1 ? B.MKIND[k] : PL[k]));
+    const sig = JSON.stringify(['multi', parts, !!B.clipboard, UI.mode]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const dup = () => { const keep = B.clipboard; if (B.copySelection(sc)) { const c = B.clipboard; B.paste(sc, { x: c.ox + sc.grid, y: c.oy + sc.grid }); } B.clipboard = keep; };
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble on' }, ic('mouse-pointer-2')),
+          h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, items.length + (items.length === 1 ? ' item selecionado' : ' itens selecionados')),
+            h('div', { class: 'hud-sub' }, parts.join(' · ')))),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Arraste qualquer um para mover tudo junto (setas também). Shift + clique soma ou tira; Shift + arrastar no vazio faz o laço. Ctrl+C copia e Ctrl+V cola onde estiver o mouse, em qualquer cena. Esc limpa.'),
+        h('div', { class: 'hud-btns' },
+          btnI('copy', 'Copiar', { title: 'Ctrl+C', onclick: () => B.copySelection(sc) }),
+          btnI('copy-plus', 'Duplicar', { title: 'Ctrl+D', onclick: dup }),
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Delete', onclick: () => B.deleteMulti(sc) })),
+        h('div', { class: 'hud-btns' }, btnI('x', 'Limpar seleção', { title: 'Esc', onclick: () => { B.multi.clear(); B.requestRender(); } })));
+    }
+    hud.hidden = false;
+    hud.style.transform = '';
+    if (hudFloats()) hud.style.transform = 'translate(14px, 66px)';
+  }
+
+  // =============== Gatilhos (Plano 14, janela do Plano 15) ===============
+  // Tudo que muda o que o editor mostra (nomes de portas, luzes, tokens, faixas…)
+  const nSteps = (o) => ((o.anim && o.anim.steps) || []).length;
+  const trigSig = (sc, tr) => JSON.stringify([tr, (sc.walls || []).filter((w) => w.door).map((w) => [w.id, w.tag]), (sc.lights || []).map((o) => [o.id, o.name, o.tag, nSteps(o), o.x, o.y]), sc.groups,
+    Object.values(sc.tokens).map((t) => [t.id, t.name]), (sc.props || []).map((p) => [p.id, p.name, p.tag, nSteps(p), p.x, p.y]), (sc.sounds || []).map((s) => [s.id, s.name, s.tag]),
+    (sc.triggers || []).map((x) => [x.id, x.name]), App.Audio.files.size, S().state.sceneOrder, S().state.attrs, S().state.barNames, App.Triggers.stateLabel(tr)]);
+  const trigStateClass = (st) => (st === 'Pronto' ? 'ready' : st === 'Esperando' ? 'wait' : st === 'Desligado' ? 'off' : 'spent');
+
+  // Painel da direita: só o resumo do gatilho; a configuração abre numa janela
+  function triggerHud(hud, empty, sc, tr) {
+    if (empty) empty.hidden = true;
+    const sig = 'trg-mini' + UI.mode + trigSig(sc, tr);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const TG = App.Triggers, state = TG.stateLabel(tr), n = (tr.actions || []).length;
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble trig' + (state === 'Pronto' ? ' on' : '') }, ic('zap')),
+          h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, tr.name || 'Gatilho'),
+            h('div', { class: 'hud-sub' }, 'Gatilho · ' + state.toLowerCase() + ' · disparou ' + (tr.used || 0) + (tr.used === 1 ? ' vez' : ' vezes')))),
+        h('p', { class: 'trig-sentence' }, TG.sentence(tr), h('b', {}, ' → ' + (n ? n + (n === 1 ? ' ação' : ' ações') : 'nenhuma ação'))),
+        n ? h('ol', { class: 'trig-mini' }, tr.actions.map((a) => { const s = TG.summary(sc, a); return h('li', { class: s.missing ? 'missing' : '' }, ic(TG.ICON[a.type]), h('span', {}, s.target + (s.op ? ' · ' + s.op : ''))); })) : '',
+        h('div', { class: 'hud-btns' },
+          btnI('settings-2', 'Configurar', { class: 'btn primary grow', onclick: () => UI.openTrigger(sc.id, tr.id) }),
+          btnI('play', 'Testar', { title: 'Simula no mapa (nada muda de verdade)', onclick: () => App.Triggers.simulate(sc.id, tr.id) })),
+        h('div', { class: 'hud-btns' },
+          btnI('zap', 'Disparar agora', { title: 'Faz tudo de verdade agora, mesmo gasto', onclick: () => App.Triggers.fire(sc.id, tr.id, null, { manual: true }) }),
+          iconBtn('refresh-cw', 'Rearmar', () => S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch: { used: 0, lastAt: 0 } })),
+          h('span', { class: 'grow' }),
+          iconBtn('trash-2', 'Apagar (Delete)', () => { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); App.Board.selectedTrigger = null; UI.closeWindow('trigger:' + tr.id); App.Board.requestRender(); })));
+    }
+    hud.hidden = false;
+    if (!hudFloats()) { hud.style.transform = ''; return; }
+    const c = App.Triggers.center(tr), p = App.Board.toScreen(c.x, c.y), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
+  }
+
+  // Janela "Configurar gatilho": SE (condições) | ENTÃO (ações em cartões)
+  UI.trigEdit = null; // ação aberta para editar
+  UI.trigAdd = false; // lista de tipos de ação aberta
+  UI.openTrigger = function (sceneId, trId) {
+    for (const id of [...UI.windows.keys()]) if (id.startsWith('trigger:') && id !== 'trigger:' + trId) UI.closeWindow(id);
+    const B = App.Board;
+    B.selectedTrigger = trId; B.selected = null; B.selectedLight = null; B.selectedDoor = null; B.selectedProp = null; B.selectedSound = null; B.selectedRoom = null;
+    UI.trigEdit = null; UI.trigAdd = false;
+    const w = UI.openWindow('trigger:' + trId, 'Configurar gatilho', (win) => buildTriggerWin(win, sceneId, trId), { w: Math.min(780, window.innerWidth - 40), icon: 'zap' });
+    B.requestRender();
+    return w;
+  };
+  function buildTriggerWin(win, sceneId, trId) {
+    const st = S().state, sc = st && st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+    if (!tr || !S().gmView()) return false;
+    const sig = trigSig(sc, tr) + '|' + UI.trigEdit + '|' + UI.trigAdd;
+    if (win._sig === sig) return null;
+    win._sig = sig;
+    win.el.classList.add('trig-win');
+    win.titleEl.textContent = 'Configurar gatilho';
+    const Au = App.Audio, TG = App.Triggers, B = App.Board, g = sc.grid;
+    const upd = (patch) => S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch });
+    const acts = () => U.clone(tr.actions || []);
+    const setAct = (i, patch) => { const a = acts(); Object.assign(a[i], patch); upd({ actions: a }); };
+    const delAct = (i) => { const a = acts(); if (a[i] && a[i].id === UI.trigEdit) UI.trigEdit = null; a.splice(i, 1); upd({ actions: a }); };
+    const moveTo = (from, to) => { const a = acts(); if (from === to || !a[from]) return; const [x] = a.splice(from, 1); a.splice(to, 0, x); upd({ actions: a }); };
+    const redo = () => { win._sig = null; renderWindow(win); };
+    const sel = (value, opts, onchange, attrs = {}) => h('select', Object.assign({ value: value == null ? '' : String(value), onchange: (e) => onchange(e.target.value) }, attrs), opts.map(([v, l]) => h('option', { value: v }, l)));
+    const num = (value, onchange, attrs = {}) => h('input', Object.assign({ type: 'number', class: 'num', value: value ?? '', onchange: (e) => onchange(Number(String(e.target.value).replace(',', '.')) || 0) }, attrs));
+    // Escolher no mapa: a janela some enquanto você clica no mapa e volta depois
+    const pickBtn = (kind, cb) => btnI('map-pin', 'No mapa', { class: 'btn small', title: 'Escolher no mapa', onclick: () => { win.el.style.display = 'none'; B.pick(kind, cb, () => { win.el.style.display = ''; }, { exclude: tr.id }); } });
+    // No cartão de porta, luz, token ou outro gatilho: aceita qualquer objeto e a ação vira do tipo dele
+    const cur = () => ((S().state.scenes[sc.id] || {}).triggers || []).find((x) => x.id === tr.id);
+    // Muda uma ação lendo o gatilho de agora (as escolhas no mapa chegam uma a uma)
+    const editAct = (id, fn) => {
+      const t = cur();
+      if (!t) return;
+      const list = U.clone(t.actions || []), x = list.find((q) => q.id === id);
+      if (!x) return;
+      const r = fn(x, list);
+      S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: t.id, patch: { actions: list } });
+      return r;
+    };
+    // Escolher no mapa com a janela escondida (volta no fim)
+    const winPick = (kind, cb, onEnd, opts = {}) => {
+      win.el.style.display = 'none';
+      if (opts.bar) pickBar(opts.bar);
+      B.pick(kind, cb, () => { win.el.style.display = ''; if (opts.bar) pickBar(null); if (onEnd) onEnd(); }, Object.assign({ exclude: tr.id }, opts));
+    };
+    // Escolher no mapa (ENTÃO): cada objeto clicado vira uma ação do tipo certo; objetos iguais seguidos entram na mesma ação
+    const pickMany = () => {
+      let lastId = null, lastKind = null;
+      winPick('any', (res) => {
+        const t = cur();
+        if (!t) return;
+        const list = U.clone(t.actions || []), last = lastId && res.kind === lastKind && list.find((q) => q.id === lastId);
+        if (last) {
+          const added = TG.toggleRef(last, res);
+          S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: t.id, patch: { actions: list } });
+          const s = TG.summary(sc, last);
+          U.toast((added ? 'Somado: ' : 'Tirado: ') + TG.nameOf(sc, res.kind, res.obj) + ' → ' + s.target, 'info', 2200);
+          return;
+        }
+        const na = TG.actionFromPick(res);
+        if (!na) return;
+        lastId = na.id; lastKind = res.kind;
+        S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: t.id, patch: { actions: list.concat([na]) } });
+        const s = TG.summary(sc, na);
+        U.toast('Adicionado: ' + s.target + (s.op ? ' · ' + s.op : ''), 'info', 2500);
+      }, null, { multi: true, withProps: true, bar: 'Clique nos objetos do mapa: cada um vira uma ação. Vários iguais seguidos (3 luzes) entram na mesma ação. Enter ou Concluir termina.' });
+    };
+    // Rótulo de um alvo da lista
+    const refLabel = (a, ref) => {
+      const s = String(ref);
+      if (a.type === 'token') {
+        if (s.startsWith('g:')) { const gr = (sc.groups || []).find((x) => x.id === s.slice(2)); return gr ? 'Grupo ' + gr.name : null; }
+        const t = sc.tokens[s.replace(/^t:/, '')]; return t ? t.name : null;
+      }
+      let k = { door: 'door', light: 'light', sound: 'sound', trigger: 'trigger' }[a.type], id = s;
+      if (a.type === 'anim') { const j = s.indexOf(':'); k = s.slice(0, j); id = s.slice(j + 1); }
+      const o = TG.objOf(sc, k, id);
+      return o ? (a.type === 'anim' ? { prop: 'Imagem', light: 'Luz', token: 'Token' }[k] + ': ' : '') + TG.nameOf(sc, k, o) : null;
+    };
+    // Opções da lista "Adicionar…" de cada tipo
+    const listOpts = (a) => {
+      const tags = (TG.tagKinds[a.type] ? TG.allTags(sc) : []).map((t) => ['tag:' + t, 'Grupo de objetos: ' + t]);
+      const door = (w) => TG.nameOf(sc, 'door', w);
+      switch (a.type) {
+        case 'door': return (sc.walls || []).filter((w) => w.door).map((w) => [w.id, door(w)]).concat(tags);
+        case 'light': return (sc.lights || []).map((o) => [o.id, o.name || 'Luz']).concat(tags);
+        case 'sound': return (sc.sounds || []).map((s) => [s.id, Au.label(s.name)]).concat(tags);
+        case 'trigger': return (sc.triggers || []).filter((x) => x.id !== tr.id).map((x) => [x.id, x.name]);
+        case 'token': return tokOpts.slice(1);
+        case 'anim': return (sc.props || []).map((p) => ['prop:' + p.id, 'Imagem: ' + (p.name || 'Imagem')]).concat((sc.lights || []).map((o) => ['light:' + o.id, 'Luz: ' + (o.name || 'Luz')]),
+          Object.values(sc.tokens).map((t) => ['token:' + t.id, 'Token: ' + t.name]), tags);
+      }
+      return [];
+    };
+    // Alvos de uma ação: chips (clique tira), lista para somar e "No mapa" para clicar em vários
+    const targetsBox = (a, pickKind) => {
+      const chips = (a.ids || []).map((ref) => { const l = refLabel(a, ref); return l && h('span', { class: 'chip', title: 'Clique para tirar', onclick: () => editAct(a.id, (x) => { x.ids = (x.ids || []).filter((r) => r !== ref); }) }, l, ic('x')); }).filter(Boolean);
+      if (a.tag) {
+        const n = TG.targets(sc, Object.assign({}, a, { ids: [] })).length;
+        chips.push(h('span', { class: 'chip tag', title: 'Todos os objetos com este grupo (clique para tirar)', onclick: () => editAct(a.id, (x) => { x.tag = ''; }) }, ic('tag'), a.tag + ' (' + n + ')', ic('x')));
+      }
+      const opts = listOpts(a);
+      return h('div', { class: 'ta-targets' },
+        chips.length ? h('div', { class: 'chips' }, chips) : h('span', { class: 'ta-target none' }, 'Escolha os alvos'),
+        h('div', { class: 'row' },
+          h('select', { class: 'grow', value: '', onchange: (e) => {
+            const v = e.target.value;
+            if (!v) return;
+            editAct(a.id, (x) => { if (v.startsWith('tag:')) x.tag = v.slice(4); else { x.ids = x.ids || []; if (!x.ids.includes(v)) x.ids.push(v); } });
+          } }, h('option', { value: '' }, opts.length ? 'Somar da lista…' : 'Nada deste tipo na cena'), opts.map(([v, l]) => h('option', { value: v }, l))),
+          btnI('map-pin', 'No mapa', { class: 'btn small', title: 'Clique em vários no mapa (clicar de novo tira). Enter ou Concluir termina.', onclick: () => winPick(pickKind, (res) => {
+            const t = cur(), x = t && (t.actions || []).find((q) => q.id === a.id);
+            if (!x) return;
+            // Outro tipo de objeto: a ação vira do tipo dele (Plano 16)
+            if (pickKind === 'any' && TG.refFor(x, res) == null) {
+              const na = TG.actionFromPick(res, x);
+              if (na) { UI.trigEdit = na.id; editAct(a.id, (y, list) => { list[list.indexOf(y)] = na; }); U.toast('A ação virou ' + TG.summary(sc, na).target + '. Continue clicando para somar.', 'info', 2500); B.cancelPick(); }
+              return;
+            }
+            const r = editAct(a.id, (y) => TG.toggleRef(y, res));
+            if (r == null) U.toast('Este objeto não serve para esta ação.');
+            else U.toast((r ? 'Somado: ' : 'Tirado: ') + TG.nameOf(sc, res.kind, res.obj), 'info', 1500);
+          }, null, { multi: true, bar: 'Clique nos alvos desta ação (clicar de novo tira). Enter ou Concluir termina.' }) })));
+    };
+    const field = (label, ...kids) => h('label', { class: 'ta-field' }, h('span', {}, label), ...kids);
+    const cell = (x, y) => `(${Math.floor(x / g) + 1}, ${Math.floor(y / g) + 1})`;
+    const state = TG.stateLabel(tr);
+    const tokOpts = [['', 'Escolha…']].concat((sc.groups || []).map((x) => ['g:' + x.id, 'Grupo: ' + x.name]),
+      Object.values(sc.tokens).map((t) => ['t:' + t.id, t.name + (t.hidden ? ' (invisível)' : '')]));
+    const tracks = [...Au.files.keys()].sort((a, b) => a.localeCompare(b));
+
+    // Campos de cada tipo de ação
+    const body = (a, i) => {
+      const set = (patch) => setAct(i, patch);
+      switch (a.type) {
+        case 'door':
+          return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.door), (v) => set({ op: v })))];
+        case 'light':
+          return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.light), (v) => set({ op: v })))];
+        case 'token':
+          return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.token), (v) => set({ op: v })))];
+        case 'anim': {
+          const tl = TG.targets(sc, a), kinds = [...new Set(tl.map((x) => x.kind))].filter((k) => ['prop', 'light', 'token'].includes(k));
+          const out = [targetsBox(a, 'animable'), field('Fazer', sel(a.op, Object.entries(TG.OPS.anim), (v) => set(v === 'play' && !a.spec ? { op: v, spec: App.Anim.newSpec('move') } : { op: v })))];
+          if (a.op === 'play') {
+            out.push(h('div', { class: 'anim-box' }, animEditor({ sc, spec: a.spec, kinds, ref: tl.find((x) => kinds.includes(x.kind)) || null, pick: winPick,
+              set: (p) => editAct(a.id, (x) => { x.spec = x.spec || App.Anim.newSpec('move'); if (typeof p === 'function') p(x.spec); else Object.assign(x.spec, p); }) })));
+            out.push(h('p', { class: 'hint', style: { margin: 0 } }, 'O caminho aparece no mapa enquanto este cartão está aberto. Vários alvos fazem o mesmo movimento, cada um a partir de onde está.'));
+          } else if (a.op === 'own') {
+            const without = tl.filter((x) => !(x.obj.anim && (x.obj.anim.steps || []).length));
+            out.push(h('p', { class: 'hint', style: { margin: 0 } }, without.length ? 'Sem animação própria: ' + without.map((x) => x.name).join(', ') + '. Monte no painel da imagem ou da luz (seção Animação).' : 'Toca a animação montada no painel de cada objeto (seção Animação).'));
+          } else out.push(h('p', { class: 'hint', style: { margin: 0 } }, a.op === 'stop' ? 'Para a animação onde o objeto está agora (inclusive as que começam sozinhas).' : 'Para e devolve o objeto para onde estava antes da primeira animação.'));
+          return out;
+        }
+        case 'sound': {
+          const out = [field('Fazer', sel(a.op, [['sfx', 'Tocar um efeito'], ['spot-fire', 'Tocar um som do mapa (uma vez)'], ['spot-on', 'Ligar um som do mapa'], ['spot-off', 'Desligar um som do mapa'],
+            ['music', 'Trocar a música'], ['music-stop', 'Parar a música'], ['ambient', 'Trocar o ambiente'], ['ambient-stop', 'Parar o ambiente']], (v) => set({ op: v })))];
+          if (['sfx', 'music', 'ambient'].includes(a.op)) {
+            const list = tracks.includes(a.name) || !a.name ? tracks : [a.name].concat(tracks);
+            out.push(list.length ? field('Faixa', sel(a.name, [['', 'Escolha a faixa…']].concat(list.map((n) => [n, Au.label(n)])), (v) => set({ name: v })))
+              : h('p', { class: 'hint', style: { margin: 0 } }, 'Escolha a pasta de músicas no painel Som para listar as faixas.'));
+          } else if (String(a.op).startsWith('spot')) out.push(targetsBox(a, 'any'));
+          return out;
+        }
+        case 'trap': {
+          const st2 = S().state;
+          return [h('div', { class: 'ta-grid' },
+            field('Teste', sel(a.save, [['', 'Sem teste (só dano)']].concat((st2.attrs || []).map((n) => [n, n])), (v) => set({ save: v }))),
+            a.save ? field('CD', num(a.dc, (v) => set({ dc: v }), { min: 1 })) : '',
+            field('Dano', h('input', { class: 'num', value: a.damage || '', placeholder: '2d6', onchange: (e) => set({ damage: e.target.value.trim() || '0' }) })),
+            field('Barra', sel(a.bar, [['', (st2.barNames || [])[0] || 'Primeira']].concat((st2.barNames || []).slice(1).map((n) => [n, n])), (v) => set({ bar: v }))),
+            a.save ? field('Se passar', sel(a.onSave, [['half', 'Metade'], ['none', 'Nada']], (v) => set({ onSave: v }))) : ''),
+          h('p', { class: 'hint', style: { margin: 0 } }, 'Atinge quem disparou (em Disparar agora: quem está na área). O resultado aparece no mapa e no chat, e dá para desfazer.')];
+        }
+        case 'fog':
+          return [field('Fazer', sel(a.op, [['reveal', 'Revelar a névoa da área'], ['hide', 'Esconder a área com névoa']], (v) => set({ op: v })))];
+        case 'teleport': {
+          const other = a.sceneId && a.sceneId !== sc.id && st.scenes[a.sceneId];
+          return [field('Para', sel(other ? a.sceneId : '', [['', 'Um ponto deste mapa']].concat(st.sceneOrder.filter((id) => id !== sc.id && st.scenes[id]).map((id) => [id, 'Cena: ' + st.scenes[id].name])), (v) => set({ sceneId: v || null, x: null, y: null }))),
+            other ? h('p', { class: 'hint', style: { margin: 0 } }, 'Chega no centro do mapa "' + other.name + '". Quem controla o token vai junto para a cena.')
+              : h('div', { class: 'row' }, h('span', { class: 'grow ta-target' + (a.x != null ? '' : ' none') }, a.x != null ? 'Destino ' + cell(a.x, a.y) : 'Escolha o ponto'), pickBtn('point', (p) => set({ x: p.x, y: p.y })))];
+        }
+        case 'trigger':
+          return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.trigger), (v) => set({ op: v })))];
+      }
+      return [];
+    };
+
+    // Cartões das ações: resumo; o aberto mostra os campos. A alça arrasta para mudar a ordem.
+    const cards = (tr.actions || []).map((a, i) => {
+      const s = TG.summary(sc, a), open = UI.trigEdit === a.id;
+      const toggle = () => { UI.trigEdit = open ? null : a.id; redo(); B.requestRender(); };
+      // Mouse em cima do cartão: o alvo dessa ação acende no mapa (linha rosa e número)
+      const card = h('div', { class: 'ta-card' + (open ? ' open' : '') + (s.missing ? ' missing' : ''), 'data-i': String(i),
+        onmouseenter: () => { UI.trigHover = a.id; B.requestRender(); }, onmouseleave: () => { if (UI.trigHover === a.id) { UI.trigHover = null; B.requestRender(); } } },
+        h('div', { class: 'ta-row', onclick: (e) => { if (!e.target.closest('button,.ta-grip')) toggle(); } },
+          h('span', { class: 'ta-grip', title: 'Arraste para mudar a ordem', onpointerdown: () => { card.draggable = true; } }, ic('grip-vertical')),
+          h('span', { class: 'ta-n' }, String(i + 1)), ic(TG.ICON[a.type]),
+          h('div', { class: 'ta-sum' }, h('b', {}, s.target), h('small', {}, [s.missing ? 'falta escolher o alvo' : s.op, Number(a.delay) > 0 ? 'esperar ' + String(a.delay).replace('.', ',') + ' s' : ''].filter(Boolean).join(' · '))),
+          iconBtn(open ? 'chevron-up' : 'pencil', open ? 'Fechar' : 'Editar', toggle),
+          iconBtn('trash-2', 'Remover ação', () => delAct(i))),
+        open ? h('div', { class: 'ta-edit' }, ...body(a, i),
+          h('div', { class: 'row ta-delay' }, h('span', { class: 'muted small-text grow' }, i ? 'Esperar depois da ação anterior (s)' : 'Esperar antes (s)'),
+            num(a.delay || 0, (v) => setAct(i, { delay: Math.max(0, v) }), { min: 0, step: 0.5 }))) : null);
+      card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-ta', String(i)); e.dataTransfer.effectAllowed = 'move'; card.classList.add('dragging'); });
+      card.addEventListener('dragend', () => { card.draggable = false; card.classList.remove('dragging'); });
+      card.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('text/x-ta')) { e.preventDefault(); card.classList.add('drop'); } });
+      card.addEventListener('dragleave', () => card.classList.remove('drop'));
+      card.addEventListener('drop', (e) => { e.preventDefault(); card.classList.remove('drop'); const from = Number(e.dataTransfer.getData('text/x-ta')); if (Number.isFinite(from)) moveTo(from, i); });
+      return card;
+    });
+    const addArea = UI.trigAdd
+      ? h('div', { class: 'ta-types' }, TG.ACTIONS.map(([k, l]) => h('button', { class: 'ta-type', onclick: () => {
+        const na = TG.newAction(k); UI.trigEdit = na.id; UI.trigAdd = false; upd({ actions: acts().concat([na]) });
+      } }, ic(TG.ICON[k]), l)), h('button', { class: 'btn small', onclick: () => { UI.trigAdd = false; redo(); } }, 'Cancelar'))
+      : h('div', { class: 'ta-add' },
+        btnI('map-pin', 'Escolher no mapa', { class: 'btn primary', title: 'Clique numa luz, porta, token, som, gatilho ou imagem: a ação certa é criada sozinha', onclick: pickMany }),
+        btnI('plus', 'Adicionar ação', { class: 'btn', title: 'Armadilha, névoa, teletransporte, música…', onclick: () => { UI.trigAdd = true; redo(); } }));
+    const prop = tr.on === 'click' && (sc.props || []).find((x) => x.id === tr.propId);
+
+    return h('div', { class: 'tw' },
+      h('div', { class: 'tw-top' },
+        h('input', { class: 'tw-name', value: tr.name || '', placeholder: 'Nome do gatilho', onchange: (e) => upd({ name: e.target.value.trim() || 'Gatilho' }) }),
+        h('span', { class: 'tw-state ' + trigStateClass(state) }, state + ' · disparou ' + (tr.used || 0) + (tr.used === 1 ? ' vez' : ' vezes'))),
+      h('div', { class: 'tw-cols' },
+        h('section', { class: 'tw-col' },
+          h('div', { class: 'tw-h' }, h('span', { class: 'tw-tag' }, 'SE'), h('b', {}, 'Condições')),
+          field('Quando', sel(tr.on, TG.EVENTS, (v) => upd({ on: v }))),
+          tr.on === 'click' ? h('div', { class: 'row' }, h('span', { class: 'grow ta-target' + (prop ? '' : ' none') }, prop ? 'Imagem: ' + (prop.name || 'Imagem') : 'Escolha a imagem (alavanca, baú…)'), pickBtn('prop', (q) => upd({ propId: q.id }))) : '',
+          field('Quem dispara', sel(tr.who, TG.WHO, (v) => upd({ who: v }))),
+          tr.who === 'pick' ? h('div', { class: 'chips' }, (tr.whoIds || []).map((id) => sc.tokens[id] && h('span', { class: 'chip', title: 'Clique para tirar', onclick: () => upd({ whoIds: tr.whoIds.filter((x) => x !== id) }) }, sc.tokens[id].name)),
+            pickBtn('token', (t) => upd({ whoIds: [...new Set((tr.whoIds || []).concat(t.id))] }))) : '',
+          h('span', { class: 'eyebrow' }, 'Quantas vezes'),
+          h('div', { class: 'seg' }, [['once', 'Uma vez'], ['always', 'Sempre'], ['n', 'Algumas']].map(([k, l]) => h('button', { class: (tr.times || 'once') === k ? 'on' : '', onclick: () => upd({ times: k }) }, l))),
+          tr.times === 'n' ? h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Número de vezes'), num(tr.n || 3, (v) => upd({ n: Math.max(1, Math.round(v)) }), { min: 1 })) : '',
+          tr.times && tr.times !== 'once' ? h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Espera entre disparos (s)'), num(tr.cooldown || 0, (v) => upd({ cooldown: Math.max(0, v) }), { min: 0 })) : '',
+          h('span', { class: 'eyebrow' }, 'Opções'),
+          h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Ligado'), h('input', { type: 'checkbox', checked: tr.enabled !== false, onchange: (e) => upd({ enabled: e.target.checked }) })),
+          h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Perguntar antes de disparar'), h('input', { type: 'checkbox', checked: !!tr.ask, onchange: (e) => upd({ ask: e.target.checked }) })),
+          tr.on === 'enter' ? h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Parar o movimento (armadilha)'), h('input', { type: 'checkbox', checked: !!tr.stop, onchange: (e) => upd({ stop: e.target.checked }) })) : '',
+          h('p', { class: 'hint', style: { margin: 0 } }, 'Os jogadores não veem a área. Arrastar tokens como mestre não dispara; para ver de verdade, use Ver como os jogadores.')),
+        h('section', { class: 'tw-col' },
+          h('div', { class: 'tw-h' }, h('span', { class: 'tw-tag then' }, 'ENTÃO'), h('b', {}, 'O que acontece'), h('small', { class: 'muted grow', style: { textAlign: 'right' } }, 'em ordem')),
+          cards.length ? h('div', { class: 'ta-list' }, cards) : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhuma ação ainda. Adicione na ordem em que devem acontecer.'),
+          addArea)),
+      h('div', { class: 'tw-foot' },
+        btnI('play', 'Testar gatilho', { class: 'btn primary', title: 'Simula no mapa: cada alvo pisca no tempo certo, o som toca só para você. Nada muda de verdade.', onclick: () => TG.simulate(sc.id, tr.id) }),
+        btnI('zap', 'Disparar agora', { title: 'Faz tudo de verdade agora, mesmo gasto', onclick: () => TG.fire(sc.id, tr.id, null, { manual: true }) }),
+        btnI('refresh-cw', 'Rearmar', { onclick: () => upd({ used: 0, lastAt: 0 }) }),
+        h('span', { class: 'grow' }),
+        iconBtn('copy-plus', 'Duplicar', () => { B.duplicateTrigger(sc, tr.id); UI.openTrigger(sc.id, B.selectedTrigger); }),
+        iconBtn('trash-2', 'Apagar gatilho', () => { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); B.selectedTrigger = null; UI.closeWindow('trigger:' + tr.id); B.requestRender(); })));
+  }
+  // Faixa no topo do mapa enquanto o mestre escolhe vários objetos (Concluir = termina)
+  function pickBar(text) {
+    let bar = $('#pick-bar');
+    if (!text) { if (bar) bar.remove(); return; }
+    if (!bar) { bar = h('div', { id: 'pick-bar' }); $('#board-wrap').append(bar); }
+    bar.innerHTML = '';
+    bar.append(ic('map-pin'), h('span', { class: 'grow' }, text), h('button', { class: 'btn primary small', onclick: () => App.Board.cancelPick() }, 'Concluir'));
+  }
+
+  // Caixa do mestre para gatilhos com "Perguntar antes de disparar"
+  UI.renderTriggerAsk = function () {
+    const wrap = $('#board-wrap');
+    if (!wrap) return;
+    let box = $('#trig-ask');
+    const q = App.Triggers.queue;
+    if (!q.length) { if (box) box.remove(); return; }
+    if (!box) { box = h('div', { id: 'trig-ask' }); wrap.append(box); }
+    box.innerHTML = '';
+    q.forEach((it, i) => {
+      const sc = S().state.scenes[it.sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === it.trId), t = sc && sc.tokens[it.tokenId];
+      if (!tr) return;
+      const verb = it.why === 'click' ? 'usou' : tr.on === 'leave' ? 'saiu de' : 'entrou em';
+      box.append(h('div', { class: 'ta-ask' }, ic('zap'), h('span', { class: 'grow' }, h('b', {}, t ? t.name : 'Alguém'), ' ' + verb + ' ', h('b', {}, '"' + tr.name + '"'), '. Disparar?'),
+        h('button', { class: 'btn primary small', onclick: () => App.Triggers.answer(i, true) }, 'Disparar'),
+        h('button', { class: 'btn small', onclick: () => App.Triggers.answer(i, false) }, 'Ignorar')));
+    });
+  };
+
+  // Porta (mestre): aberta ou fechada, trancada ou destrancada
+  function doorHud(hud, empty, sc, w) {
+    if (empty) empty.hidden = true;
+    const sig = JSON.stringify(['door', w, UI.mode, App.Triggers.allTags(sc)]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const B = App.Board;
+      const setOpen = (open) => { if (!!w.open !== open) S().dispatch({ type: 'wall.door', sceneId: sc.id, id: w.id, open }); };
+      const setLock = (locked) => { if (!!w.locked !== locked) S().dispatch({ type: 'wall.lock', sceneId: sc.id, id: w.id, locked }); };
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble door' + (w.locked ? ' locked' : '') }, ic(w.locked ? 'lock' : w.open ? 'door-open' : 'door-closed')),
+          h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, 'Porta'),
+            h('div', { class: 'hud-sub' }, (w.open ? 'Aberta' : 'Fechada') + ' · ' + (w.locked ? 'trancada' : 'destrancada')))),
+        h('div', { class: 'hud-section vis-sec' },
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: w.open ? 'on' : '', title: 'Abrir (um clique no marcador também)', onclick: () => setOpen(true) }, ic('door-open'), 'Aberta'),
+            h('button', { class: w.open ? '' : 'on', onclick: () => setOpen(false) }, ic('door-closed'), 'Fechada')),
+          h('div', { class: 'seg vis-seg' },
+            h('button', { class: w.locked ? '' : 'on', title: 'Shift + clique no marcador também', onclick: () => setLock(false) }, ic('lock-open'), 'Destrancada'),
+            h('button', { class: w.locked ? 'on' : '', title: 'Shift + clique no marcador também', onclick: () => setLock(true) }, ic('lock'), 'Trancada')),
+          h('p', { class: 'hint', style: { margin: 0 } }, w.locked
+            ? 'Trancada: os jogadores não abrem nem passam. Eles não veem o cadeado: descobrem ao tentar abrir. Só você abre (e ao abrir ela fica destrancada).'
+            : 'Destrancada: qualquer um abre e fecha com um clique, e dá para passar por ela mesmo fechada (ela continua fechada e tapando a visão).'),
+          tagField(sc, w, (v) => S().dispatch({ type: 'wall.update', sceneId: sc.id, id: w.id, patch: { tag: v } }))),
+        h('div', { class: 'hud-btns' },
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar porta', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'wall.delete', sceneId: sc.id, id: w.id }); B.selectedDoor = null; B.requestRender(); } })));
+    }
+    hud.hidden = false;
+    if (!hudFloats()) { hud.style.transform = ''; return; }
+    const p = App.Board.toScreen((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
     const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
     hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
   }
@@ -1955,7 +2765,7 @@
 
   function soundHud(hud, empty, sc, snd) {
     if (empty) empty.hidden = true;
-    const sig = JSON.stringify(['snd', snd, UI.mode]);
+    const sig = JSON.stringify(['snd', snd, UI.mode, App.Triggers.allTags(sc)]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -1979,6 +2789,7 @@
           h('div', { class: 'snd-row' }, h('span', {}, 'Volume'), volLbl),
           h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: snd.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } })),
         legend,
+        h('div', { class: 'hud-section' }, tagField(sc, snd, (v) => upd({ tag: v }))),
         h('p', { class: 'hint', style: { margin: 0 } }, 'Cada jogador ouve pelo próprio token: mais alto perto do ponto, do lado em que o som está. Atrás de paredes (área apagada no mapa) chega abafado, a ' + Math.round(App.Audio.OCCLUDED * 100) + '%. Arraste o marcador para mudar de lugar.'),
         h('div', { class: 'hud-btns' },
           snd.once ? '' : btnI(snd.on ? 'pause' : 'play', snd.on ? 'Silenciar' : 'Tocar', { onclick: () => upd(snd.on ? { on: false } : { on: true, at: Date.now() }) }),
@@ -1986,7 +2797,7 @@
           btnI('trash-2', 'Remover', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); App.Board.selectedSound = null; App.Board.requestRender(); } })));
     }
     hud.hidden = false;
-    if (UI.mode !== 'play') { hud.style.transform = ''; return; }
+    if (!hudFloats()) { hud.style.transform = ''; return; }
     const p = App.Board.soundScreenPos(snd), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
     let x = p.x + 30;
     if (x + hud.offsetWidth > W - 14) x = p.x - hud.offsetWidth - 30;
@@ -2432,7 +3243,11 @@
         chk('hideNumbers', 'Esconder Defesa e PV dos monstros dos jogadores'),
         h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Depois de mover, o caminho fica no mapa para todos verem por onde o token passou' },
           h('span', { class: 'grow' }, 'Rastro do movimento (segundos, 0 = não mostra)'),
-          h('input', { type: 'number', class: 'num', min: 0, max: 30, step: 1, value: R.trailSecs ?? 3, onchange: (e) => setR('trailSecs', U.clamp(Math.round(Number(e.target.value) || 0), 0, 30)) })));
+          h('input', { type: 'number', class: 'num', min: 0, max: 30, step: 1, value: R.trailSecs ?? 3, onchange: (e) => setR('trailSecs', U.clamp(Math.round(Number(e.target.value) || 0), 0, 30)) })),
+        h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'O que já foi visto fica no mapa, escurecido. Liga por cena em Iluminação.' },
+          h('span', { class: 'grow' }, 'Memória de exploração'),
+          h('select', { value: R.exploreMode === 'player' ? 'player' : 'group', onchange: (e) => setR('exploreMode', e.target.value) },
+            h('option', { value: 'group' }, 'Do grupo (o que um viu, todos lembram)'), h('option', { value: 'player' }, 'De cada jogador'))));
 
       // Lista editável em etiquetas: × remove, o campo embaixo adiciona (Enter ou vírgula; dá para colar "A, B, C")
       const tagList = (key, ph) => {

@@ -47,3 +47,5 @@ O resultado precisa ser `processos de teste: 0`.
 - Para som, use `--autoplay-policy=no-user-gesture-required` (já está no `runwalk.ps1`) e carregue a faixa com `fetch` + `App.Audio.addFiles`.
 - Recortes de foto para a wiki: `System.Drawing` no PowerShell, JPEG qualidade 85, salvos em `wiki/img/`.
 - Python não está instalado; use node ou PowerShell.
+- **Tempo virtual:** o `runwalk.ps1` usa `--virtual-time-budget`, então `performance.now()` não anda durante código síncrono (dá "0 ms"). Para medir desempenho, rode o código no node carregando os `js/*.js` num contexto com `window`/`document` falsos.
+- Ao filtrar a saída por "EXC", lembre que o `Select-String` ignora maiúsculas ("excluir" também casa); procure por `EXC ` no começo da linha.

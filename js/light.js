@@ -51,9 +51,11 @@
     L.cache.clear();
     const W = sc.cols * sc.grid, H = sc.rows * sc.grid;
     const cfg = App.Combat ? App.Combat.coverCfg(sc) : null, on = !!(cfg && cfg.enabled);
-    const seg = (w) => [w.x1, w.y1, w.x2, w.y2];
+    const segOf = new Map(), seg = (w) => { let s = segOf.get(w); if (!s) { s = [w.x1, w.y1, w.x2, w.y2]; segOf.set(w, s); } return s; };
     const type = (w) => (App.Combat ? App.Combat.wallType(w) : 'full');
     const walls = (sc.walls || []).filter((w) => !(w.door && w.open));
+    // Portas fechadas mas destrancadas: tapam a luz e a visão, mas dá para atravessar
+    L.passDoors = new Set(walls.filter((w) => w.door && !w.locked).map(seg));
     // Sempre bloqueiam: portas fechadas e parede absoluta (casa com telhado). Com a cobertura desligada, a cobertura total também.
     L.walls = walls.filter((w) => type(w) === 'full' || (!on && type(w) === 'high')).map(seg);
     // A luz passa por cima de ¾ e meia, mas não da cobertura total
@@ -120,10 +122,11 @@
   L.visibility = visibility;
 
   // Algum segmento bloqueante cruza a linha a→b?
-  function blocked(sc, ax, ay, bx, by, eyeH) {
+  function blocked(sc, ax, ay, bx, by, eyeH, skip) {
     prepare(sc);
     const cross = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
     for (const s of wallsFor(eyeH)) {
+      if (skip && skip.has(s)) continue;
       const d1 = cross(s[0], s[1], s[2], s[3], ax, ay), d2 = cross(s[0], s[1], s[2], s[3], bx, by);
       const d3 = cross(ax, ay, bx, by, s[0], s[1]), d4 = cross(ax, ay, bx, by, s[2], s[3]);
       if (((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6))) return true;
@@ -131,6 +134,19 @@
     return false;
   }
   L.blocked = blocked;
+  /*
+   * Andar de a até b atravessa parede que tapa a visão de quem tem eyeH metros?
+   * Testa duas linhas paralelas, a 1 px de cada lado, e só conta se as duas batem: assim cortar o canto de uma sala
+   * (diagonal pelo ponto onde duas paredes se encontram) conta, e passar rente à ponta solta de uma parede não.
+   * Porta fechada destrancada não segura ninguém (só a trancada).
+   */
+  L.moveBlocked = function (sc, a, b, eyeH) {
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!len) return false;
+    prepare(sc);
+    const nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
+    return [1, -1].every((k) => blocked(sc, a.x + nx * k, a.y + ny * k, b.x + nx * k, b.y + ny * k, eyeH, L.passDoors));
+  };
 
   const center = (sc, t) => { const s = (t.size || 1) * sc.grid; return { x: t.x + s / 2, y: t.y + s / 2 }; };
   L.center = center;
@@ -189,12 +205,16 @@
       color: o.color || WARM, tint: o.tint ?? 0.4, flicker: !dark && !!o.flicker, seed: seedOf(o.id) };
     if (s.shape === 'area') {
       if (!Array.isArray(o.pts) || o.pts.length < 3) return null;
+      if (o.power != null && Number(o.power) < 0.5) return null;
       s.pts = o.pts; s.edge = Math.max(0, Number(o.edge) || 0) * g;
       return s;
     }
-    s.dim = Math.max(Number(o.dim) || 0, Number(o.bright) || 0) * g;
+    // power: intensidade animada (Plano 21), 1 = normal
+    const pw = o.power == null ? 1 : Math.max(0, Number(o.power) || 0);
+    if (pw < 0.02) return null;
+    s.dim = Math.max(Number(o.dim) || 0, Number(o.bright) || 0) * g * pw;
     if (!(s.dim > 0)) return null;
-    s.bright = U.clamp(Number(o.bright) || 0, 0, s.dim / g) * g;
+    s.bright = U.clamp((Number(o.bright) || 0) * pw, 0, s.dim / g) * g;
     s.dir = (Number(o.dir) || 0) * DEG;
     s.half = (U.clamp(Number(o.angle) || 60, 10, 340) / 2) * DEG;
     s.soft = SOFT;
@@ -430,6 +450,16 @@
       }
     }
 
+    // Memória de exploração: o que já foi visto fica no mínimo a ~25% (sem tokens: eles já foram filtrados pela visão)
+    if (opts.explore && viewers && viewers.length) {
+      const sx = seenC.getContext('2d');
+      sx.save();
+      world(sx);
+      sx.globalCompositeOperation = 'lighten';
+      sx.imageSmoothingEnabled = true;
+      sx.drawImage(opts.explore, 0, 0, sc.cols * sc.grid, sc.rows * sc.grid);
+      sx.restore();
+    }
     ctx.save();
     // Cor das luzes (só no escuro): tinge o chão e dá um brilho leve; a escuridão aplicada depois apaga o que ninguém vê
     if (!sc.light.global && lights.length) {

@@ -34,6 +34,8 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 | Três quartos | `three` | 1,4 m | A luz passa por cima. Bloqueia a visão de quem não é mais alto. |
 | Meia | `half` | 0,9 m | Idem. |
 
+- **Portas** (`door`, `open`, `locked`; Plano 13): fechada tapa luz e visão (tipo 'full'). **Destrancada** (padrão, portas antigas também): qualquer um abre/fecha e dá para atravessar fechada (`Light.passDoors` é ignorado em `moveBlocked`; não fica vermelho; continua fechada). **Trancada** (`wall.lock`, só o mestre: Shift+clique no marcador ou painel da porta; ferramenta Porta escolhe o padrão das novas): fecha; jogador não abre (`permit` de `wall.door`) nem passa; cadeado só para o mestre; o mestre abrindo destranca.
+- **Lápis** (Plano 12, `B.wallMode`): traço livre → `pencilWalls` simplifica (Ramer-Douglas-Peucker, tolerância 8% do quadrado), fecha se terminar a até meio quadrado do começo, e cria um trecho de parede por segmento, todos com o mesmo `w.stroke`. Borracha e clique de troca de tipo agem no traço inteiro (`wall.delete`/`wall.update` aceitam `ids`).
 - **Proteção = altura do muro ÷ altura do alvo:** ≥100% cobertura total (não pode ser alvo), ≥75% bônus de ¾ (+5), ≥50% bônus de ½ (+2). Limites e bônus configuráveis. O bônus soma na Defesa e no teste de resistência.
 - Testa 5 linhas (centro e cantos do alvo) e vale a de **menor** cobertura. Vários muros: vale o maior.
 - Quem está encostado no muro ataca por cima dele (opção da cena).
@@ -51,6 +53,7 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 ## Movimento por caminho (Plano 5)
 - Arrastando um token (ou a Régua), o botão direito marca pontos de passagem (via `mousedown`, porque o 2º botão não gera `pointerdown`); Backspace desfaz. Sem segurar nada, o direito move a câmera.
 - `drawPath`: trechos com distância, total, vermelho onde atravessa parede (só aviso). `pathCost` soma na medida da cena; na 1-2-1 as diagonais acumulam entre trechos.
+- **Sem espiar (Plano 11):** jogador arrastando com algum trecho que atravessa parede que tapa a visão dele (`Light.moveBlocked` com a altura do olho: absoluta, cobertura total, porta fechada; muro baixo só para quem é mais baixo que ele) fica cego (tela preta, só o próprio token e o caminho vermelho, sem mensagem). Soltar assim não move (o token volta); setas também param. `permit()` confere o caminho inteiro de `token.move` vindo de jogador (posição atual → pontos → destino). O mestre não tem trava. "Atravessa" testa duas linhas paralelas a 1 px: pega o canto de sala na diagonal e deixa passar rente à ponta solta de uma parede (vale também para o vermelho).
 - `token.move` leva `path` e `at` → `t.lastMove`; o token vai direto ao destino (sem deslizar, Plano 7) e todos veem o rastro por `rules.trailSecs` segundos (Mesa → Regras; 0 desliga).
 
 ## Visibilidade dos tokens
@@ -91,9 +94,49 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Sons no mapa: volume pela distância, lado esquerdo/direito, abafado atrás de paredes.
 - **Salas de som** (ferramenta M, retângulo ou polígono): à prova de som. Música da sala toca na sala inteira; para quem está dentro, a música da cena para (volume 0, continua em sincronia), o ambiente de fora para/abafa/continua, efeitos seguem. Cada jogador ouve pelo próprio token; o mestre, pelo centro da câmera.
 
+## Gatilhos (Plano 14, `js/triggers.js`; ainda sem tutorial/wiki)
+- Ferramenta **Gatilho** (`T`, só o mestre): retângulo (clique = 1 quadrado), círculo ou polígono. Jogadores nunca veem a área.
+- **Quando:** entrar (inclusive passando por cima no meio do caminho), sair, clicar numa imagem ligada (`propId`; jogador clica, o mestre confere dono e visibilidade). **Disparar agora** no painel (mesmo gasto).
+- **Quem:** grupo (`Combat.side` = party, padrão), criaturas, qualquer, escolhidos. **Arrastar como mestre não dispara**; em "ver como" dispara.
+- **Vezes:** uma (padrão), sempre, N; espera entre disparos; gasto = cinza; Rearmar / Rearmar todos; Ligado.
+- **Perguntar antes**: fila no mestre (`#trig-ask`, Disparar/Ignorar). **Parar o movimento**: o mestre corta o caminho no primeiro quadrado da área antes de aplicar (o jogador recebe a posição corrigida).
+- **Ações** em ordem, atraso acumulado: porta (abrir/fechar/trancar/destrancar/alternar), luz (acender/apagar/alternar), token ou grupo (aparecer/sumir/vulto), som (efeito, som do mapa, música, ambiente), armadilha (`useAction` com `a.trap`: teste + dano, com Desfazer; atinge quem disparou ou, no botão, quem está na área), névoa (revelar/esconder o retângulo da área), teletransporte (ponto deste mapa, ou outra cena: o token passa para lá e quem o controla vai junto), outro gatilho (ligar/desligar/rearmar/disparar; profundidade máx. 5). "Escolher no mapa" (`B.pick`).
+- **Configurar** (Plano 15): janela flutuante `trigger:<id>` (SE | ENTÃO, cartões com arrastar, "No mapa" esconde a janela); painel da direita só com resumo; lista no quadro da ferramenta (estado, ligar, testar). **Testar = simulação** (`simulate`: piscar no mapa do mestre + prévia de som; não muda estado).
+- **Escolher no mapa** (Plano 16): botão na coluna ENTÃO; `anyObjectAt` reconhece luz, porta, som, gatilho ou token e `actionFromPick` cria a ação com o contrário do estado atual; vários seguidos até Esc/Concluir. Alvos numerados no mapa; ação em foco (aberta ou hover) destacada. Luzes novas com nome numerado.
+- **Sem mensagens para os jogadores** (decisão: o mestre narra). O mestre recebe aviso e uma linha secreta no chat a cada disparo.
+
+## Vários alvos e animação (Plano 21, `js/anim.js`; ainda sem tutorial/wiki)
+- **Vários alvos:** cada ação tem `ids` (lista) e `tag` (grupo de objetos). Porta, luz, som do mapa, outro gatilho, token (`t:`/`g:`) e Animar (`prop:`/`light:`/`token:`). No cartão: chips (clique tira), "Somar da lista…" e "No mapa" (vários cliques; clicar de novo tira; Enter/Concluir). Objeto de outro tipo transforma o cartão (Plano 16). Na coluna ENTÃO, objetos iguais clicados em seguida entram na mesma ação.
+- **Grupo de objetos:** campo no painel da imagem, luz, porta e som. O gatilho que mira o grupo pega também os objetos postos nele depois. Gatilhos antigos (`lightId`, `wallId`…) viram `ids` no `migrate` e no reducer.
+- **Animar** (imagem, luz, token): mover (quadrados ou destino no mapa), ronda (pontos marcados no mapa), girar/varrer, opacidade (imagem) ou intensidade (luz, campo `power`), tamanho (imagem), cor (luz). Duração, curva (suave, constante, acelerando, freando), repetir (uma vez, ir e voltar N vezes ou sem parar, repetir sem parar), no fim fica ou volta. Modelos prontos (lâmina, girar, holofote, pulsar, aparecer, sumir, ronda).
+- Ações: **Tocar a animação do objeto** (a do painel), **Animação nova** (a do cartão; vários alvos fazem o mesmo movimento), **Parar onde está**, **Voltar ao início** (`animHome`).
+- **Animação própria** no painel da imagem e da luz (seção Animação): movimentos, "Começa sozinha com a cena" (calculada pelo relógio, sem estado; para tokens, só por gatilho), Tocar/Parar/Voltar.
+- **Rede:** uma mensagem para começar (`anim.start`) e uma para terminar (`anim.end`, grava o resultado); cada tela calcula o quadro (`Anim.view`) pelo relógio do mestre (`now` no welcome/state e `clock` a cada 20 s).
+- Luz animada vale para a visão e as paredes; a memória de exploração grava a cada 1 s enquanto luz ou token anima. Token anda olhando para onde vai e termina no grid. Testar = prévia só na tela do mestre (até 6 s). Animação rodando não entra no Ctrl+Z.
+- **Área de dano da imagem** ("Machuca quem tocar"): retângulo ajustado no mapa (`hurt.box`, gira e espelha com a imagem), só em movimento ou sempre, quem, teste/CD/dano/barra (como a armadilha). Um golpe por passagem. Os jogadores não recebem a área (`Net.playerState`/`forPlayers`).
+- Mestre vê o caminho tracejado (com sombra no destino e o arco do giro) do objeto selecionado ou do cartão Animar aberto, e a área de dano em vermelho.
+
+## Scan de paredes e portas (Plano 22, `js/scan.js`; ainda sem tutorial/wiki)
+- Ferramenta Parede → **Procurar paredes no mapa** (janela `scan`). Precisa de imagem de mapa na cena.
+- **O que separa as salas:** Lado de fora (clique no vazio; todo vazio daquela cor, inclusive pátios), Cor da parede (clique na linha; meio da linha) ou Escuro. Sensibilidade. Retas (meio-quadrado, 0°/45°/90°) ou Livre (um traço por trecho). Mapa inteiro ou só uma área.
+- **Portas:** Mostrar uma porta (retângulo justo em volta) → procura as parecidas, giradas e espelhadas; Outra porta para outro desenho; Quão parecida; palpite pelas aberturas (desligado). A porta corta a parede debaixo.
+- Prévia tracejada (verde-água paredes, laranja portas); clique tira/põe, Shift + arrastar tira várias; não repete paredes existentes; **Criar** = um passo no Ctrl+Z.
+- **Importar mapa com paredes** (aba Cenas, ícone de envio): `.dd2vtt`/`.uvtt` → cena nova com imagem, grid, paredes, portas e luzes.
+
+## Montagem do mapa (Planos 17, 18, 20; ainda sem tutorial/wiki)
+- **Desfazer/refazer** (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, botões ↶ ↷): só o mestre, 100 passos por sessão, só montagem e tokens do mestre.
+- **Seleção múltipla:** Shift + arrastar (laço), Shift + clique; mover junto, setas, Delete, Ctrl+D, Ctrl+C/Ctrl+V em qualquer cena (escala se o grid for outro; gatilhos colados religados às cópias). Shift + clique numa porta continua trancando.
+- **Notas do mestre** (`N`): alfinete colorido com título, texto no hover, janela própria, lista com busca. Nunca vão para os jogadores.
+
+## Memória de exploração (Plano 19; ainda sem tutorial/wiki)
+- Por cena (Iluminação → Memória de exploração; Esquecer o explorado). Regra da campanha: do grupo ou de cada jogador.
+- O já visto fica ~25% e sem tokens na tela do jogador; o contorno das paredes vale nas áreas lembradas. Espiar no arraste não grava.
+
 ## Painéis
 - Atualizam na hora; só esperam quando alguém digita (`isTyping`).
+- Barras laterais recolhem (Plano 15): faixa de ícones; lembrado em `localStorage` `vesper.paineis`. Direita recolhida = painel do selecionado flutua (`hudFloats`/`placeHud`). Larguras via `--lw`/`--rw` no `#app`.
+- Janelas (`UI.openWindow`): o `build` pode devolver `null` para "nada mudou, não redesenha".
 - Painel Mesa: conexão, salvar/exportar, regras, listas da campanha (atributos, barras, condições) como etiquetas.
 
 ## Atalhos
-`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `M` sala de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.
+`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `T` gatilho · `N` nota · `M` sala de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.

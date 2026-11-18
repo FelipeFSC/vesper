@@ -429,7 +429,9 @@ td:first-child { white-space: nowrap; }
   </ol>
   <ul>
     <li><kbd>Backspace</kbd> (ainda segurando) desfaz o último ponto.</li>
-    <li>Trecho que atravessa parede ou porta fechada fica <b>vermelho</b>, só como aviso: o movimento é permitido.</li>
+    <li>Trecho que atravessa parede ou porta fechada fica <b>vermelho</b>. Cortar o canto de uma sala na diagonal também conta.</li>
+    <li><b>Sem espiar:</b> se o caminho atravessa uma parede que tapa a visão (parede absoluta, cobertura total ou porta trancada; porta fechada destrancada deixa passar), o jogador fica <b>sem visão</b> enquanto arrasta: a tela escurece e fica só o token e o caminho vermelho. Recuou ou marcou um ponto pela porta, a visão volta. Se soltar assim, o token <b>volta para onde estava</b>. Muros baixos (meia e três quartos) só ficam vermelhos, porque dá para ver por cima. Quem é baixo (ou mais baixo que o muro) segue a mesma regra da visão.</li>
+    <li>As setas do teclado também param na parede. O mestre pode mover qualquer token através das paredes.</li>
     <li>Na regra <b>alternada 1-2-1</b>, a contagem das diagonais continua de um trecho para o outro.</li>
     <li>Depois de mover, <b>todos</b> veem o rastro do caminho com o total por alguns segundos. O mestre escolhe quanto tempo em <b>Mesa → Regras automáticas → Rastro do movimento</b> (0 desliga).</li>
     <li>A <b>Régua</b> <kbd>R</kbd> aceita os mesmos pontos com o botão direito, para medir sem mover ninguém.</li>
@@ -502,6 +504,7 @@ td:first-child { white-space: nowrap; }
   <ol>
     <li>Sem nenhum token selecionado, ligue <b>Luz e visão dinâmicas</b> na lateral direita e escolha <b>Claro</b> ou <b>Escuro</b>.</li>
     <li>Use <b>Parede</b> <kbd>W</kbd> e <b>Porta</b> <kbd>O</kbd>: arraste de um canto do grid até outro.</li>
+    <li>Muro curvo, caverna, rocha? No quadro da ferramenta Parede, troque <b>Reta</b> por <b>Lápis</b> e desenhe à mão livre. O traço vira uma parede do tipo escolhido. Terminando perto de onde começou, o contorno se fecha. A <b>borracha</b> apaga o traço inteiro, e clicar nele com outro tipo escolhido troca o tipo do traço todo.</li>
     <li>Selecione o token e escolha a luz dele em <b>Luz e visão</b>: vela, <b>Tocha (4/8)</b>, lanterna ou fogueira. Ali também ficam a cor, <b>Tremular</b>, a luz <b>em cone</b> e a <b>visão no escuro</b>.</li>
     <li>Para luzes presas ao mapa (lustre, janela, sala acesa) e para escuridão, use a ferramenta <b>Luz</b> <kbd>U</kbd>. Veja <a href="#pontos-luz">Pontos de luz e de escuridão</a>.</li>
   </ol>
@@ -518,6 +521,11 @@ td:first-child { white-space: nowrap; }
   <ul>
     <li><b>Escuro</b>: os jogadores só veem o que uma luz ilumina. <b>Claro</b>: tudo é visível, mas as paredes ainda escondem o outro lado.</li>
     <li>Portas abrem e fecham com um clique no marcador dourado. Os jogadores também podem abrir.</li>
+    <li><b>Porta trancada</b> <span class="who gm">Mestre</span>: <b>Shift + clique</b> no marcador tranca ou destranca, e clicar no marcador também abre o painel da porta (Aberta/Fechada, Destrancada/Trancada, Apagar). Na ferramenta <b>Porta</b> você escolhe se as novas portas nascem trancadas.
+      <ul>
+        <li><b>Destrancada</b>: qualquer um abre e fecha, e dá para <b>passar por ela mesmo fechada</b> (ela continua fechada e tapando a visão).</li>
+        <li><b>Trancada</b>: fica fechada, os jogadores não abrem nem passam (o caminho fica vermelho, sem visão, e o token volta). Só você vê o cadeado; o jogador descobre ao tentar abrir: "A porta está trancada". Se você abrir, ela fica destrancada.</li>
+      </ul></li>
     <li><b>Contorno no escuro:</b> o jogador vê uma linha clara nas paredes que o personagem enxerga, mesmo sem luz, e as portas em dourado. Assim ele sabe o limite da sala. Paredes fora da vista e debaixo da névoa de guerra continuam escondidas.</li>
     <li>Já desenhou as salas com linhas e retângulos? <b>Configurar cena → Paredes dos desenhos</b> transforma os desenhos em paredes.</li>
     <li>Monstros que o jogador não vê também não podem ser clicados nem atacados por ele.</li>

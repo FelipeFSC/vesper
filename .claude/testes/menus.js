@@ -11,7 +11,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const fits = (el) => { const r = el.getBoundingClientRect(); return { ok: r.top >= area.top - 1 && r.bottom <= area.bottom + 1, top: Math.round(r.top), bottom: Math.round(r.bottom), rola: el.scrollHeight > el.clientHeight + 1 }; };
     const tb = fits($('#toolbar'));
     log.push(`barra de ferramentas: cabe=${tb.ok} (${tb.top}–${tb.bottom}) rola=${tb.rola}`);
-    for (const tool of ['path', 'rect', 'wall', 'light', 'prop', 'room']) {
+    for (const tool of ['path', 'rect', 'wall', 'light', 'trigger', 'prop', 'room']) {
       B.setTool(tool); App.UI.refresh(); await W(120);
       const r = fits($('#tool-opts'));
       log.push(`opções de ${tool}: cabe=${r.ok} (${r.top}–${r.bottom}) rola=${r.rola}`);
