@@ -29,12 +29,14 @@
     return name;
   }
 
+  // Abre a história escolhida na tela de Histórias (Plano 33)
   async function startGM(online, then) {
     if (!readName(online)) return;
     const S = App.Store;
     S.role = 'gm';
     const saved = await App.Storage.load();
     const st = saved && saved.state ? S.migrate(saved.state) : S.newCampaign();
+    $('#st-screen').hidden = true;
     st.gm = { id: S.me.id, name: S.me.name, color: S.me.color };
     S.setState(st, (saved && saved.assets) || {});
     App.UI.start();
@@ -118,6 +120,7 @@
 
   function onKey(e) {
     if ($('#lobby').hidden) return;
+    if (storiesKey(e)) return;
     const inField = e.target instanceof Element && e.target.matches('input');
     if (e.key === 'Escape') {
       if (!$('#mn-join').hidden) { $('#mn-join').hidden = true; select($('#lb-join-open'), true); }
@@ -237,15 +240,175 @@
     } catch (e) { U.toast(e.message, 'error'); }
   }
 
-  // Mostra o nome da campanha salva em "Preparar tabuleiro"
+  // Quantas histórias há (descrição de "Preparar tabuleiro")
   async function peekCampaign() {
-    const saved = await App.Storage.load();
-    const name = saved && saved.state && saved.state.name;
-    if (!name) return;
-    const b = $('#lb-offline');
-    b.dataset.desc = `Continua a campanha <b>${name.replace(/[<&>"]/g, '')}</b>: cenas, mapas e fichas, sem ninguém conectado.`;
+    let list = [];
+    try { list = await App.Storage.listStories(); } catch { return; }
+    if (!list.length) return;
+    const b = $('#lb-offline'), n = list.length, last = list[0].name.replace(/[<&>"]/g, '');
+    b.dataset.desc = `Escolha uma das suas ${n === 1 ? 'histórias' : n + ' histórias'} (a última foi <b>${last}</b>) e monte cenas, mapas e fichas sem ninguém conectado.`;
     if (b.classList.contains('sel')) select(b);
   }
+
+  // ================= Histórias (Plano 33) =================
+  // Uma tela de cartões entre o menu e a mesa: cada cartão é uma mesa preparada; o último é "+ Nova história".
+  const Stories = { online: false, list: [], menu: null };
+  App.Stories = Stories;
+  const esc = (t) => String(t || '').replace(/[<&>"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;', '"': '&quot;' }[c]));
+  function ago(t) {
+    const m = Math.round((Date.now() - (t || 0)) / 60000);
+    if (m < 1) return 'agora';
+    if (m < 60) return 'há ' + m + ' min';
+    const h = Math.round(m / 60);
+    if (h < 24) return 'há ' + h + ' h';
+    const d = Math.round(h / 24);
+    if (d === 1) return 'ontem';
+    if (d < 30) return 'há ' + d + ' dias';
+    return new Date(t).toLocaleDateString('pt-BR');
+  }
+  async function showStories(online) {
+    if (!readName(online)) return;
+    Stories.online = online;
+    $('.mn-main').hidden = true;
+    $('#st-screen').hidden = false;
+    $('#st-crumb').textContent = online ? 'Abrir mesa online' : 'Preparar tabuleiro';
+    await renderStories();
+    const first = $('#st-grid .st-card');
+    if (first) first.focus({ preventScroll: true });
+  }
+  function hideStories() {
+    closeCardMenu();
+    $('#st-screen').hidden = true;
+    $('.mn-main').hidden = false;
+    if (Stories.online) showList('mn-play', $('#lb-host')); else showList('mn-root', $('#lb-offline'));
+  }
+  Stories.onCards = () => { if (!$('#st-screen').hidden && !$('#st-grid .st-new.editing') && !$('#st-grid .st-name-edit')) renderStories(); };
+  async function renderStories() {
+    const grid = $('#st-grid');
+    try { Stories.list = await App.Storage.listStories(); } catch (e) { Stories.list = []; U.toast('Não consegui ler as histórias deste navegador: ' + e.message, 'error'); }
+    grid.innerHTML = '';
+    Stories.list.forEach((c, i) => {
+      const img = c.cover || c.thumb;
+      const card = document.createElement('div');
+      card.className = 'st-card';
+      card.tabIndex = 0;
+      card.dataset.id = c.id;
+      card.style.animationDelay = Math.min(i, 8) * 0.04 + 's';
+      card.innerHTML = `<div class="st-img${img ? '' : ' empty'}"${img ? ` style="background-image:url('${img}')"` : ''}>${img ? '' : '<span>' + esc((c.name || '?').trim().charAt(0).toUpperCase()) + '</span>'}</div>
+        <div class="st-info"><b class="st-name">${esc(c.name)}</b><small>${ago(c.savedAt)} · ${c.scenes || 0} ${c.scenes === 1 ? 'cena' : 'cenas'}</small></div>
+        <button class="st-more" title="Opções da história">${App.Icons.svg('ellipsis')}</button>`;
+      card.onclick = (e) => { if (e.target.closest('.st-more, .st-name-edit')) return; openStory(c.id); };
+      card.onkeydown = (e) => { if (e.key === 'Enter' && e.target === card) openStory(c.id); };
+      card.querySelector('.st-more').onclick = (e) => { e.stopPropagation(); cardMenu(c, e.currentTarget); };
+      card.oncontextmenu = (e) => { e.preventDefault(); cardMenu(c, card.querySelector('.st-more')); };
+      grid.append(card);
+    });
+    const add = document.createElement('div');
+    add.className = 'st-card st-new';
+    add.tabIndex = 0;
+    add.innerHTML = `<div class="st-plus">${App.Icons.svg('plus')}</div><div class="st-info"><b>Nova história</b><small>Uma mesa nova, com uma cena vazia</small></div>`;
+    add.onclick = () => newStoryForm(add);
+    add.onkeydown = (e) => { if (e.key === 'Enter' && e.target === add) newStoryForm(add); };
+    grid.append(add);
+  }
+  function newStoryForm(add) {
+    if (add.classList.contains('editing')) return;
+    add.classList.add('editing');
+    add.innerHTML = `<div class="st-plus">${App.Icons.svg('plus')}</div><div class="st-info st-form"><input class="st-input" maxlength="60" placeholder="Nome da história" autocomplete="off"><div class="st-form-btns"><button class="btn primary small">Criar</button><button class="btn small">Cancelar</button></div></div>`;
+    const inp = add.querySelector('input'), [ok, no] = add.querySelectorAll('button');
+    const go = async () => {
+      const name = inp.value.trim();
+      if (!name) { inp.focus(); return; }
+      ok.disabled = true;
+      const id = await App.Storage.createStory(name);
+      openStory(id);
+    };
+    ok.onclick = (e) => { e.stopPropagation(); go(); };
+    no.onclick = (e) => { e.stopPropagation(); renderStories(); };
+    inp.onclick = (e) => e.stopPropagation();
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') renderStories().then(() => add.focus && $('#st-grid .st-new').focus()); };
+    inp.focus();
+  }
+  async function openStory(id) {
+    closeCardMenu();
+    App.Storage.currentId = id;
+    try { localStorage.setItem('vesper.story', id); } catch { /* */ }
+    await startGM(Stories.online);
+  }
+  Stories.open = openStory;
+  // Menu do cartão: Renomear, Trocar imagem, Usar o mapa da cena, Duplicar, Exportar, Apagar
+  function closeCardMenu() { if (Stories.menu) { Stories.menu.remove(); Stories.menu = null; } }
+  function cardMenu(c, anchor) {
+    if (Stories.menu && Stories.menu.dataset.id === c.id) { closeCardMenu(); return; }
+    closeCardMenu();
+    const St = App.Storage, m = document.createElement('div');
+    m.className = 'st-menu';
+    m.dataset.id = c.id;
+    const item = (icon, label, run, danger) => {
+      const b = document.createElement('button');
+      b.className = 'st-mi' + (danger ? ' danger' : '');
+      b.innerHTML = App.Icons.svg(icon) + '<span>' + label + '</span>';
+      b.onclick = async (e) => { e.stopPropagation(); closeCardMenu(); try { await run(); } catch (err) { U.toast(err.message, 'error'); } };
+      m.append(b);
+    };
+    item('pencil', 'Renomear', () => renameInline(c));
+    item('image', 'Trocar imagem', async () => {
+      const file = await U.pickFile('image/*');
+      if (!file) return;
+      const r = await App.Images.toWebP(file, 900);
+      await St.setCover(c.id, r.data);
+      await renderStories();
+    });
+    if (c.cover) item('map', 'Usar o mapa da cena', async () => { await St.setCover(c.id, null); await St.refreshThumb(c.id); await renderStories(); });
+    item('copy-plus', 'Duplicar', async () => { await St.duplicateStory(c.id); await renderStories(); U.toast('História duplicada.'); });
+    item('download', 'Exportar (arquivo)', async () => { const b = await St.storyBundle(c.id); if (b) St.downloadJSON(b, 'historia_' + c.name); });
+    item('trash-2', 'Apagar', async () => {
+      if (!confirm('Apagar a história "' + c.name + '"? Isso não pode ser desfeito (exporte antes, se quiser guardar).')) return;
+      await St.deleteStory(c.id);
+      await renderStories();
+      U.toast('História apagada.');
+    }, true);
+    document.body.append(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = Math.min(window.innerWidth - m.offsetWidth - 10, r.right - m.offsetWidth) + 'px';
+    m.style.top = (r.bottom + 6 + m.offsetHeight > window.innerHeight - 10 ? r.top - m.offsetHeight - 6 : r.bottom + 6) + 'px';
+    Stories.menu = m;
+  }
+  function renameInline(c) {
+    const card = $('#st-grid .st-card[data-id="' + c.id + '"]');
+    if (!card) return;
+    const nameEl = card.querySelector('.st-name'), inp = document.createElement('input');
+    inp.className = 'st-input st-name-edit'; inp.maxLength = 60; inp.value = c.name;
+    nameEl.replaceWith(inp);
+    inp.focus(); inp.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      if (save && inp.value.trim() && inp.value.trim() !== c.name) await App.Storage.renameStory(c.id, inp.value);
+      await renderStories();
+      const again = $('#st-grid .st-card[data-id="' + c.id + '"]');
+      if (again) again.focus();
+    };
+    inp.onclick = (e) => e.stopPropagation();
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+    inp.onblur = () => finish(true);
+  }
+  // Setas andam pelos cartões; Esc fecha o menu do cartão ou volta
+  function storiesKey(e) {
+    if ($('#st-screen').hidden) return false;
+    if (e.key === 'Escape') { if (Stories.menu) closeCardMenu(); else if (!(e.target instanceof Element && e.target.matches('input'))) hideStories(); return true; }
+    if (e.target instanceof Element && e.target.matches('input')) return true;
+    const cards = [...document.querySelectorAll('#st-grid .st-card')], cur = cards.indexOf(document.activeElement);
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return true;
+    e.preventDefault();
+    if (cur < 0) { if (cards[0]) cards[0].focus(); return true; }
+    const top0 = cards[0].offsetTop, cols = Math.max(1, cards.filter((c) => c.offsetTop === top0).length);
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[e.key];
+    const next = cards[Math.max(0, Math.min(cards.length - 1, cur + step))];
+    if (next) next.focus();
+    return true;
+  }
+  document.addEventListener('pointerdown', (e) => { if (Stories.menu && !e.target.closest('.st-menu, .st-more')) closeCardMenu(); });
 
   function boot() {
     App.Store.me = loadMe();
@@ -260,9 +423,10 @@
 
     $('[data-sub="mn-play"]').onclick = () => showList('mn-play');
     $('#mn-play [data-back]').onclick = () => showList('mn-root', $('[data-sub="mn-play"]'));
-    $('#lb-host').onclick = () => startGM(true);
+    $('#lb-host').onclick = () => showStories(true);
     $('#lb-join-open').onclick = openJoin;
-    $('#lb-offline').onclick = () => startGM(false);
+    $('#lb-offline').onclick = () => showStories(false);
+    $('#st-back').onclick = hideStories;
     $('#lb-sheet').onclick = () => { location.href = 'ficha.html'; };
     $('#lb-join').onclick = startPlayer;
     $('#lb-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
@@ -284,6 +448,8 @@
     } else {
       showList('mn-root');
       if (!$('#lb-name').value) $('#lb-name').focus();
+      const back = new URLSearchParams(location.search).get('historias');
+      if (back) { history.replaceState(null, '', location.pathname); showList(back === 'online' ? 'mn-play' : 'mn-root', back === 'online' ? $('#lb-host') : $('#lb-offline')); showStories(back === 'online'); }
     }
     peekCampaign();
   }

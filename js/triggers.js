@@ -8,6 +8,9 @@
  * {id, name, shape: circle|rect|poly, x, y, r (raio em quadrados, círculo), pts [[x,y]…] (retângulo e polígono),
  *  on: enter|leave|click, propId (imagem ligada, para click), who: party|foes|any|pick, whoIds [],
  *  times: once|always|n, n, used, cooldown (s), lastAt, ask, stop, enabled, actions: [{id, type, delay, …}]}
+ *
+ * Portal (Plano 31): um gatilho com portal: true e uma ação só, teleport {sceneId, x, y, portalId}.
+ * portalId = o portal do outro lado (ida e volta): a chegada é o centro dele. Sem portalId, chega em x, y.
  */
 (function (App) {
   const { U } = App;
@@ -18,7 +21,7 @@
   T.WHO = [['party', 'Personagens do grupo'], ['foes', 'Criaturas'], ['any', 'Qualquer token'], ['pick', 'Tokens escolhidos']];
   T.ACTIONS = [
     ['door', 'Porta'], ['light', 'Luz'], ['token', 'Token ou grupo'], ['sound', 'Som'],
-    ['anim', 'Animar'], ['trap', 'Armadilha'], ['fog', 'Névoa'], ['teleport', 'Teletransporte'], ['trigger', 'Outro gatilho'],
+    ['anim', 'Animar'], ['trap', 'Armadilha'], ['fog', 'Névoa'], ['trigger', 'Outro gatilho'],
   ];
 
   T.ICON = { door: 'door-closed', light: 'lightbulb', token: 'users', sound: 'volume-2', trap: 'swords', fog: 'cloud-fog', teleport: 'sparkles', trigger: 'zap', anim: 'move' };
@@ -129,7 +132,8 @@
       case 'fog': return { target: 'Névoa', op, missing: false };
       case 'teleport': {
         const other = a.sceneId && a.sceneId !== sc.id && st.scenes[a.sceneId];
-        return { target: 'Teletransporte', op: other ? 'para a cena ' + other.name : a.x != null ? 'para ' + cellOf(sc, a.x, a.y) : '', missing: !other && a.x == null };
+        const d = T.portalDest(sc, null, a);
+        return { target: 'Teletransporte', op: other ? 'para a cena ' + other.name + (d && !d.center ? ' ' + cellOf(other, d.x, d.y) : '') : d && !d.center ? 'para ' + cellOf(sc, d.x, d.y) : '', missing: !other && (!d || d.center) };
       }
       case 'trigger': { const l = T.targets(sc, a); return { target: l.length === 1 ? 'Gatilho ' + l[0].name : targetLabel(sc, a, l, 'Outro gatilho'), op, missing: !l.length }; }
     }
@@ -298,6 +302,82 @@
     return Object.assign({ id: U.uid('tg_'), name: 'Gatilho ' + n, shape: 'circle', x: 0, y: 0, r: 0.5, pts: null, on: 'enter', propId: null,
       who: 'party', whoIds: [], times: 'once', n: 3, used: 0, cooldown: 0, lastAt: 0, ask: false, stop: false, enabled: true, actions: [] }, part);
   };
+  // Portal: qualquer token passa, sempre (Plano 31)
+  T.isPortal = (tr) => !!(tr && tr.portal);
+  T.newPortal = function (sc, part) {
+    const n = (sc.triggers || []).filter((x) => x.portal).length + 1;
+    const act = T.newAction('teleport');
+    return T.newTrigger(sc, Object.assign({ name: 'Portal ' + n, portal: true, who: 'any', times: 'always', actions: [act] }, part));
+  };
+  // O teletransporte do portal e o portal do outro lado (se existir)
+  T.portalAct = (tr) => (tr && (tr.actions || []).find((a) => a.type === 'teleport')) || null;
+  T.portalPartner = function (sc, tr) {
+    const a = T.portalAct(tr);
+    if (!a || !a.portalId) return null;
+    const st = S().state, dest = st.scenes[a.sceneId || sc.id];
+    const o = dest && (dest.triggers || []).find((x) => x.id === a.portalId && x.portal);
+    return o ? { scene: dest, tr: o } : null;
+  };
+  // Para onde o portal leva: {scene, x, y} (o centro do portal de volta, o ponto escolhido ou o meio do mapa)
+  T.portalDest = function (sc, tr, act) {
+    const a = act || T.portalAct(tr), st = S().state;
+    if (!a) return null;
+    const dest = a.sceneId && st.scenes[a.sceneId] ? st.scenes[a.sceneId] : a.sceneId ? null : sc;
+    if (!dest) return null;
+    const o = a.portalId && (dest.triggers || []).find((x) => x.id === a.portalId);
+    if (o) { const c = T.center(o); return { scene: dest, x: c.x, y: c.y, linked: true }; }
+    if (a.x != null && Number.isFinite(Number(a.x))) return { scene: dest, x: Number(a.x), y: Number(a.y), linked: false };
+    return { scene: dest, x: (dest.cols * dest.grid) / 2, y: (dest.rows * dest.grid) / 2, linked: false, center: true };
+  };
+  // Ida e volta: cria o portal de volta no destino (1 quadrado), ligado a este
+  T.linkPortal = function (sceneId, trId) {
+    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+    const d = tr && T.portalDest(sc, tr);
+    if (!d || d.linked) return null;
+    const c = T.center(tr), g = d.scene.grid;
+    const px = Math.floor(d.x / g) * g + g / 2, py = Math.floor(d.y / g) * g + g / 2;
+    const back = T.newPortal(d.scene, { name: 'Volta de ' + (tr.name || 'Portal'), shape: 'circle', x: px, y: py, r: 0.5, fx: tr.fx !== false });
+    Object.assign(back.actions[0], { sceneId: d.scene.id === sc.id ? null : sc.id, x: Math.round(c.x), y: Math.round(c.y), portalId: tr.id });
+    S().dispatch({ type: 'trigger.add', sceneId: d.scene.id, trigger: back });
+    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { portalId: back.id, x: px, y: py }) : a));
+    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+    return back;
+  };
+  // Tira a volta: apaga o portal do outro lado e este passa a levar ao ponto onde ele estava
+  T.unlinkPortal = function (sceneId, trId) {
+    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+    if (!tr) return;
+    const p = T.portalPartner(sc, tr), c = p ? T.center(p.tr) : null;
+    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { portalId: null }, c ? { x: Math.round(c.x), y: Math.round(c.y) } : {}) : a));
+    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+    if (p) S().dispatch({ type: 'trigger.delete', sceneId: p.scene.id, id: p.tr.id });
+  };
+  // Muda o destino (patch: {sceneId} ou {x, y}). Com volta: move o portal de volta (ou recria na cena nova)
+  T.setPortalDest = function (sceneId, trId, patch) {
+    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+    if (!tr) return;
+    const p = T.portalPartner(sc, tr);
+    if ('sceneId' in patch) {
+      const had = !!p;
+      if (p) T.unlinkPortal(sceneId, trId);
+      const t2 = (S().state.scenes[sceneId].triggers || []).find((x) => x.id === trId);
+      const acts = U.clone(t2.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { sceneId: patch.sceneId || null, x: null, y: null, portalId: null }) : a));
+      S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+      // Outra cena: já vem com ida e volta (o mestre pode tirar); no mesmo mapa, mantém o que estava
+      if (patch.sceneId && patch.sceneId !== sceneId ? true : had) T.linkPortal(sceneId, trId);
+      return;
+    }
+    if (p && patch.x != null) {
+      const g = p.scene.grid, c = T.center(p.tr), px = Math.floor(patch.x / g) * g + g / 2, py = Math.floor(patch.y / g) * g + g / 2, dx = px - c.x, dy = py - c.y;
+      S().dispatch({ type: 'trigger.update', sceneId: p.scene.id, id: p.tr.id, patch: Object.assign({ x: p.tr.x + dx, y: p.tr.y + dy }, p.tr.pts ? { pts: p.tr.pts.map(([x, y]) => [x + dx, y + dy]) } : {}) });
+      const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { x: px, y: py }) : a));
+      S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+      return;
+    }
+    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, patch) : a));
+    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+  };
+
   T.newAction = function (type) {
     const base = { id: U.uid('ta_'), type, delay: 0 };
     const def = {
@@ -313,7 +393,7 @@
   // O que um gatilho faz não entra no Desfazer do mestre (Plano 17)
   const D = (a) => S().dispatch(Object.assign(a, { noUndo: true }));
   // Antes de aplicar um movimento de jogador: descobre os gatilhos e, se um deles para o movimento, corta o caminho
-  T.beforeMove = function (st, a) {
+  T.beforeMove = function (st, a, opts) {
     const sc = st.scenes[a.sceneId], t = sc && sc.tokens[a.id];
     if (!t || !(sc.triggers || []).length) return null;
     const g = sc.grid, s = ((t.size || 1) * g) / 2;
@@ -322,7 +402,7 @@
     const pts = corners.map(([x, y]) => ({ x: x + s, y: y + s }));
     let fires = [];
     for (const tr of sc.triggers) {
-      if (!T.ready(tr) || tr.on === 'click' || !whoOk(tr, t)) continue;
+      if (!T.ready(tr) || tr.on === 'click' || !whoOk(tr, t) || (opts && opts.portalsOnly && !tr.portal)) continue;
       const c = crossing(sc, tr, pts), ev = tr.on === 'leave' ? c.leave : c.enter;
       if (ev) fires.push({ tr, ev });
     }
@@ -391,6 +471,11 @@
     D({ type: 'trigger.update', sceneId, id: trId, patch: { used: (tr.used || 0) + 1, lastAt: Date.now() } });
     const tok = tokenId && sc.tokens[tokenId];
     const who = tok ? tok.name : opts.manual ? 'você' : '';
+    // Portal: sem aviso no chat a cada passagem (o trem passaria o tempo todo); quem muda de cena avisa no teleport()
+    if (tr.portal) {
+      for (const act of tr.actions || []) { try { runAction(sceneId, tr, act, tokenId, opts); } catch (e) { console.warn('portal', e); } }
+      return true;
+    }
     D({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'system', secret: true, playerId: S().me.id,
       text: `Gatilho "${tr.name}" disparou` + (who ? ` (${who})` : '') + '.' } });
     if (!opts.quiet) U.toast(`Gatilho "${tr.name}" disparou` + (tok ? ' por ' + tok.name : ''), 'info', 3500);
@@ -487,7 +572,8 @@
         return;
       }
       case 'teleport': {
-        for (const id of victims(sc, tr, tokenId)) teleport(sc, sc.tokens[id], act);
+        const taken = new Set();
+        for (const id of victims(sc, tr, tokenId)) teleport(sc, sc.tokens[id], act, tr, taken);
         return;
       }
       case 'trigger': {
@@ -502,24 +588,56 @@
     }
   }
 
+  // Quadrado livre mais perto do destino (vários tokens passando juntos não caem um em cima do outro)
+  function freeSpot(dest, t, cx, cy, taken, skipId) {
+    const g = dest.grid, n = t.size || 1, s = (n * g) / 2;
+    const bx = Math.round((cx - s) / g), by = Math.round((cy - s) / g);
+    const busy = new Set(taken);
+    for (const o of Object.values(dest.tokens)) {
+      if (o.id === skipId) continue;
+      const on = o.size || 1, ox = Math.round(o.x / g), oy = Math.round(o.y / g);
+      for (let i = 0; i < on; i++) for (let j = 0; j < on; j++) busy.add((ox + i) + ',' + (oy + j));
+    }
+    const fits = (x, y) => {
+      if (x < 0 || y < 0 || x + n > dest.cols || y + n > dest.rows) return false;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (busy.has((x + i) + ',' + (y + j))) return false;
+      return true;
+    };
+    let best = null;
+    for (let r = 0; r <= 6 && !best; r++) {
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !fits(bx + dx, by + dy)) continue;
+        const d = Math.hypot(dx, dy);
+        if (!best || d < best.d) best = { x: bx + dx, y: by + dy, d };
+      }
+    }
+    const c = best || { x: bx, y: by };
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) taken.add((c.x + i) + ',' + (c.y + j));
+    return { x: c.x * g, y: c.y * g };
+  }
+  T.freeSpot = freeSpot;
+
   // Leva o token para um ponto deste mapa ou para outra cena (com quem controla o token)
-  function teleport(sc, t, act) {
+  function teleport(sc, t, act, tr, taken) {
     if (!t) return;
-    const st = S().state, dest = act.sceneId && act.sceneId !== sc.id ? st.scenes[act.sceneId] : sc;
-    if (!dest) return;
-    const g = dest.grid, s = ((t.size || 1) * g) / 2;
-    const cx = Number.isFinite(Number(act.x)) && act.x != null ? Number(act.x) : (dest.cols * g) / 2;
-    const cy = Number.isFinite(Number(act.y)) && act.y != null ? Number(act.y) : (dest.rows * g) / 2;
-    const x = Math.round((cx - s) / g) * g, y = Math.round((cy - s) / g) * g;
-    if (dest === sc) { D({ type: 'token.move', sceneId: sc.id, id: t.id, x, y, fromTrigger: true }); return; }
-    // Outra cena: o token passa para lá e quem o controla vai junto
-    const nt = Object.assign(U.clone(t), { id: U.uid('t_'), x, y, lastMove: null });
+    const st = S().state, d = T.portalDest(sc, null, act);
+    if (!d) return;
+    const dest = d.scene;
+    const pos = freeSpot(dest, t, d.x, d.y, taken || new Set(), dest === sc ? t.id : null);
+    // warp: cada tela mostra o brilho na saída e na chegada; a câmera de quem controla vai junto
+    if (dest === sc) { D({ type: 'token.move', sceneId: sc.id, id: t.id, x: pos.x, y: pos.y, fromTrigger: true, warp: true, fx: !(tr && tr.fx === false), at: Date.now() }); return; }
+    // Outra cena: o token passa para lá e quem o controla vai junto (o resto do grupo fica onde está)
+    const nt = Object.assign(U.clone(t), { id: U.uid('t_'), x: pos.x, y: pos.y, lastMove: null, warp: { at: Date.now(), fx: !(tr && tr.fx === false) } });
     D({ type: 'token.add', sceneId: dest.id, token: nt });
     D({ type: 'token.delete', sceneId: sc.id, id: t.id });
     const owners = Object.keys(st.players || {}).filter((pid) => S().canControl(nt, pid));
     if (owners.length) {
       const there = Object.keys(st.players).filter((pid) => S().sceneIdOf(pid) === dest.id);
       D({ type: 'scene.movePlayers', id: dest.id, players: [...new Set(there.concat(owners))] });
+    }
+    const cur = S().currentScene();
+    if (tr && tr.portal && cur && cur.id !== dest.id) {
+      U.toast(t.name + ' foi para "' + dest.name + '"', 'info', 6000, { label: 'Ir para lá', run: () => { S().viewSceneId = dest.id; S().emit('local'); } });
     }
   }
 

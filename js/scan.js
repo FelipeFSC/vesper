@@ -6,7 +6,9 @@
  * 2. Máscara do que NÃO é chão:
  *    - outside = "lado de fora": inundação a partir dos cliques no vazio (só o que está ligado a ele, com cor parecida);
  *    - wall = cor da parede (linhas desenhadas): usa o meio da linha (afinamento);
- *    - dark = o que for bem escuro.
+ *    - dark = o que for bem escuro;
+ *    - floor = chão das salas (Plano 34): inundação a partir de cliques no chão; a borda do chão vira parede.
+ *    "Ignorar textura" borra a imagem antes (raio maior = rocha e lajotas viram manchas lisas).
  * 3. Contorno → linhas simplificadas → (Retas) encaixadas no grid e em 0°/45°/90°.
  * 4. Portas por exemplo: o desenho que o mestre mostrou é procurado no mapa (4 giros + espelho).
  * O cálculo pesado roda num Web Worker criado a partir do texto de CORE (sem arquivo extra); sync = no próprio thread.
@@ -39,6 +41,61 @@
         }
       }
       return { w, h, data: out };
+    };
+    // Desfoque de caixa com raio r (horizontal + vertical, duas vezes): tira a textura de rocha, neve e lajotas
+    C.boxBlur = function (img, r) {
+      const { w, h } = img;
+      let src = img.data;
+      const pass = (a, horiz) => {
+        const out = new Uint8ClampedArray(a.length), n = horiz ? w : h, m = horiz ? h : w;
+        for (let j = 0; j < m; j++) {
+          for (let c = 0; c < 3; c++) {
+            let sum = 0, cnt = 0;
+            const at = (i) => (horiz ? (j * w + i) : (i * w + j)) * 4 + c;
+            for (let i = 0; i <= Math.min(r, n - 1); i++) { sum += a[at(i)]; cnt++; }
+            for (let i = 0; i < n; i++) {
+              out[at(i)] = sum / cnt;
+              const add = i + r + 1, del = i - r;
+              if (add < n) { sum += a[at(add)]; cnt++; }
+              if (del >= 0) { sum -= a[at(del)]; cnt--; }
+            }
+          }
+          for (let i = 0; i < n; i++) out[(horiz ? (j * w + i) : (i * w + j)) * 4 + 3] = 255;
+        }
+        return out;
+      };
+      for (let k = 0; k < 2; k++) src = pass(pass(src, true), false);
+      return { w, h, data: src };
+    };
+    // Chão das salas: cada clique inunda a sala dele. Compara com a MÉDIA do que já encheu (acompanha a luz e a sombra
+    // aos poucos) e com o vizinho (para onde a cor muda de repente: a borda da parede)
+    C.floorMask = function (img, seeds, tol) {
+      const { w, h, data } = img, m = new Uint8Array(w * h).fill(1), q = new Int32Array(w * h);
+      const tol2 = tol * tol, step2 = (tol * 0.45) * (tol * 0.45);
+      const ycAt = (i) => { const o = i * 4, r = data[o], g = data[o + 1], b = data[o + 2], Y = 0.299 * r + 0.587 * g + 0.114 * b; return [Y, (b - Y) * 3, (r - Y) * 3]; };
+      const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+      for (const [sx, sy] of seeds) {
+        if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+        const s0 = sy * w + sx;
+        if (!m[s0]) continue;
+        const c0 = C.colorAt(img, sx, sy, 3), Y0 = 0.299 * c0[0] + 0.587 * c0[1] + 0.114 * c0[2];
+        const mean = [Y0, (c0[2] - Y0) * 3, (c0[0] - Y0) * 3], sum = mean.slice();
+        let n = 1, qh = 0, qt = 0;
+        m[s0] = 0; q[qt++] = s0;
+        while (qh < qt) {
+          const i = q[qh++], x = i % w, y = (i - x) / w, ci = ycAt(i);
+          const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+          for (const j of nb) {
+            if (j < 0 || !m[j]) continue;
+            const cj = ycAt(j);
+            if (d2(cj, mean) > tol2 || d2(cj, ci) > step2) continue;
+            m[j] = 0; q[qt++] = j;
+            sum[0] += cj[0]; sum[1] += cj[1]; sum[2] += cj[2]; n++;
+            if ((n & 63) === 0) { mean[0] = sum[0] / n; mean[1] = sum[1] / n; mean[2] = sum[2] / n; }
+          }
+        }
+      }
+      return m;
     };
     C.colorAt = function (img, x, y, r) {
       r = r || 2;
@@ -217,12 +274,21 @@
       return a.concat(b.slice(1));
     };
     C.walls = function (img0, o) {
-      const img = C.blur(img0), { w, h } = img, out = [];
+      const img = o.smooth > 0 ? C.boxBlur(img0, o.smooth) : C.blur(img0), { w, h } = img, out = [];
+      // minK = quantas vezes o tamanho mínimo padrão (1 = como antes)
+      const cell2 = o.cell * o.cell, k = o.minK || 1, minA = Math.max(4, cell2 * 0.1 * k), holeA = Math.max(8, cell2 * 1.5 * k);
       let m;
+      if (o.by === 'floor') {
+        // Chão (0) e o resto (1). Buracos do tamanho de móveis dentro da sala viram chão; migalhas de chão somem
+        m = C.floorMask(img, o.seeds, o.tol);
+        C.despeckle(m, w, h, Math.max(6, cell2 * 0.25), holeA);
+        for (const p of C.loops(m, w, h)) out.push({ pts: p.closed ? C.rdpLoop(p.pts, o.eps) : C.rdp(p.pts, o.eps), closed: p.closed });
+        return out;
+      }
       if (o.by === 'wall' || o.by === 'dark') {
         // Linhas de parede (pela cor clicada ou pelo escuro): o meio da linha vira parede
         m = o.by === 'dark' ? C.darkMask(img, o.lum) : C.colorMask(img, o.seeds.map((s) => C.colorAt(img, s[0], s[1], 1)), o.tol);
-        C.despeckle(m, w, h, Math.max(4, o.cell * o.cell * 0.1));
+        C.despeckle(m, w, h, Math.max(4, cell2 * 0.1), minA);
         const sk = C.thin(m, w, h);
         for (const p of C.trace(sk, w, h)) out.push({ pts: C.rdp(p, o.eps), closed: false });
         return out;
@@ -233,7 +299,7 @@
         m = C.colorMask(img, cols, o.tol);
         const lone = C.outsideMask(img, o.seeds, o.tol);
         for (let i = 0; i < m.length; i++) if (lone[i]) m[i] = 1;
-        C.despeckle(m, w, h, Math.max(6, o.cell * o.cell * 0.25), Math.max(8, o.cell * o.cell * 1.5));
+        C.despeckle(m, w, h, Math.max(6, cell2 * 0.25), holeA);
       }
       for (const p of C.loops(m, w, h)) out.push({ pts: p.closed ? C.rdpLoop(p.pts, o.eps) : C.rdp(p.pts, o.eps), closed: p.closed });
       return out;
@@ -462,9 +528,13 @@
   Sc.run = async function (sc, opts) {
     const P = await Sc.prepare(sc), k = P.k, g = sc.grid, sens = opts.sens ?? 0.5;
     const seeds = (opts.seeds || []).map((p) => [Math.floor(p.x / k), Math.floor(p.y / k)]);
-    if (opts.by !== 'dark' && !seeds.length) return { walls: [], doors: [], need: true };
-    const o = { by: opts.by || 'outside', seeds, tol: 18 + sens * 70, lum: 30 + sens * 90, eps: opts.mode === 'free' ? 1.2 : 2.2, cell: P.px };
-    const polys = await call('walls', [P.img, o], opts.sync);
+    const onlyDoors = opts.only === 'doors'; // Plano 32: ferramenta Porta
+    if (onlyDoors && !(opts.tpls || []).length && !opts.gaps) return { walls: [], doors: [], need: true };
+    if (!onlyDoors && opts.by !== 'dark' && !seeds.length) return { walls: [], doors: [], need: true };
+    // smooth (0–1) → raio do desfoque em pixels da leitura; minSize (0–1, padrão 0,1) → tamanho mínimo (0,1 = como antes)
+    const o = { by: opts.by || 'outside', seeds, tol: 18 + sens * 70, lum: 30 + sens * 90, eps: opts.mode === 'free' ? 1.2 : 2.2, cell: P.px,
+      smooth: Math.round((opts.smooth || 0) * P.px * 0.5), minK: Math.max(0.2, (opts.minSize ?? 0.1) * 10) };
+    const polys = onlyDoors ? [] : await call('walls', [P.img, o], opts.sync);
     const strokeOf = () => (opts.mode === 'free' ? U.uid('st_') : null);
     let walls = [];
     const minLen = g * (opts.mode === 'free' ? 0.25 : 0.4);
@@ -497,7 +567,8 @@
       }
       for (const d of doors) walls = cutByDoor(walls, d, g);
     }
-    if (opts.gaps) doors = doors.concat(gapDoors(walls, g).filter((d) => !doors.some((o2) => Math.hypot((o2.x1 + o2.x2) / 2 - (d.x1 + d.x2) / 2, (o2.y1 + o2.y2) / 2 - (d.y1 + d.y2) / 2) < g * 0.5)));
+    const gapBase = onlyDoors ? (sc.walls || []).filter((w) => !w.door) : walls;
+    if (opts.gaps) doors = doors.concat(gapDoors(gapBase, g).filter((d) => !doors.some((o2) => Math.hypot((o2.x1 + o2.x2) / 2 - (d.x1 + d.x2) / 2, (o2.y1 + o2.y2) / 2 - (d.y1 + d.y2) / 2) < g * 0.5)));
     // só a área escolhida; sem repetir as paredes que já existem
     const inR = (s) => { const r = opts.region; if (!r) return true; const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2; return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h; };
     const old = sc.walls || [];
@@ -512,7 +583,17 @@
     const walls = res.walls.filter((s) => !s.off).map(clean), doors = res.doors.filter((s) => !s.off).map(clean);
     const all = walls.concat(doors);
     if (!all.length) return 0;
-    const run = () => S().dispatch({ type: 'wall.add', sceneId: sc.id, walls: all });
+    const g = sc.grid, gone = [], pieces = [];
+    for (const w of (sc.walls || []).filter((x) => !x.door)) {
+      let parts = [w];
+      for (const d of doors) parts = cutByDoor(parts, d, g);
+      if (parts.length === 1 && parts[0] === w) continue;
+      gone.push(w.id); pieces.push(...parts.map((p) => Object.assign({}, p, { id: U.uid('w_') })));
+    }
+    const run = () => {
+      if (gone.length) S().dispatch({ type: 'wall.delete', sceneId: sc.id, ids: gone });
+      S().dispatch({ type: 'wall.add', sceneId: sc.id, walls: pieces.concat(all) });
+    };
     if (App.History) App.History.batch('scan: ' + walls.length + ' paredes e ' + doors.length + ' portas', run); else run();
     return all.length;
   };

@@ -101,3 +101,15 @@ cena
 ## Régua para todos (Plano 30)
 - Mensagem leve `{ t: 'ruler', kind: 'ruler'|'drag', sceneId, from, name, color, tokenId, pts, done, clear }` (`App.Net.shareRuler`): jogador → mestre (que carimba `from` e `name`) → outros. Não muda o estado nem entra no desfazer.
 - `B.remote` (Map `quem:tipo`) guarda o que chegou; `drawRemote` desenha e `pruneRemote` limpa (soltou: `trailSecs`; ao vivo: 5 s sem sinal).
+
+## Portais e sub-cenas (Plano 31)
+- Portal = gatilho (`sc.triggers`) com `portal: true`; reaproveita desenho, desfazer, exportar e disparo. `teleport.portalId` liga os dois lados.
+- `t.warp = { at, from? }` no token marca um teletransporte; `checkWarps` (board) desenha o brilho e move a câmera de quem controla.
+- `sc.parent` define a sub-cena; `migrate()` limpa pai inexistente (ou pai que é sub-cena). Gatilho antigo só com teletransporte vira portal.
+- `U.toast(msg, tipo, ms, { label, run })`: aviso com botão.
+
+## Histórias (Plano 33)
+- IndexedDB `mesarpg`/`kv`: `story:<id>` = {state, assets, savedAt}; `stories` = cartões [{id, name, cover, thumb, thumbOf, savedAt, scenes}]. `App.Storage.currentId` = história aberta (`save()` grava nela e chama `touchCard`).
+- A chave antiga `campaign` vira a primeira história em `listStories()` (na primeira vez).
+- Tela de cartões: `App.Stories` em `js/main.js` (`showStories(online)` → `openStory(id)` → `startGM`). "Voltar ao menu" do mestre: `?historias=online|offline`.
+- `App.Storage.mem` (Map): guarda na memória em vez do IndexedDB (testes).

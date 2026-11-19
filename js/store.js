@@ -165,11 +165,15 @@
       sc.anims = Array.isArray(sc.anims) ? sc.anims : [];
       // Plano 21: ações de gatilho com um alvo só viram lista (ids)
       for (const tr of sc.triggers) for (const a of tr.actions || []) upgradeTrigAction(a);
+      // Plano 31: gatilho que só teletransporta vira portal (o teletransporte saiu da lista de ações do gatilho)
+      for (const tr of sc.triggers) if (!tr.portal && (tr.actions || []).length === 1 && tr.actions[0].type === 'teleport' && tr.on !== 'click') tr.portal = true;
       sc.explored = sc.explored && typeof sc.explored === 'object' ? sc.explored : {};
       st.scenes[id] = sc;
       if (!st.sceneOrder.includes(id)) st.sceneOrder.push(id);
     }
     st.sceneOrder = st.sceneOrder.filter((id) => st.scenes[id]);
+    // Plano 31: sub-cena é filha de uma cena principal (um nível só)
+    for (const sc of Object.values(st.scenes)) if (sc.parent && (!st.scenes[sc.parent] || st.scenes[sc.parent].parent || sc.parent === sc.id)) delete sc.parent;
     if (!st.scenes[st.activeSceneId]) st.activeSceneId = st.sceneOrder[0] || null;
     st.playerScenes = st.playerScenes && typeof st.playerScenes === 'object' ? st.playerScenes : {};
     st.handouts = Array.isArray(st.handouts) ? st.handouts : [];
@@ -311,10 +315,13 @@
     },
     'scene.update': (s, a) => { Object.assign(sceneOf(s, a.id), a.patch); },
     'scene.delete': (s, a) => {
+      // Sub-cenas: a.subs === 'delete' apaga junto; senão viram cenas principais (Plano 31)
+      const subs = Object.values(s.scenes).filter((x) => x.parent === a.id).map((x) => x.id);
+      for (const id of subs) { if (a.subs === 'delete') { delete s.scenes[id]; s.sceneOrder = s.sceneOrder.filter((x) => x !== id); s.combat.entries = s.combat.entries.filter((e) => e.sceneId !== id); if (s.activeSceneId === id) s.activeSceneId = null; } else delete s.scenes[id].parent; }
       delete s.scenes[a.id];
       s.sceneOrder = s.sceneOrder.filter((x) => x !== a.id);
       s.combat.entries = s.combat.entries.filter((e) => e.sceneId !== a.id);
-      if (s.activeSceneId === a.id) s.activeSceneId = s.sceneOrder[0] || null;
+      if (!s.scenes[s.activeSceneId]) s.activeSceneId = s.sceneOrder[0] || null;
       // Quem estava separado nessa cena volta para o grupo
       for (const [pid, sid] of Object.entries(s.playerScenes || {})) if (sid === a.id || sid === s.activeSceneId) delete s.playerScenes[pid];
       fixTurn(s);
@@ -334,14 +341,21 @@
       if (a.id !== s.activeSceneId) for (const [pid, sid] of Object.entries(s.playerScenes)) if (sid === a.id && !want.has(pid)) delete s.playerScenes[pid];
     },
     'scene.move': (s, a) => {
-      const i = s.sceneOrder.indexOf(a.id), j = i + a.dir;
-      if (i < 0 || j < 0 || j >= s.sceneOrder.length) return false;
+      const me = s.scenes[a.id];
+      if (!me) return false;
+      const sib = s.sceneOrder.filter((id) => (s.scenes[id].parent || null) === (me.parent || null));
+      const k = sib.indexOf(a.id), other = sib[k + a.dir];
+      if (!other) return false;
+      const i = s.sceneOrder.indexOf(a.id), j = s.sceneOrder.indexOf(other);
       [s.sceneOrder[i], s.sceneOrder[j]] = [s.sceneOrder[j], s.sceneOrder[i]];
     },
 
     'token.add': (s, a) => { sceneOf(s, a.sceneId).tokens[a.token.id] = a.token; },
     'token.move': (s, a) => {
-      const t = tok(s, a); t.x = a.x; t.y = a.y;
+      const t = tok(s, a);
+      // Portal (Plano 31): cada tela mostra o brilho na saída e na chegada, e a câmera de quem controla vai junto
+      if (a.warp) t.warp = { at: Number(a.at) || Date.now(), from: [t.x, t.y], fx: a.fx !== false };
+      t.x = a.x; t.y = a.y;
       if (Array.isArray(a.path) && a.path.length >= 2 && a.path.length <= 64) {
         const pts = a.path.map((p) => [Math.round(Number(p[0]) || 0), Math.round(Number(p[1]) || 0)]);
         t.lastMove = { pts, at: Number(a.at) || Date.now() };
@@ -615,8 +629,10 @@
     commit(a) {
       // Movimento de jogador (ou do mestre vendo como jogador): confere os gatilhos antes (um deles pode parar o movimento)
       let fires = null;
-      if (a.type === 'token.move' && !a.fromTrigger && App.Triggers && this.state && (a.by !== this.me.id || !this.gmView())) {
-        try { fires = App.Triggers.beforeMove(this.state, a); } catch (e) { console.warn(e); }
+      if (a.type === 'token.move' && !a.fromTrigger && App.Triggers && this.state) {
+        // O mestre arrastando: só os portais (os outros gatilhos não disparam com o mestre, Plano 31)
+        const own = a.by === this.me.id && this.gmView();
+        try { fires = App.Triggers.beforeMove(this.state, a, own ? { portalsOnly: true } : null); } catch (e) { console.warn(e); }
       }
       // Desfazer (Plano 17): guarda o "antes" do que a ação de montagem do mestre vai mexer
       let hist = null;

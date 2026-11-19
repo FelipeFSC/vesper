@@ -190,3 +190,19 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 
 ## Atalhos
 `V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `T` gatilho · `N` nota · `M` isolamento de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.
+
+## Portais e sub-cenas (Plano 31)
+- **Portal** (ferramenta K): gatilho com `portal: true`, "sempre", "qualquer token" e uma ação `teleport {sceneId, x, y, portalId}`. Desenho igual ao do gatilho (retângulo, círculo, polígono), em azul.
+- Painel: Leva para (Neste mapa / sub-cenas da mesma principal / outras cenas), Escolher no mapa (`B.pickInScene` em outra cena), Ida e volta (`App.Triggers.linkPortal` / `unlinkPortal`), Quem passa, Ligado.
+- Chegada: `T.portalDest` (centro do portal de volta, ponto escolhido ou meio do mapa) + `T.freeSpot` (quadrado livre mais perto). Mesmo mapa: `token.move` com `warp` (brilho e câmera); outra cena: `token.add` com `warp` e `scene.movePlayers` só para quem controla; aviso ao mestre com "Ir para lá".
+- O arraste do próprio mestre dispara só portais (`beforeMove(st, a, { portalsOnly })`).
+- **Sub-cena:** `sc.parent` = id de uma cena principal (um nível). Lista agrupada e recolhível; `scene.move` troca entre irmãs; `scene.delete` com `subs: 'delete'|'keep'`; o pacote da cena leva `subs`.
+
+## Procurar portas pela ferramenta Porta (Plano 32)
+- Ferramenta Porta → "Procurar portas no mapa": `UI.openScan('doors')` abre a busca só de portas (`opts.only = 'doors'`: sem paredes, sem clique no vazio; o palpite usa as paredes do mapa).
+- `App.Scan.apply` corta as paredes que já existem no trecho de cada porta nova (nos dois modos), num passo só do desfazer.
+
+## Histórias (Plano 33)
+- "Abrir mesa online" e "Preparar tabuleiro" abrem a tela **Histórias**: um cartão por mesa preparada (imagem, nome, "há X", cenas) e **+ Nova história** no fim; a última mexida primeiro.
+- Cartão: Renomear, Trocar imagem, Usar o mapa da cena, Duplicar, Exportar, Apagar. Imagem padrão = miniatura do mapa da cena do grupo.
+- Importar campanha dentro da mesa: criar história nova ou substituir a atual. Voltar ao menu (mestre) volta para a tela de Histórias.

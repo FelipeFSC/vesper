@@ -45,7 +45,7 @@
 
       <nav class="mn-list" id="mn-root" aria-label="Menu principal">
         <button class="mn-item" data-sub="mn-play" data-desc="Abra uma mesa para os seus jogadores ou entre na mesa de alguém."><span data-icon="swords"></span>Jogar</button>
-        <button class="mn-item" id="lb-offline" data-desc="Monte cenas, mapas e fichas sem ninguém conectado. Nada vai para a internet."><span data-icon="map"></span>Preparar tabuleiro</button>
+        <button class="mn-item" id="lb-offline" data-desc="Escolha uma história (ou crie uma) e monte cenas, mapas e fichas sem ninguém conectado. Nada vai para a internet."><span data-icon="map"></span>Preparar tabuleiro</button>
         <button class="mn-item" id="lb-sheet" data-desc="Uma página só para montar fichas, com espaço."><span data-icon="user-round"></span>Criar ficha</button>
         <a class="mn-item" href="?tutorial" data-desc="Uma cena de exemplo mostra onde clicar: ataques, magias e combate. Nada é salvo."><span data-icon="sparkles"></span>Tutorial</a>
         <a class="mn-item" href="wiki/index.html" data-desc="O manual completo, separado por tópicos, com fotos e exemplos."><span data-icon="book-open"></span>Wiki</a>
@@ -53,7 +53,7 @@
 
       <nav class="mn-list" id="mn-play" aria-label="Jogar" hidden>
         <p class="mn-crumb">Jogar</p>
-        <button class="mn-item" id="lb-host" data-desc="Você é o mestre. Abre a campanha salva e gera um código para os jogadores."><span data-icon="crown"></span>Abrir mesa online</button>
+        <button class="mn-item" id="lb-host" data-desc="Você é o mestre. Escolha a história e a mesa gera um código para os jogadores."><span data-icon="crown"></span>Abrir mesa online</button>
         <button class="mn-item" id="lb-join-open" data-desc="Digite o código de 6 letras que o mestre mandou."><span data-icon="users"></span>Entrar na mesa online</button>
         <div class="mn-join" id="mn-join" hidden>
           <input id="lb-code" maxlength="12" placeholder="CÓDIGO" class="code-input" autocomplete="off">
@@ -64,6 +64,18 @@
 
       <p class="mn-desc" id="mn-desc" aria-live="polite"></p>
     </div>
+
+    <!-- Histórias (Plano 33): uma mesa preparada em cada cartão -->
+    <section class="st-screen" id="st-screen" hidden aria-label="Histórias">
+      <div class="st-head">
+        <button class="st-back" id="st-back" title="Voltar ao menu (Esc)"><span data-icon="undo-2"></span>Voltar</button>
+        <div>
+          <p class="mn-crumb" id="st-crumb">Abrir mesa online</p>
+          <h2 class="st-title">Histórias</h2>
+        </div>
+      </div>
+      <div class="st-grid" id="st-grid"></div>
+    </section>
 
     <div class="mn-foot">
       <span class="mn-keys"><kbd>↑</kbd><kbd>↓</kbd> escolher <kbd>Enter</kbd> confirmar <kbd>Esc</kbd> voltar</span>

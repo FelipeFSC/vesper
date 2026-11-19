@@ -62,12 +62,20 @@ window.App = window.App || {};
     return el;
   };
 
-  U.toast = (msg, type = 'info', ms = 3200) => {
+  // action = {label, run}: botão dentro do aviso (ex.: "Ir para lá")
+  U.toast = (msg, type = 'info', ms = 3200, action) => {
     const box = document.getElementById('toasts');
     if (!box) return;
     const el = document.createElement('div');
-    el.className = 'toast ' + type;
+    el.className = 'toast ' + type + (action ? ' has-act' : '');
     el.textContent = msg;
+    if (action) {
+      const b = document.createElement('button');
+      b.className = 'toast-act';
+      b.textContent = action.label;
+      b.onclick = () => { try { action.run(); } finally { el.remove(); } };
+      el.append(b);
+    }
     box.append(el);
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
   };

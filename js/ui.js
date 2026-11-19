@@ -41,7 +41,8 @@
     { id: 'light', icon: 'lightbulb', title: 'Luz (U): pontos de luz e de escuridão no mapa\nCírculo, cone ou área, com cor', gm: true, edit: true },
     { id: 'prop', icon: 'image', title: 'Imagem (I): coloque imagens soltas no mapa\nArraste arquivos do computador para o mapa ou use a biblioteca', gm: true, edit: true },
     { id: 'note', icon: 'file-text', title: 'Nota (N): alfinete com anotações só suas (os jogadores nunca veem)\nClique no mapa para criar; clique no alfinete para abrir', gm: true, edit: true },
-    { id: 'trigger', icon: 'zap', title: 'Gatilho (T): o mapa reage quando alguém entra, sai ou clica numa imagem\nPortas, luzes, tokens, sons, armadilhas, névoa, teletransporte', gm: true, edit: true },
+    { id: 'trigger', icon: 'zap', title: 'Gatilho (T): o mapa reage quando alguém entra, sai ou clica numa imagem\nPortas, luzes, tokens, sons, armadilhas, névoa', gm: true, edit: true },
+    { id: 'portal', icon: 'sparkles', title: 'Portal (K): quem pisa na área vai para outro ponto do mapa ou para outra cena\nEscadas, vagões, portas mágicas', gm: true, edit: true },
     { id: 'room', icon: 'volume-x', title: 'Isolamento de som (M): borda que nenhum som do mapa atravessa\nClique em cada canto (ou arraste um retângulo). Não tapa a visão nem impede de andar', gm: true, edit: true },
   ];
   const DOCK = [
@@ -324,7 +325,9 @@
     else if (role === 'player') msg = 'Sair da mesa e voltar ao menu? Você pode entrar de novo com o mesmo código.';
     if (msg && !confirm(msg)) return;
     if (S().isGM() && S().state) { try { await App.Storage.save(); } catch { /* */ } }
-    location.href = location.pathname;
+    // Mestre volta para a tela de Histórias (Plano 33); jogador e tutorial, para o menu
+    const tut = new URLSearchParams(location.search).has('tutorial');
+    location.href = location.pathname + (role === 'player' || tut || !S().state ? '' : '?historias=' + (online ? 'online' : 'offline'));
   };
 
   // =============== Ferramentas ===============
@@ -371,7 +374,7 @@
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
     const gmRuler = t && t.id === 'ruler' && S().gmView();
-    if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; return; }
+    if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'portal' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; return; }
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
@@ -431,6 +434,15 @@
           : 'Só você vê a régua (para medir escondido).'));
       return;
     }
+    if (t.id === 'portal') {
+      const hint = { rect: 'Clique num quadrado (a escada) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
+        poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
+      box.append(h('span', { class: 'eyebrow' }, 'Área do portal'),
+        h('div', { class: 'seg' }, [['rect', 'Retângulo'], ['circle', 'Círculo'], ['poly', 'Polígono']].map(([k, l]) =>
+          h('button', { class: B.trigShape === k ? 'on' : '', onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }, l))),
+        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Depois escolha para onde ele leva. Os jogadores nunca veem a área.'));
+      return;
+    }
     if (t.id === 'trigger') {
       const hint = { rect: 'Clique num quadrado (placa de pressão) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
         poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
@@ -445,7 +457,9 @@
         h('div', { class: 'seg vis-seg' },
           h('button', { class: B.doorLocked ? '' : 'on', onclick: () => { B.doorLocked = false; redo(); } }, ic('lock-open'), 'Destrancada'),
           h('button', { class: B.doorLocked ? 'on' : '', onclick: () => { B.doorLocked = true; redo(); } }, ic('lock'), 'Trancada')),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Arraste de um canto do grid a outro. Clique no marcador para abrir ou fechar; Shift + clique tranca ou destranca. Porta destrancada deixa passar mesmo fechada; a trancada, ninguém abre nem passa (só você). O cadeado só você vê.'));
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Arraste de um canto do grid a outro. Clique no marcador para abrir ou fechar; Shift + clique tranca ou destranca. Porta destrancada deixa passar mesmo fechada; a trancada, ninguém abre nem passa (só você). O cadeado só você vê.'),
+        h('span', { class: 'eyebrow' }, 'Ajuda'),
+        btnI('scan', 'Procurar portas no mapa', { class: 'btn primary block', title: 'Mostre uma porta da imagem e o sistema acha as parecidas; nas paredes que já existem, abre a passagem', onclick: () => UI.openScan('doors') }));
       return;
     }
     if (t.id === 'light') {
@@ -692,7 +706,7 @@
       const st = S().state;
       if (!st) return;
       const viewing = S().currentScene();
-      const sig = JSON.stringify([st.sceneOrder, st.activeSceneId, viewing && viewing.id, st.sceneOrder.map((id) => { const s = st.scenes[id]; return [s.name, s.cols, s.rows, Object.keys(s.tokens).length]; }),
+      const sig = JSON.stringify([st.sceneOrder, st.activeSceneId, viewing && viewing.id, st.sceneOrder.map((id) => { const s = st.scenes[id]; return [s.name, s.cols, s.rows, Object.keys(s.tokens).length, s.parent]; }), [...UI.scenesClosed],
         st.playerScenes, st.players, S().online]);
       const online = new Set(S().online);
       // Bolinhas de quem está em cada cena
@@ -727,13 +741,18 @@
           S().viewSceneId = sc.id;
           sceneSettings(sc.id);
         })));
-      st.sceneOrder.forEach((id, i) => {
-        const sc = st.scenes[id], active = st.activeSceneId === id;
-        body.append(h('div', { class: 'scene-item' + (viewing && viewing.id === id ? ' viewing' : ''), title: 'Clique para ver e editar (os jogadores não mudam de cena)',
+      // Plano 31: sub-cenas ficam embaixo da principal (um nível só); a seta recolhe
+      const mains = st.sceneOrder.filter((id) => !st.scenes[id].parent);
+      const subsOf = (id) => st.sceneOrder.filter((x) => st.scenes[x].parent === id);
+      const item = (id, i, isSub, nSubs) => {
+        const sc = st.scenes[id], active = st.activeSceneId === id, closed = UI.scenesClosed.has(id);
+        body.append(h('div', { class: 'scene-item' + (isSub ? ' sub-scene' : '') + (viewing && viewing.id === id ? ' viewing' : ''), title: 'Clique para ver e editar (os jogadores não mudam de cena)',
           onclick: () => { S().viewSceneId = id; S().emit('local'); } },
+        nSubs ? h('button', { class: 'icon-btn scene-fold', title: closed ? 'Mostrar as sub-cenas' : 'Recolher as sub-cenas', onclick: (e) => { e.stopPropagation(); if (closed) UI.scenesClosed.delete(id); else UI.scenesClosed.add(id); body._sig = null; renderScenes(); } }, ic(closed ? 'chevron-right' : 'chevron-down'))
+          : isSub ? h('span', { class: 'scene-sub-ic' }, ic('corner-down-right')) : '',
         h('div', { class: 'grow' },
           h('div', { class: 'name' }, sc.name),
-          h('div', { class: 'sub' }, `${sc.cols}×${sc.rows} · ${Object.keys(sc.tokens).length} tokens`),
+          h('div', { class: 'sub' }, `${isSub ? 'Sub-cena · ' : ''}${sc.cols}×${sc.rows} · ${Object.keys(sc.tokens).length} tokens${nSubs ? ' · ' + nSubs + (nSubs === 1 ? ' sub-cena' : ' sub-cenas') : ''}`),
           bubbles(id),
           h('div', { class: 'row wrap', style: { marginTop: '6px', gap: '6px' }, onclick: (e) => e.stopPropagation() },
             active ? h('span', { class: 'badge gold' }, 'Cena do grupo')
@@ -743,8 +762,21 @@
         h('div', { class: 'acts', onclick: (e) => e.stopPropagation() },
           iconBtn('arrow-up', 'Subir', () => S().dispatch({ type: 'scene.move', id, dir: -1 }), { disabled: i === 0 }),
           iconBtn('settings-2', 'Configurar', () => sceneSettings(id)),
-          iconBtn('download', 'Exportar cena', () => App.Storage.downloadJSON(App.Storage.sceneBundle(id), 'cena_' + sc.name)),
-          iconBtn('trash-2', 'Excluir', () => { if (confirm(`Excluir a cena "${sc.name}"?`)) S().dispatch({ type: 'scene.delete', id }); }))));
+          iconBtn('download', nSubs ? 'Exportar cena (com as sub-cenas)' : 'Exportar cena', () => App.Storage.downloadJSON(App.Storage.sceneBundle(id), 'cena_' + sc.name)),
+          isSub ? '' : iconBtn('corner-down-right', 'Nova sub-cena (andar de baixo, torre, interior…)', () => {
+            const n = subsOf(id).length + 1, ns = S().newScene(sc.name + ' · ' + n);
+            ns.parent = id;
+            S().dispatch({ type: 'scene.add', scene: ns });
+            UI.scenesClosed.delete(id);
+            S().viewSceneId = ns.id;
+            sceneSettings(ns.id);
+          }),
+          iconBtn('trash-2', 'Excluir', () => deleteScene(id)))));
+      };
+      mains.forEach((id, i) => {
+        const subs = subsOf(id);
+        item(id, i, false, subs.length);
+        if (!UI.scenesClosed.has(id)) subs.forEach((sid, k) => item(sid, k, true, 0));
       });
       body.append(h('p', { class: 'hint' }, 'Monte salas com as ferramentas de desenho (retângulo sólido = piso, linha = parede) ou envie uma imagem de mapa em "Trocar mapa".'));
     });
@@ -754,6 +786,24 @@
       foot.append(btnI('folder-open', 'Importar cena', { class: 'btn block', onclick: () => UI.importDialog() }));
     }
   }
+
+  UI.scenesClosed = new Set(); // principais com as sub-cenas recolhidas (só nesta tela)
+  // Excluir cena. Com sub-cenas: apagar tudo ou manter (as sub-cenas viram cenas principais)
+  function deleteScene(id) {
+    const st = S().state, sc = st.scenes[id];
+    if (!sc) return;
+    const subs = st.sceneOrder.filter((x) => st.scenes[x].parent === id);
+    if (!subs.length) { if (confirm(`Excluir a cena "${sc.name}"?`)) S().dispatch({ type: 'scene.delete', id }); return; }
+    UI.modal('Excluir "' + sc.name + '"', h('div', {},
+      h('p', { style: { margin: '0 0 8px' } }, 'Esta cena tem ' + subs.length + (subs.length === 1 ? ' sub-cena' : ' sub-cenas') + ':'),
+      h('ul', { style: { margin: '0 0 8px', paddingLeft: '18px' } }, subs.map((x) => h('li', {}, st.scenes[x].name))),
+      h('p', { class: 'hint', style: { margin: 0 } }, 'Manter: só esta cena é apagada e as sub-cenas viram cenas principais.')), [
+      { label: 'Cancelar' },
+      { label: 'Manter as sub-cenas', onclick: () => S().dispatch({ type: 'scene.delete', id, subs: 'keep' }) },
+      { label: 'Apagar tudo', primary: true, onclick: () => S().dispatch({ type: 'scene.delete', id, subs: 'delete' }) },
+    ]);
+  }
+  UI.deleteScene = deleteScene;
 
   // Escolher quem fica numa cena (um ou vários). Na cena do grupo, marcar traz o jogador de volta.
   function movePlayersDialog(id) {
@@ -1426,14 +1476,20 @@
 
   // =============== Scan de paredes e portas (Plano 22) ===============
   UI.scanOpts = null;
-  UI.openScan = function () {
+  UI.openScan = function (only) {
     const sc = S().currentScene();
     if (!sc || !S().gmView()) return;
     if (!sc.bg) { U.toast('Esta cena ainda não tem imagem de mapa. Troque o mapa primeiro.'); return; }
-    if (!UI.scanOpts || UI.scanOpts.sceneId !== sc.id) UI.scanOpts = { sceneId: sc.id, by: 'outside', seeds: [], sens: 0.5, mode: 'straight', region: null, tpls: [], doorThr: 0.86, gaps: false };
+    if (!UI.scanOpts || UI.scanOpts.sceneId !== sc.id) UI.scanOpts = { sceneId: sc.id, by: 'outside', seeds: [], sens: 0.5, smooth: 0, minSize: 0.1, mode: 'straight', region: null, tpls: [], doorThr: 0.86, gaps: false };
+    // Plano 32: pela ferramenta Porta, procura só portas (as paredes que já existem ganham a passagem)
+    const mode = only === 'doors' ? 'doors' : null;
+    if (UI.scanOpts.only !== mode) { UI.scanOpts.only = mode; if (App.Board.scan) { App.Board.scan.walls = []; App.Board.scan.doors = []; } }
+    if (mode && !UI.scanOpts.tpls.length && (S().currentScene().walls || []).some((w) => !w.door)) UI.scanOpts.gaps = true;
+    // janela aberta no outro modo: fecha antes (fechar limpa as sugestões do mapa)
+    if (UI.windows.has('scan')) UI.closeWindow('scan');
     const B = App.Board;
     B.scan = B.scan && B.scan.sceneId === sc.id ? B.scan : { sceneId: sc.id, walls: [], doors: [], busy: false };
-    UI.openWindow('scan', 'Procurar paredes no mapa', (win) => buildScanWin(win), { w: 360, icon: 'scan' });
+    UI.openWindow('scan', mode ? 'Procurar portas no mapa' : 'Procurar paredes no mapa', (win) => buildScanWin(win), { w: 360, icon: mode ? 'door-closed' : 'scan' });
     UI.runScan();
   };
   let scanTimer = null, scanSeq = 0;
@@ -1467,35 +1523,42 @@
     const P = App.Scan.cache;
     const swatch = (p) => h('i', { class: 'scan-dot', style: { background: P ? App.Scan.colorAt(P, p) : '#888' } });
     const pickSeeds = () => hide((back) => {
-      pickBar(o.by === 'wall' ? 'Clique num pedaço de parede da imagem (pode clicar em mais de uma cor). Enter ou Concluir termina.' : 'Clique no vazio de fora das salas (pode clicar em mais de um lugar). Enter ou Concluir termina.');
+      pickBar(o.by === 'wall' ? 'Clique num pedaço de parede da imagem (pode clicar em mais de uma cor). Enter ou Concluir termina.' : o.by === 'floor' ? 'Clique no chão de cada sala (um clique por sala; corredores também). Enter ou Concluir termina.' : 'Clique no vazio de fora das salas (pode clicar em mais de um lugar). Enter ou Concluir termina.');
       B.pick('point', (p) => { o.seeds = o.seeds.concat([{ x: Math.round(p.x), y: Math.round(p.y) }]); UI.runScan(true); }, () => { pickBar(null); back(); UI.refreshScan(); }, { multi: true, raw: true });
     });
     const W = R.walls.filter((s) => !s.off).length, Dn = R.doors.filter((s) => !s.off).length;
+    const OD = o.only === 'doors';
     const status = R.error ? h('div', { class: 'warn-box' }, R.error)
-      : R.need ? h('p', { class: 'hint scan-status' }, o.by === 'wall' ? 'Clique numa parede da imagem para começar.' : 'Clique no vazio de fora das salas para começar.')
-        : h('p', { class: 'scan-status' }, R.busy ? 'Procurando…' : W + (W === 1 ? ' parede' : ' paredes') + ' · ' + Dn + (Dn === 1 ? ' porta' : ' portas') + ' sugeridas'
+      : R.need ? h('p', { class: 'hint scan-status' }, OD ? 'Mostre uma porta da imagem ou ligue o palpite para começar.' : o.by === 'wall' ? 'Clique numa parede da imagem para começar.' : o.by === 'floor' ? 'Clique no chão de uma sala para começar.' : 'Clique no vazio de fora das salas para começar.')
+        : h('p', { class: 'scan-status' }, R.busy ? 'Procurando…' : (OD ? '' : W + (W === 1 ? ' parede' : ' paredes') + ' · ') + Dn + (Dn === 1 ? ' porta' : ' portas') + ' sugeridas'
           + ((R.walls.length - W) + (R.doors.length - Dn) ? ' (' + ((R.walls.length - W) + (R.doors.length - Dn)) + ' tiradas)' : ''));
     const BY = { outside: 'Clique no vazio de fora das salas: a borda das salas vira parede. Bom para mapas em que as salas ficam "soltas" num fundo.',
       wall: 'Clique na cor das paredes desenhadas: o meio da linha vira parede. Bom para mapas com paredes pretas ou de pedra.',
-      dark: 'Sem clique: o que for bem escuro vira parede. Bom para mapas simples em preto e branco.' };
+      dark: 'Sem clique: o que for bem escuro vira parede. Bom para mapas simples em preto e branco.',
+      floor: 'Clique no chão de cada sala: o chão é preenchido até a parede, e a borda dele vira parede. Bom para mapas com rocha, neve ou fundo cheio de textura.' };
+    const n = (k) => (OD ? k - 2 : k) + '. ';
     return h('div', { class: 'scan' },
-      h('p', { class: 'hint', style: { margin: 0 } }, 'As sugestões aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta); Shift + arrastar tira várias. Depois ajuste com o lápis e a borracha.'),
-      h('span', { class: 'eyebrow' }, '1. O que separa as salas'),
-      h('div', { class: 'seg scan-by' }, [['outside', 'Lado de fora'], ['wall', 'Cor da parede'], ['dark', 'Escuro']].map(([k, l]) =>
+      h('p', { class: 'hint', style: { margin: 0 } }, OD ? 'As portas sugeridas aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta). Onde já existe parede, a porta abre a passagem nela.' : 'As sugestões aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta); Shift + arrastar tira várias. Depois ajuste com o lápis e a borracha.'),
+      OD ? '' : h('span', { class: 'eyebrow' }, '1. O que separa as salas'),
+      OD ? '' : h('div', { class: 'seg scan-by' }, [['outside', 'Lado de fora'], ['floor', 'Chão das salas'], ['wall', 'Cor da parede'], ['dark', 'Escuro']].map(([k, l]) =>
         h('button', { class: o.by === k ? 'on' : '', onclick: () => set({ by: k, seeds: k === o.by ? o.seeds : [] }) }, l))),
-      h('p', { class: 'hint', style: { margin: 0 } }, BY[o.by]),
-      o.by !== 'dark' ? h('div', { class: 'row' }, h('div', { class: 'grow scan-seeds' }, o.seeds.length ? o.seeds.map(swatch) : h('span', { class: 'ta-target none' }, 'Nenhum clique ainda')),
+      OD ? '' : h('p', { class: 'hint', style: { margin: 0 } }, BY[o.by]),
+      !OD && o.by !== 'dark' ? h('div', { class: 'row' }, h('div', { class: 'grow scan-seeds' }, o.seeds.length ? o.seeds.map(swatch) : h('span', { class: 'ta-target none' }, 'Nenhum clique ainda')),
         btnI('map-pin', o.seeds.length ? 'Mais' : 'Clicar no mapa', { class: 'btn small primary', onclick: pickSeeds }),
         o.seeds.length ? iconBtn('x', 'Limpar os cliques', () => set({ seeds: [] })) : '') : '',
-      h('div', { class: 'snd-row' }, h('span', {}, 'Sensibilidade'), h('span', {}, Math.round(o.sens * 100) + '%')),
-      h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.sens, onchange: (e) => set({ sens: Number(e.target.value) }) }),
-      h('span', { class: 'eyebrow' }, '2. Paredes'),
-      h('div', { class: 'seg' }, [['straight', 'Retas (grid e 45°)'], ['free', 'Livre (cavernas)']].map(([k, l]) => h('button', { class: o.mode === k ? 'on' : '', onclick: () => set({ mode: k }) }, l))),
-      h('span', { class: 'eyebrow' }, '3. Onde'),
+      OD ? '' : h('div', { class: 'snd-row' }, h('span', {}, 'Sensibilidade'), h('span', {}, Math.round(o.sens * 100) + '%')),
+      OD ? '' : h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.sens, onchange: (e) => set({ sens: Number(e.target.value) }) }),
+      OD ? '' : h('div', { class: 'snd-row', title: 'Borra a imagem antes de procurar: rocha, neve e lajotas viram manchas lisas' }, h('span', {}, 'Ignorar textura'), h('span', {}, o.smooth ? Math.round(o.smooth * 100) + '%' : 'desligado')),
+      OD ? '' : h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.smooth || 0, onchange: (e) => set({ smooth: Number(e.target.value) }) }),
+      OD ? '' : h('div', { class: 'snd-row', title: 'Manchas menores que isso (árvores, pedras, móveis) não viram parede' }, h('span', {}, 'Tamanho mínimo'), h('span', {}, (() => { const q = Math.round((o.by === 'wall' || o.by === 'dark' ? 0.1 : 1.5) * Math.max(0.2, (o.minSize ?? 0.1) * 10) * 10) / 10; return String(q).replace('.', ',') + (q === 1 ? ' quadrado' : ' quadrados'); })())),
+      OD ? '' : h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: o.minSize ?? 0.1, onchange: (e) => set({ minSize: Number(e.target.value) }) }),
+      OD ? '' : h('span', { class: 'eyebrow' }, '2. Paredes'),
+      OD ? '' : h('div', { class: 'seg' }, [['straight', 'Retas (grid e 45°)'], ['free', 'Livre (cavernas)']].map(([k, l]) => h('button', { class: o.mode === k ? 'on' : '', onclick: () => set({ mode: k }) }, l))),
+      h('span', { class: 'eyebrow' }, n(3) + 'Onde'),
       h('div', { class: 'row' }, h('div', { class: 'seg grow' },
         h('button', { class: o.region ? '' : 'on', onclick: () => set({ region: null }) }, 'Mapa inteiro'),
         h('button', { class: o.region ? 'on' : '', onclick: () => hide((back) => B.dragRect('Arraste o retângulo onde procurar. Esc cancela.', (a, b) => set({ region: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) } }), back, '#5fd0c4')) }, o.region ? 'Só a área (trocar)' : 'Só uma área'))),
-      h('span', { class: 'eyebrow' }, '4. Portas'),
+      h('span', { class: 'eyebrow' }, n(4) + 'Portas'),
       h('div', { class: 'row' }, h('div', { class: 'grow chips' }, o.tpls.map((t, i) => h('span', { class: 'chip', title: 'Clique para tirar este exemplo', onclick: () => set({ tpls: o.tpls.filter((_, j) => j !== i) }) }, 'Exemplo ' + (i + 1), ic('x')))),
         btnI('door-closed', o.tpls.length ? 'Outra porta' : 'Mostrar uma porta', { class: 'btn small', title: 'Arraste um retângulo em volta de uma porta da imagem: o sistema procura as parecidas (giradas também)', onclick: () => hide((back) => B.dragRect('Arraste um retângulo bem justo em volta de uma porta da imagem. Esc cancela.', (a, b) => {
           const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
@@ -1503,13 +1566,13 @@
         }, back, '#e8a54b')) })),
       o.tpls.length ? h('div', { class: 'snd-row' }, h('span', {}, 'Quão parecida'), h('span', {}, Math.round(o.doorThr * 100) + '%')) : '',
       o.tpls.length ? h('input', { type: 'range', min: 0.7, max: 0.98, step: 0.01, value: o.doorThr, onchange: (e) => set({ doorThr: Number(e.target.value) }) }) : '',
-      h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, 'Palpite: aberturas de 1 quadrado viram porta'), h('input', { type: 'checkbox', checked: !!o.gaps, onchange: (e) => set({ gaps: e.target.checked }) })),
+      h('label', { class: 'switch-row' }, h('span', { class: 'grow' }, OD ? 'Palpite: aberturas de 1 quadrado nas paredes do mapa viram porta' : 'Palpite: aberturas de 1 quadrado viram porta'), h('input', { type: 'checkbox', checked: !!o.gaps, onchange: (e) => set({ gaps: e.target.checked }) })),
       status,
       R.doorWarn ? h('div', { class: 'warn-box' }, R.doorWarn) : '',
       h('div', { class: 'hud-btns' },
         btnI('check', 'Criar', { class: 'btn primary grow', title: 'Cria as paredes e portas sugeridas (um Ctrl+Z desfaz tudo)', disabled: !(W + Dn) || R.busy, onclick: () => {
           const n = App.Scan.apply(sc, R);
-          U.toast('Criadas: ' + W + ' paredes e ' + Dn + ' portas. Ctrl+Z desfaz.', 'info', 3500);
+          U.toast(OD ? 'Criadas: ' + Dn + (Dn === 1 ? ' porta' : ' portas') + '. Ctrl+Z desfaz.' : 'Criadas: ' + W + ' paredes e ' + Dn + ' portas. Ctrl+Z desfaz.', 'info', 3500);
           if (n) { R.walls = []; R.doors = []; App.Scan.cache = App.Scan.cache; UI.runScan(true); }
         } }),
         iconBtn('refresh-cw', 'Procurar de novo', () => UI.runScan(true)),
@@ -1980,7 +2043,7 @@
     if (note) { noteHud(hud, empty, csc, note); return; }
     if (B.selectedNote && !note) B.selectedNote = null;
     const trg = S().gmView() && B.selectedTrigger && csc && (csc.triggers || []).find((x) => x.id === B.selectedTrigger);
-    if (trg) { triggerHud(hud, empty, csc, trg); return; }
+    if (trg) { (trg.portal ? portalHud : triggerHud)(hud, empty, csc, trg); return; }
     if (B.selectedTrigger && !trg) B.selectedTrigger = null;
     const door = S().gmView() && B.selectedDoor && csc && (csc.walls || []).find((x) => x.id === B.selectedDoor && x.door);
     if (door) { doorHud(hud, empty, csc, door); return; }
@@ -2563,6 +2626,64 @@
           iconBtn('refresh-cw', 'Rearmar', () => S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch: { used: 0, lastAt: 0 } })),
           h('span', { class: 'grow' }),
           iconBtn('trash-2', 'Apagar (Delete)', () => { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); App.Board.selectedTrigger = null; UI.closeWindow('trigger:' + tr.id); App.Board.requestRender(); })));
+    }
+    hud.hidden = false;
+    if (!hudFloats()) { hud.style.transform = ''; return; }
+    const c = App.Triggers.center(tr), p = App.Board.toScreen(c.x, c.y), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
+    const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
+  }
+
+  // Portal (Plano 31): para onde leva, ida e volta, quem passa, ligado
+  // Destinos: este mapa, as sub-cenas da mesma família e as outras cenas
+  UI.portalTargets = function (sc) {
+    const st = S().state, fam = sc.parent || sc.id, out = [['', 'Neste mapa']];
+    const order = st.sceneOrder.filter((id) => st.scenes[id] && id !== sc.id);
+    const same = order.filter((id) => id === fam || st.scenes[id].parent === fam), rest = order.filter((id) => !same.includes(id));
+    for (const id of same) out.push([id, st.scenes[id].name + (st.scenes[id].parent ? ' (sub-cena)' : ' (principal)')]);
+    for (const id of rest) out.push([id, 'Cena: ' + st.scenes[id].name]);
+    return out;
+  };
+  function portalHud(hud, empty, sc, tr) {
+    if (empty) empty.hidden = true;
+    const TG = App.Triggers, st = S().state, act = TG.portalAct(tr) || {}, d = TG.portalDest(sc, tr), partner = TG.portalPartner(sc, tr);
+    const sig = JSON.stringify(['portal', UI.mode, tr, partner && partner.tr, st.sceneOrder.map((id) => [id, st.scenes[id].name, st.scenes[id].parent])]);
+    if (hud._sig !== sig && !isTyping(hud)) {
+      hud._sig = sig;
+      hud.innerHTML = '';
+      const B = App.Board, on = tr.enabled !== false;
+      const upd = (patch) => S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch });
+      const far = d && d.scene.id !== sc.id;
+      const cellTxt = (x, y) => { const g = d.scene.grid; return '(' + (Math.floor(x / g) + 1) + ', ' + (Math.floor(y / g) + 1) + ')'; };
+      const where = !d ? 'A cena de destino não existe mais' : d.center ? (far ? 'Chega no meio do mapa: escolha o ponto' : 'Escolha o ponto de chegada') : 'Chega em ' + cellTxt(d.x, d.y) + (partner ? ', no portal de volta' : '');
+      const pick = () => {
+        const done = (p) => TG.setPortalDest(sc.id, tr.id, { x: p.x, y: p.y });
+        if (far) B.pickInScene(d.scene.id, done, { trigger: tr.id });
+        else B.pick('point', done, null, { exclude: tr.id });
+      };
+      hud.append(
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble portal' + (on ? ' on' : '') }, ic('sparkles')),
+          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: tr.name || '', placeholder: 'Nome', onchange: (e) => upd({ name: e.target.value.trim() || 'Portal' }) }),
+            h('div', { class: 'hud-sub' }, 'Portal · ' + (on ? (far ? 'leva para outra cena' : 'leva para este mapa') : 'desligado')))),
+        h('div', { class: 'hud-section' },
+          h('span', { class: 'eyebrow' }, 'Leva para'),
+          h('select', { value: act.sceneId && act.sceneId !== sc.id ? act.sceneId : '', onchange: (e) => TG.setPortalDest(sc.id, tr.id, { sceneId: e.target.value || null }) },
+            UI.portalTargets(sc).map(([v, l]) => h('option', { value: v }, l))),
+          h('div', { class: 'row' }, h('span', { class: 'grow hint', style: { margin: 0 } }, where),
+            btnI('map-pin', 'Escolher no mapa', { class: 'btn small', title: far ? 'Sua tela vai para a outra cena; clique no ponto e ela volta' : 'Clique no ponto de chegada', onclick: pick }))),
+        h('div', { class: 'hud-section' },
+          h('label', { class: 'check', title: 'Cria um portal no ponto de chegada que traz de volta para cá' },
+            h('input', { type: 'checkbox', checked: !!partner, disabled: !d, onchange: (e) => { if (e.target.checked) TG.linkPortal(sc.id, tr.id); else TG.unlinkPortal(sc.id, tr.id); } }), 'Ida e volta'),
+          h('p', { class: 'hint', style: { margin: 0 } }, partner ? 'Do outro lado há o portal "' + (partner.tr.name || 'Portal') + '", que traz de volta. Quem chega não volta sozinho: precisa sair e pisar de novo.' : 'Só ida (ex.: uma armadilha, ou o trem que só anda para frente).'),
+          h('span', { class: 'eyebrow' }, 'Quem passa'),
+          h('select', { value: tr.who || 'any', onchange: (e) => upd({ who: e.target.value }) }, TG.WHO.filter(([k]) => k !== 'pick').map(([k, l]) => h('option', { value: k }, l))),
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, onchange: (e) => upd({ enabled: e.target.checked }) }), 'Ligado (desligue para bloquear a passagem)'),
+          h('label', { class: 'check', title: 'Brilho azul na saída e na chegada, para todos que veem' }, h('input', { type: 'checkbox', checked: tr.fx !== false, onchange: (e) => { upd({ fx: e.target.checked }); if (partner) S().dispatch({ type: 'trigger.update', sceneId: partner.scene.id, id: partner.tr.id, patch: { fx: e.target.checked } }); } }), 'Efeito de brilho ao passar' + (partner ? ' (vale para a volta também)' : ''))),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem pisa na área vai para o destino. Em outra cena, quem controla o token vai junto; o resto do grupo fica onde está. Os jogadores não veem o portal.'),
+        h('div', { class: 'hud-btns' },
+          far ? btnI('map', 'Ir para o destino', { title: 'Abre a outra cena na sua tela (os jogadores não mudam)', onclick: () => { S().viewSceneId = d.scene.id; S().emit('local'); } }) : '',
+          h('span', { class: 'grow' }),
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); B.selectedTrigger = null; B.requestRender(); } })));
     }
     hud.hidden = false;
     if (!hudFloats()) { hud.style.transform = ''; return; }
@@ -3526,6 +3647,7 @@
   };
 
   UI.applyImport = (obj) => applyImport(obj);
+  UI.importParsed = (obj) => applyImport(obj);
   async function applyImport(obj) {
     const S_ = S(), gm = S_.isGM();
     const addAssets = (assets) => {
@@ -3537,18 +3659,39 @@
     };
     if (obj.format === 'mesarpg') {
       if (!gm) throw new Error('Só o mestre pode importar uma campanha.');
-      if (!confirm('Substituir a campanha atual por esta? (exporte antes se quiser guardar a atual)')) throw new Error('Importação cancelada');
+      // Plano 33: vira uma história nova (recomendado) ou substitui a aberta
+      const how = await new Promise((res) => UI.modal('Importar campanha', h('div', {},
+        h('p', { style: { margin: '0 0 8px' } }, 'Campanha "' + ((obj.state && obj.state.name) || 'sem nome') + '".'),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Nova história: a atual continua guardada e esta abre no lugar. Substituir: a história aberta vira esta (exporte antes, se quiser guardar).')), [
+        { label: 'Cancelar', onclick: () => res(null) },
+        { label: 'Substituir a atual', onclick: () => res('replace') },
+        { label: 'Criar história nova', primary: true, onclick: () => res('new') },
+      ]));
+      if (!how) throw new Error('Importação cancelada');
+      if (how === 'new' && !new URLSearchParams(location.search).has('tutorial')) {
+        await App.Storage.save();
+        App.Storage.currentId = await App.Storage.createStory((obj.state && obj.state.name) || 'História importada', S().migrate(U.clone(obj.state)), obj.assets || {});
+        try { localStorage.setItem('vesper.story', App.Storage.currentId); } catch { /* */ }
+      }
       replaceCampaign(obj.state, obj.assets || {});
-      U.toast('Campanha importada!');
+      U.toast(how === 'new' ? 'Campanha importada como história nova!' : 'Campanha importada!');
     } else if (obj.format === 'mesarpg-scene') {
       if (!gm) throw new Error('Só o mestre pode importar cenas.');
       addAssets(obj.assets);
       for (const a of Object.values(obj.actors || {})) if (!S_.state.actors[a.id]) S_.dispatch({ type: 'actor.add', actor: a });
-      const sc = Object.assign(S_.newScene(), U.clone(obj.scene));
-      sc.id = U.uid('s_');
-      S_.dispatch({ type: 'scene.add', scene: sc });
-      S_.viewSceneId = sc.id;
-      U.toast('Cena importada!');
+      // Plano 31: a principal vem com as sub-cenas; ids novos e os portais entre elas apontam para as cópias
+      const list = [obj.scene].concat(Array.isArray(obj.subs) ? obj.subs : []), map = {};
+      for (const x of list) map[x.id] = U.uid('s_');
+      const made = list.map((x, k) => {
+        const sc = Object.assign(S_.newScene(), U.clone(x));
+        sc.id = map[x.id];
+        if (k === 0) delete sc.parent; else sc.parent = map[obj.scene.id];
+        for (const tr of sc.triggers || []) for (const a of tr.actions || []) if (a.type === 'teleport' && a.sceneId) a.sceneId = map[a.sceneId] || (S_.state.scenes[a.sceneId] ? a.sceneId : null);
+        return sc;
+      });
+      for (const sc of made) S_.dispatch({ type: 'scene.add', scene: sc });
+      S_.viewSceneId = made[0].id;
+      U.toast(made.length > 1 ? 'Cena importada com ' + (made.length - 1) + (made.length === 2 ? ' sub-cena!' : ' sub-cenas!') : 'Cena importada!');
     } else if (obj.format === 'mesarpg-actor') {
       addAssets(obj.assets);
       const a = U.clone(obj.actor);

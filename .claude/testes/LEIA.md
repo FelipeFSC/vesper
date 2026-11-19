@@ -19,6 +19,11 @@
 | `isohud.js` | Painel do isolamento com a barra da direita recolhida: abre ao lado do isolamento e fecha ao clicar no vazio |
 | `prophud.js` | Painel da imagem com a barra da direita recolhida: abre ao lado da imagem, como o da luz |
 | `shareruler.js` | Plano 30 (rede simulada): rastro com relógio atrasado, movimento velho não aparece, mestre carimba a hora, régua desempenho/tempo real (mensagens, sinal de vida), "Mostrar aos jogadores", arraste ao vivo, token escondido, régua de outro (cena, cancelar, some depois de trailSecs e sem sinal), opção em Mesa → Regras |
+| `portal.js` | Plano 31: ferramenta Portal (K), mesmo mapa, três juntos, desligado, "quem passa", mestre arrastando (câmera), sub-cena pela lista, outra cena com ida e volta e "Escolher no mapa" lá, não volta sozinho, tirar a volta, menu, "Portal aqui", migração, exportar/importar com sub-cena, apagar (manter/apagar tudo) |
+| `portal_shot.js` | Foto do portal selecionado, linha até o destino e lista de cenas com sub-cenas (`-shot`) |
+| `doorscan.js` | Plano 32: Procurar portas pela ferramenta Porta (só portas, palpite pelas paredes do mapa, paredes existentes ganham a passagem, desfazer, janela completa na Parede) |
+| `stories.js` | Plano 33 (rodar com `-query ''`): campanha antiga vira história, tela de cartões, menu do cartão, duplicar/renomear/imagem/apagar, nova história abre a mesa, salva na certa, ordem, importar como nova. Com `-query '?historias=offline'`: a tela abre sozinha (Voltar ao menu). Usa `App.Storage.mem` porque o IndexedDB não responde no Edge sem tela |
+| `stories_shot.js` | Foto da tela de Histórias (`-query '' -shot`) |
 | `groups.js` | Vulto, grupos de tokens e nomes no chat |
 | `pscene.js` | Jogadores separados em cenas |
 | `props.js` | Imagens no mapa: soltar arquivo, níveis, mover, redimensionar, girar, travar, invisível, biblioteca, Ctrl+D, Delete, exportar |
@@ -51,3 +56,6 @@
 | `live.js` | Painéis atualizando na hora (botões, listas, caixas de marcar) |
 
 Como rodar e como encerrar os processos: [../docs/testes.md](../docs/testes.md).
+
+## IndexedDB nos testes
+No Edge sem tela com `--virtual-time-budget`, o IndexedDB não responde (nem abrir um banco novo). Para testar o salvamento, ponha `App.Storage.mem = new Map()` no começo do teste: a lógica é a mesma, só guarda na memória. Rodadas na página do menu (`-query ''`) podem deixar o Edge de teste aberto: confira os processos no fim e encerre os que sobrarem.

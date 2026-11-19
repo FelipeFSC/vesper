@@ -143,10 +143,10 @@
   };
 
   B.setTool = function (t) {
-    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light' || t === 'trigger' || t === 'note') && !S().gmView()) return;
+    if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light' || t === 'trigger' || t === 'portal' || t === 'note') && !S().gmView()) return;
     if (t !== 'room') B.roomPoly = null;
     if (t !== 'light') { B.lightPoly = null; B.lightDraft = null; }
-    if (t !== 'trigger') { B.trigPoly = null; B.trigDraft = null; }
+    if (t !== 'trigger' && t !== 'portal') { B.trigPoly = null; B.trigDraft = null; }
     B.tool = t;
     B.canvas.style.cursor = CURSORS[t] || 'crosshair';
     if (App.UI) App.UI.renderToolbar();
@@ -379,7 +379,8 @@
     if (sc.id !== B.lastSceneId) {
       // Jogador levado para outra cena: avisa onde ele está agora
       if (B.lastSceneId && !S().gmView()) U.toast('Você está em "' + sc.name + '"', 'info', 4000);
-      B.lastSceneId = sc.id; B.remote.clear(); B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; B.selectedDoor = null; B.selectedTrigger = null; B.trigDrag = null; B.trigPoly = null; B.cancelPick(); B.flashes = []; B.multi.clear(); B.lasso = null; B.multiDrag = null; B.selectedNote = null; B.noteDrag = null; B.hoverNote = null; fitCam(sc); }
+      B.lastSceneId = sc.id; B.remote.clear(); B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; B.selectedDoor = null; B.selectedTrigger = null; B.trigDrag = null; B.trigPoly = null; if (!(B.picking && B.picking.sceneId === sc.id)) B.cancelPick(); B.flashes = []; B.warps = []; B.multi.clear(); B.lasso = null; B.multiDrag = null; B.selectedNote = null; B.noteDrag = null; B.hoverNote = null; fitCam(sc);
+      if (B.afterScene && B.afterScene.sceneId === sc.id) { if (B.afterScene.trigger) B.selectedTrigger = B.afterScene.trigger; if (B.afterScene.cam) Object.assign(B.cam, B.afterScene.cam); B.afterScene = null; } }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
@@ -415,6 +416,7 @@
       if (cur && !B.targeting && S().canControl(sc.tokens[cur])) B.selected = cur;
     }
     const tokens = L.tokens ? visibleTokens(sc) : [];
+    checkWarps(sc, tokens);
     // Rastro do último movimento de cada token visível (o mestre escolhe quantos segundos em Mesa → Regras)
     const trailMs = Number((S().state.rules || {}).trailSecs ?? 3) * 1000;
     if (trailMs > 0) {
@@ -470,7 +472,7 @@
     }
     for (const t of above) drawToken(ctx, sc, t, t.id === cur);
     if (gm && L.rooms && (App.UI.mode === 'edit' || B.tool === 'room' || B.selectedRoom)) drawRooms(ctx, sc);
-    if (gm && L.triggers && (App.UI.mode === 'edit' || B.tool === 'trigger' || B.selectedTrigger || B.picking)) drawTriggers(ctx, sc);
+    if (gm && L.triggers && (App.UI.mode === 'edit' || trigTool() || B.selectedTrigger || B.picking)) drawTriggers(ctx, sc);
     if (gm && L.sounds) drawSounds(ctx, sc);
     if (gm && L.lights) drawLightPoints(ctx, sc);
     if (gm && L.notes) drawNotes(ctx, sc);
@@ -492,6 +494,7 @@
     }
     if (B.ruler) drawPath(ctx, sc, [B.ruler.a].concat(B.ruler.points || [], [B.ruler.b]));
     drawRemote(ctx, sc, tokens);
+    drawWarps(ctx);
     if (B.fogDraft) {
       const r = norm(B.fogDraft);
       ctx.save();
@@ -963,10 +966,12 @@
   // ---------- gatilhos (só o mestre vê) ----------
   const TRIG_C = '#e0609a';
   const TG = () => App.Triggers;
+  const trigTool = () => B.tool === 'trigger' || B.tool === 'portal';
+  const PORTAL_C = '#38bdf8';
   function trigNow(tr) { return B.trigDrag && B.trigDrag.id === tr.id ? Object.assign({}, tr, B.trigDrag.cur) : tr; }
   function trigHandle(sc, tr) { return tr.shape === 'circle' ? { x: tr.x + (Number(tr.r) || 0.5) * sc.grid, y: tr.y } : null; }
   function triggerAt(sc, p) {
-    if (!S().gmView() || !B.layers.triggers || !(App.UI.mode === 'edit' || B.tool === 'trigger' || B.selectedTrigger)) return null;
+    if (!S().gmView() || !B.layers.triggers || !(App.UI.mode === 'edit' || trigTool() || B.selectedTrigger)) return null;
     const list = sc.triggers || [], z = B.cam.z;
     const sel = B.selectedTrigger && list.find((x) => x.id === B.selectedTrigger);
     const hd = sel && trigHandle(sc, sel);
@@ -1005,7 +1010,7 @@
     const out = [];
     (tr.actions || []).forEach((a, k) => {
       const add = (p, extra) => out.push(Object.assign({ x: p.x, y: p.y, i: k + 1, id: a.id }, extra));
-      if (a.type === 'teleport') { if ((!a.sceneId || a.sceneId === sc.id) && a.x != null) add({ x: a.x, y: a.y }, { dest: true }); return; }
+      if (a.type === 'teleport') { const d = TG().portalDest(sc, tr, a); if (d && d.scene.id === sc.id && !d.center) add({ x: d.x, y: d.y }, { dest: true }); return; }
       if (a.type === 'sound' && !String(a.op).startsWith('spot')) return;
       for (const x of TG().targets(sc, a)) { const s = TG().spotOf(sc, x); add(s, x.kind === 'token' ? { r: s.r - 4 } : {}); }
     });
@@ -1014,13 +1019,14 @@
   // Destaque: a ação aberta na janela ou com o mouse em cima do cartão (App.UI.trigHover / trigEdit)
   const focusAction = () => (App.UI && (App.UI.trigHover || App.UI.trigEdit)) || null;
   function drawTriggers(ctx, sc) {
-    const z = B.cam.z, showAll = B.tool === 'trigger';
+    const z = B.cam.z, showAll = trigTool();
     for (const tr0 of sc.triggers || []) {
-      const tr = trigNow(tr0), sel = B.selectedTrigger === tr.id, c = TG().center(tr);
-      const st = TG().stateLabel(tr), col = st === 'Pronto' ? TRIG_C : st === 'Esperando' ? C.warn : '#8f8d9a';
+      const tr = trigNow(tr0), sel = B.selectedTrigger === tr.id, c = TG().center(tr), pt = !!tr.portal;
+      const st = pt ? (tr.enabled === false ? 'Desligado' : 'Pronto') : TG().stateLabel(tr), MAIN = pt ? PORTAL_C : TRIG_C;
+      const col = st === 'Pronto' ? MAIN : st === 'Esperando' ? C.warn : '#8f8d9a';
       ctx.save();
       trigPath(ctx, sc, tr);
-      ctx.fillStyle = sel ? 'rgba(224,96,154,.16)' : st === 'Pronto' ? 'rgba(224,96,154,.07)' : 'rgba(143,141,154,.06)'; ctx.fill();
+      ctx.fillStyle = pt ? (sel ? 'rgba(56,189,248,.18)' : st === 'Pronto' ? 'rgba(56,189,248,.08)' : 'rgba(143,141,154,.06)') : sel ? 'rgba(224,96,154,.16)' : st === 'Pronto' ? 'rgba(224,96,154,.07)' : 'rgba(143,141,154,.06)'; ctx.fill();
       ctx.setLineDash(tr.enabled === false ? [3 / z, 6 / z] : [9 / z, 6 / z]); ctx.lineWidth = (sel ? 2.4 : 1.6) / z; ctx.strokeStyle = sel ? '#fff' : col; ctx.stroke();
       ctx.setLineDash([]);
       if (sel) {
@@ -1053,7 +1059,7 @@
           const s = spots.get(key) || { x: q.x, y: q.y, r: q.r, nums: [], on: false };
           s.nums.push(q.i); s.on = s.on || q.id === foc; spots.set(key, s);
         }
-        for (const s of spots.values()) {
+        for (const s of pt ? [] : spots.values()) { // portal: só a linha até o destino, sem número
           const txt = [...new Set(s.nums)].join(','), rr = (s.on ? 10 : 8) / z;
           ctx.save();
           ctx.globalAlpha = hasFoc && !s.on ? 0.45 : 1;
@@ -1070,22 +1076,29 @@
         const hd = trigHandle(sc, tr);
         if (hd) { const s = 5 / z; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(17,17,20,.9)'; ctx.fillRect(hd.x - s, hd.y - s, s * 2, s * 2); ctx.strokeRect(hd.x - s, hd.y - s, s * 2, s * 2); }
       }
-      // marcador com o raio
+      // marcador: raio (gatilho) ou anel (portal)
       const r = 12 / z, u = r / 12;
       ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = st === 'Pronto' ? TRIG_C : '#3a3550'; ctx.fill();
+      ctx.fillStyle = st === 'Pronto' ? MAIN : '#3a3550'; ctx.fill();
       ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : 'rgba(17,17,20,.9)'; ctx.stroke();
       ctx.fillStyle = st === 'Pronto' ? '#fff' : '#9b97ad';
-      ctx.beginPath();
-      ctx.moveTo(c.x + 1.5 * u, c.y - 7 * u); ctx.lineTo(c.x - 4.5 * u, c.y + 1 * u); ctx.lineTo(c.x - 0.5 * u, c.y + 1 * u);
-      ctx.lineTo(c.x - 1.5 * u, c.y + 7 * u); ctx.lineTo(c.x + 4.5 * u, c.y - 1 * u); ctx.lineTo(c.x + 0.5 * u, c.y - 1 * u); ctx.closePath(); ctx.fill();
+      if (pt) {
+        ctx.strokeStyle = st === 'Pronto' ? '#fff' : '#9b97ad'; ctx.lineWidth = 1.8 * u;
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, 6 * u, 4 * u, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(c.x, c.y, 1.8 * u, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(c.x + 1.5 * u, c.y - 7 * u); ctx.lineTo(c.x - 4.5 * u, c.y + 1 * u); ctx.lineTo(c.x - 0.5 * u, c.y + 1 * u);
+        ctx.lineTo(c.x - 1.5 * u, c.y + 7 * u); ctx.lineTo(c.x + 4.5 * u, c.y - 1 * u); ctx.lineTo(c.x + 0.5 * u, c.y - 1 * u); ctx.closePath(); ctx.fill();
+      }
       if (sel || showAll) {
-        const label = (tr.name || 'Gatilho') + ' · ' + st.toLowerCase();
+        const pd = pt && TG().portalDest(sc, tr), far = pd && pd.scene.id !== sc.id;
+        const label = pt ? (tr.name || 'Portal') + (st === 'Desligado' ? ' · desligado' : pd && !pd.center ? (far ? ' → ' + pd.scene.name : '') + (pd.linked ? ' · ida e volta' : '') : ' · sem destino') : (tr.name || 'Gatilho') + ' · ' + st.toLowerCase();
         ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         const tw = ctx.measureText(label).width;
         roundRect(ctx, c.x - tw / 2 - 6 / z, c.y + r + 4 / z, tw + 12 / z, 17 / z, 4 / z);
         ctx.fillStyle = C.plate; ctx.fill();
-        ctx.fillStyle = sel ? '#fff' : '#e6c6d6'; ctx.fillText(label, c.x, c.y + r + 7 / z);
+        ctx.fillStyle = sel ? '#fff' : pt ? '#c7ecfb' : '#e6c6d6'; ctx.fillText(label, c.x, c.y + r + 7 / z);
       }
       ctx.restore();
     }
@@ -1106,7 +1119,8 @@
   const draftRadius = (sc, d) => Math.max(0.5, Math.round((Math.hypot(d.p.x - d.x, d.p.y - d.y) / sc.grid) * 2) / 2);
   B.addTrigger = function (sc, part) {
     if (!sc || !S().gmView()) return null;
-    const tr = TG().newTrigger(sc, part);
+    const wantPortal = part && 'portal' in part ? !!part.portal : B.tool === 'portal';
+    const tr = wantPortal ? TG().newPortal(sc, part) : TG().newTrigger(sc, Object.assign({}, part, { portal: undefined }));
     if (tr.shape !== 'circle' && tr.pts) { const c = TG().center(tr); tr.x = Math.round(c.x); tr.y = Math.round(c.y); }
     S().dispatch({ type: 'trigger.add', sceneId: sc.id, trigger: tr });
     B.selectedTrigger = tr.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null; B.selectedDoor = null;
@@ -1391,7 +1405,7 @@
     const lh = lightAt(sc, p);
     if (lh) return { kind: 'light', id: lh.o.id };
     const z = B.cam.z;
-    const tg = B.layers.triggers && (App.UI.mode === 'edit' || B.tool === 'trigger') && (sc.triggers || []).find((x) => { const c = TG().center(x); return Math.hypot(p.x - c.x, p.y - c.y) <= 15 / z; });
+    const tg = B.layers.triggers && (App.UI.mode === 'edit' || trigTool()) && (sc.triggers || []).find((x) => { const c = TG().center(x); return Math.hypot(p.x - c.x, p.y - c.y) <= 15 / z; });
     if (tg) return { kind: 'trigger', id: tg.id };
     const snd = soundAt(sc, p);
     if (snd) return { kind: 'sound', id: snd.id };
@@ -2385,7 +2399,7 @@
   // ---------- efeitos do resultado: números subindo, golpe, explosão ----------
   function animActive() {
     const sc = S().currentScene();
-    return B.pings.length || B.remote.size || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
+    return B.pings.length || B.remote.size || B.warps.length || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
   }
   function ensureAnim() {
     if (B.animating) return;
@@ -2395,6 +2409,7 @@
       B.pings = B.pings.filter((q) => now - q.t < 1800);
       B.fx = B.fx.filter((f) => now - f.t < f.dur);
       pruneRemote();
+      B.warps = B.warps.filter((w) => now - w.t < WARP_MS);
       B.render();
       if (animActive()) requestAnimationFrame(step); else { B.animating = false; B.render(); }
     };
@@ -2515,6 +2530,69 @@
       ctx.restore();
     }
   }
+
+  // ---------- portal (Plano 31): brilho na saída e na chegada, câmera de quem controla ----------
+  B.warps = [];
+  B.warpSeen = new Map();
+  const WARP_MS = 900;
+  function checkWarps(sc, tokens) {
+    const now = performance.now();
+    for (const t of tokens) {
+      const w = t.warp, key = w ? String(w.at) : '';
+      const k = sc.id + ':' + t.id, prev = B.warpSeen.get(k);
+      B.warpSeen.set(k, key);
+      if (!w || prev === key) continue;
+      // Novo = chegou com a mesa aberta; token que esta tela ainda não tinha visto: só se é recente pelo relógio do mestre
+      if (prev === undefined && Math.abs(App.Anim.now() - w.at) > 8000) continue;
+      const g = sc.grid, s = ((t.size || 1) * g) / 2;
+      // efeito de brilho: o mestre pode desligar em cada portal (a câmera continua indo junto)
+      if (w.fx !== false && w.from) B.warps.push({ x: w.from[0] + s, y: w.from[1] + s, t: now, out: true });
+      if (w.fx !== false) B.warps.push({ x: t.x + s, y: t.y + s, t: now });
+      // A câmera de quem controla o token vai junto (o mestre só quando foi ele que arrastou)
+      const mine = S().role === 'player' ? S().canControl(t) : B.lastDragId === t.id && Date.now() - (B.lastDragAt || 0) < 4000;
+      if (mine && B.w) { B.cam.x = t.x + s - B.w / 2 / B.cam.z; B.cam.y = t.y + s - B.h / 2 / B.cam.z; }
+      ensureAnim();
+    }
+  }
+  function drawWarps(ctx) {
+    if (!B.warps.length) return;
+    const now = performance.now(), z = B.cam.z;
+    for (const w of B.warps) {
+      const a = Math.min(1, (now - w.t) / WARP_MS);
+      ctx.save();
+      ctx.globalAlpha = 1 - a;
+      ctx.strokeStyle = PORTAL_C; ctx.shadowColor = PORTAL_C; ctx.shadowBlur = 14;
+      for (let k = 0; k < 2; k++) {
+        const q = Math.min(1, a * 1.3 + k * 0.18), rr = (w.out ? 34 - q * 28 : 6 + q * 30) / z;
+        ctx.lineWidth = (3 - k) / z;
+        ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(1 / z, rr), 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = '#e0f6ff';
+      for (let i = 0; i < 8; i++) {
+        const ang = i * Math.PI / 4 + a * 2, d = (w.out ? 30 * (1 - a) : 10 + 26 * a) / z;
+        ctx.beginPath(); ctx.arc(w.x + Math.cos(ang) * d, w.y + Math.sin(ang) * d, 2 / z, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  /*
+   * Escolher o ponto de chegada de um portal em outra cena: a tela do mestre vai para a cena de destino,
+   * ele clica no ponto e volta para onde estava, com o portal selecionado.
+   */
+  B.pickInScene = function (destId, cb, back) {
+    const st = S().state, here = S().currentScene();
+    if (!st.scenes[destId] || !here) return;
+    const camBack = { x: B.cam.x, y: B.cam.y, z: B.cam.z };
+    const goBack = () => {
+      B.afterScene = Object.assign({ sceneId: here.id, cam: camBack }, back || {});
+      S().viewSceneId = here.id === st.activeSceneId ? null : here.id;
+      S().emit('local');
+    };
+    let chosen = null;
+    B.pick('point', (p) => { chosen = p; }, () => { if (chosen) cb(chosen); goBack(); }, { sceneId: destId });
+    S().viewSceneId = destId;
+    S().emit('local');
+  };
 
   // ---------- régua e arraste para todos (Plano 30) ----------
   // B.remote: réguas e arrastes de quem está na mesa (inclusive a minha régua, que fica uns segundos depois de soltar).
@@ -2747,7 +2825,7 @@
         B.addNote(sc, p);
         break;
       }
-      case 'trigger': {
+      case 'trigger': case 'portal': {
         if (!gm) break;
         if (grabTrigger(sc, p)) break;
         B.selectedTrigger = null;
@@ -2985,6 +3063,7 @@
       const d = B.drag;
       B.drag = null;
       if (sc) shareEnd(sc, 'drag', null);
+      B.lastDragId = d.id; B.lastDragAt = Date.now();
       if (d.moved && sc) {
         let x = d.x, y = d.y;
         if (B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
@@ -3029,7 +3108,12 @@
         if ('x' in patch) { patch.x = Math.round(patch.x); patch.y = Math.round(patch.y); }
         if (patch.pts) patch.pts = patch.pts.map(([x, y]) => [Math.round(x), Math.round(y)]);
         S().dispatch({ type: 'trigger.update', sceneId: d.sceneId, id: d.id, patch });
-      } else if (sc && d.mode === 'move' && App.UI.openTrigger) App.UI.openTrigger(d.sceneId, d.id); // clique no marcador: abre a configuração
+      } else if (sc && d.mode === 'move') {
+        const tr = (sc.triggers || []).find((x) => x.id === d.id);
+        // clique no marcador: o portal abre o painel; o gatilho, a janela de configuração
+        if (tr && tr.portal) { if (App.UI) { App.UI.hudFor = App.UI.selKey(); App.UI.refresh(); } }
+        else if (App.UI.openTrigger) App.UI.openTrigger(d.sceneId, d.id);
+      }
     }
     if (B.trigDraft && sc) {
       const d = B.trigDraft, g = sc.grid;
@@ -3194,7 +3278,7 @@
       }
     }
     if (B.tool === 'light' && B.lightPoly) { finishLightPoly(sc); B.requestRender(); return; }
-    if (B.tool === 'trigger' && B.trigPoly) { finishTrigPoly(sc); B.requestRender(); return; }
+    if (trigTool() && B.trigPoly) { finishTrigPoly(sc); B.requestRender(); return; }
     // Dois cliques no marcador de luz: acende ou apaga
     const lh = lightAt(sc, toWorld(e));
     if (lh && lh.mode === 'move') { S().dispatch({ type: 'lightpt.update', sceneId: sc.id, id: lh.o.id, patch: { on: lh.o.on === false } }); return; }
@@ -3370,7 +3454,7 @@
       if (a && (a.actions || [])[i]) { if (B.targeting) B.cancelTargeting(); App.UI.useAction(a, i, t); }
       return;
     }
-    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop', u: 'light', t: 'trigger', n: 'note' };
+    const map = { v: 'select', h: 'pan', r: 'ruler', p: 'ping', d: 'path', l: 'line', b: 'rect', e: 'ellipse', x: 'erase', f: 'fog-reveal', g: 'fog-hide', w: 'wall', o: 'door', m: 'room', i: 'prop', u: 'light', t: 'trigger', k: 'portal', n: 'note' };
     const tool = map[e.key.toLowerCase()];
     if (tool) B.setTool(tool);
   }

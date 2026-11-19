@@ -34,7 +34,8 @@
   function labelOf(a) {
     if (a.label) return a.label;
     const [p, v] = String(a.type).split('.');
-    const what = { wall: 'parede', prop: 'imagem', lightpt: 'luz', trigger: 'gatilho', sound: 'som', room: 'isolamento de som', drawing: 'desenho', fog: 'névoa', note: 'nota', group: 'grupo', token: 'token', order: 'nível' }[p] || p;
+    const isPortal = p === 'trigger' && ((a.trigger && a.trigger.portal) || (() => { const sc = S().state && S().state.scenes[a.sceneId]; const t = sc && (sc.triggers || []).find((x) => x.id === a.id); return !!(t && t.portal); })());
+    const what = { wall: 'parede', prop: 'imagem', lightpt: 'luz', trigger: isPortal ? 'portal' : 'gatilho', sound: 'som', room: 'isolamento de som', drawing: 'desenho', fog: 'névoa', note: 'nota', group: 'grupo', token: 'token', order: 'nível' }[p] || p;
     return (VERB[v] ? VERB[v] + ' ' : '') + what;
   }
 

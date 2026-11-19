@@ -54,3 +54,7 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 28 | [Menu do botão direito](28-menu-do-botao-direito.md) | Implementado (testes do usuário) |
 | 29 | [Isolamento de som](29-isolamento-de-som.md) | Implementado (testes do usuário) |
 | 30 | [Régua e rastro do movimento para todos](30-regua-e-rastro-para-todos.md) | Implementado (testes do usuário) |
+| 31 | [Portais e escadas](31-portais-e-escadas.md) | Implementado (testes do usuário) |
+| 32 | [Procurar portas pela ferramenta Porta](32-procurar-portas-na-ferramenta-porta.md) | Implementado (testes do usuário) |
+| 33 | [Histórias (várias mesas preparadas)](33-historias.md) | Implementado (testes do usuário) |
+| 34 | [Procurar paredes em mapas com textura](34-scan-mapas-com-textura.md) | Em andamento |

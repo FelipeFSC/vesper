@@ -25,6 +25,7 @@ desktop.ini
 # Saídas dos testes
 .claude/testes/*_out.html
 .claude/testes/*.png
+.claude/testes/_mapa_*
 .claude/testes/edgeprof_*/
 
 # Imagens do bestiário: cada um usa as suas (Plano 24); só a pasta vai para o repositório

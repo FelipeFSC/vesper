@@ -18,7 +18,7 @@
     if (x.kind === 'token') return o.name || 'Token';
     if (x.kind === 'sound') return App.Audio && App.Audio.label ? App.Audio.label(o.name) : o.name;
     if (x.kind === 'note') return o.title || 'Nota';
-    return o.name || NAME[x.kind];
+    return o.name || (x.kind === 'trigger' && o.portal ? 'Portal' : NAME[x.kind]);
   };
 
   let menu = null;
@@ -145,7 +145,20 @@
       { icon: 'trash-2', label: 'Apagar', kbd: 'Del', danger: true, run: () => { B().selectObj('light', o); B().keyAct('Delete'); } },
     ];
   }
+  // Portal (Plano 31)
+  function portalItems(sc, tr) {
+    const TG = App.Triggers, on = tr.enabled !== false, d = TG.portalDest(sc, tr), far = d && d.scene.id !== sc.id, back = TG.portalPartner(sc, tr);
+    return [
+      { icon: 'sliders-horizontal', label: 'Configurar', run: () => panel('trigger', tr) },
+      far ? { icon: 'map', label: 'Ir para o destino', title: 'Abre a outra cena na sua tela (os jogadores não mudam)', run: () => { S().viewSceneId = d.scene.id; S().emit('local'); } } : null,
+      { icon: back ? 'check' : 'repeat', label: back ? 'Ida e volta (ligado)' : 'Ida e volta', run: () => (back ? TG.unlinkPortal(sc.id, tr.id) : TG.linkPortal(sc.id, tr.id)) },
+      { icon: on ? 'pause' : 'play', label: on ? 'Desligar' : 'Ligar', run: () => D({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch: { enabled: !on } }) },
+      '-',
+      { icon: 'trash-2', label: 'Apagar', kbd: 'Del', danger: true, run: () => { D({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); if (B().selectedTrigger === tr.id) B().selectedTrigger = null; } },
+    ].filter(Boolean);
+  }
   function triggerItems(sc, tr) {
+    if (tr.portal) return portalItems(sc, tr);
     const TG = App.Triggers, on = tr.enabled !== false;
     return [
       { icon: 'settings-2', label: 'Configurar…', run: () => { B().selectObj('trigger', tr); UI().openTrigger(sc.id, tr.id); } },
@@ -216,7 +229,8 @@
     return [
       { icon: 'user-round', label: 'Colocar ficha aqui…', run: () => placeHere(sc, p) },
       { icon: 'lightbulb', label: 'Luz aqui', run: () => { const o = Bd.addLight(sc, { x: p.x, y: p.y }); if (o) panel('light', o); } },
-      { icon: 'zap', label: 'Gatilho aqui', run: () => Bd.addTrigger(sc, { shape: 'circle', x: p.x, y: p.y, r: 0.5 }) },
+      { icon: 'zap', label: 'Gatilho aqui', run: () => Bd.addTrigger(sc, { shape: 'circle', x: p.x, y: p.y, r: 0.5, portal: false }) },
+      { icon: 'sparkles', label: 'Portal aqui', title: 'Quem pisa aqui vai para outro ponto ou outra cena', run: () => { const tr = Bd.addTrigger(sc, { shape: 'circle', x: Math.floor(p.x / sc.grid) * sc.grid + sc.grid / 2, y: Math.floor(p.y / sc.grid) * sc.grid + sc.grid / 2, r: 0.5, portal: true }); if (tr) panel('trigger', tr); } },
       { icon: 'file-text', label: 'Nota aqui', run: () => Bd.addNote(sc, p) },
       Bd.clipboard ? { icon: 'copy', label: 'Colar aqui', kbd: 'Ctrl+V', run: () => Bd.paste(sc, p) } : null,
       '-',
@@ -276,7 +290,7 @@
     const top = hits[0], others = hits.slice(1);
     const items = (ITEMS[top.kind] || (() => []))(sc, top.obj).slice();
     if (others.length) items.push('-', { icon: 'layers', label: 'Outros aqui', sub: others.map((o) => ({ label: NAME[o.kind] + ': ' + nameOf(o), run: () => App.UI.contextMenu(x, y, sc, p, [o]) })) });
-    render(x, y, NAME[top.kind] + ' · ' + nameOf(top), items);
+    render(x, y, (top.kind === 'trigger' && top.obj && top.obj.portal ? 'Portal' : NAME[top.kind]) + ' · ' + nameOf(top), items);
   };
   App.UI.closeContextMenu = close;
 })(window.App);
