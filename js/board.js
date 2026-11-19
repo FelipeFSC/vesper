@@ -19,7 +19,7 @@
     selectedProp: null, propDrag: null,
     selectedSound: null, soundDrag: null,
     // Salas de som: modo de desenho, rascunho (retângulo ou polígono) e a sala selecionada
-    roomMode: 'rect', roomDraft: null, roomPoly: null, selectedRoom: null,
+    roomDraft: null, roomPoly: null, selectedRoom: null, roomDrag: null,
     wallDraft: null,
     // Parede: 'line' (reta, de canto a canto) ou 'pencil' (traço livre, vira vários trechos)
     wallMode: 'line', wallPencil: null,
@@ -196,14 +196,19 @@
   // ---------- movimento por um caminho ----------
   // Cada movimento novo (t.lastMove) ganha um início local; o token vai direto ao destino e o rastro fica trailSecs segundos
   B.moves = new Map();
+  B.moveSeen = new Map(); // último movimento que esta tela já viu de cada token
   function moveInfo(t) {
     const lm = t.lastMove;
-    if (!lm || !lm.pts || lm.pts.length < 2) return null;
-    const key = lm.at + ':' + lm.pts.length + ':' + lm.pts[lm.pts.length - 1].join(',');
+    const ok = lm && lm.pts && lm.pts.length >= 2;
+    const key = ok ? lm.at + ':' + lm.pts.length + ':' + lm.pts[lm.pts.length - 1].join(',') : '';
+    const prev = B.moveSeen.get(t.id);
+    B.moveSeen.set(t.id, key);
+    if (!ok) return null;
     let m = B.moves.get(t.id);
     if (!m || m.key !== key) {
-      // movimento antigo (ex.: campanha recém-carregada) não mostra o rastro de novo
-      const fresh = Math.abs(Date.now() - lm.at) < 10000;
+      // Novo = chegou com a mesa aberta (sem comparar relógios, Plano 30). Token que esta tela ainda não tinha visto
+      // (campanha recém-aberta, outra cena): só se o movimento é recente pelo relógio do mestre.
+      const fresh = (prev !== undefined && prev !== key) || Math.abs(App.Anim.now() - lm.at) < 10000;
       let len = 0;
       for (let i = 1; i < lm.pts.length; i++) len += Math.hypot(lm.pts[i][0] - lm.pts[i - 1][0], lm.pts[i][1] - lm.pts[i - 1][1]);
       m = { key, t0: fresh ? performance.now() : -1e9, len };
@@ -374,7 +379,7 @@
     if (sc.id !== B.lastSceneId) {
       // Jogador levado para outra cena: avisa onde ele está agora
       if (B.lastSceneId && !S().gmView()) U.toast('Você está em "' + sc.name + '"', 'info', 4000);
-      B.lastSceneId = sc.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; B.selectedDoor = null; B.selectedTrigger = null; B.trigDrag = null; B.trigPoly = null; B.cancelPick(); B.flashes = []; B.multi.clear(); B.lasso = null; B.multiDrag = null; B.selectedNote = null; B.noteDrag = null; B.hoverNote = null; fitCam(sc); }
+      B.lastSceneId = sc.id; B.remote.clear(); B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.roomPoly = null; B.selectedProp = null; B.propDrag = null; B.selectedLight = null; B.lightDrag = null; B.lightPoly = null; B.selectedDoor = null; B.selectedTrigger = null; B.trigDrag = null; B.trigPoly = null; B.cancelPick(); B.flashes = []; B.multi.clear(); B.lasso = null; B.multiDrag = null; B.selectedNote = null; B.noteDrag = null; B.hoverNote = null; fitCam(sc); }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
@@ -486,6 +491,7 @@
       }
     }
     if (B.ruler) drawPath(ctx, sc, [B.ruler.a].concat(B.ruler.points || [], [B.ruler.b]));
+    drawRemote(ctx, sc, tokens);
     if (B.fogDraft) {
       const r = norm(B.fogDraft);
       ctx.save();
@@ -818,34 +824,43 @@
     B.selectedProp = c.id;
   };
 
-  // ---------- salas de som ----------
-  const ROOM_C = '#5fd0c8';
+  // ---------- isolamento de som (Plano 29) ----------
+  // Uma borda que nenhum som atravessa ("parede de algodão"): só o mestre vê; não tapa visão nem impede de andar.
+  const ROOM_C = '#c084fc';
   function roomPath(ctx, pts) { ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); }
+  // Formato com o arraste em andamento (canto ou o isolamento inteiro)
+  const roomNow = (r) => (B.roomDrag && B.roomDrag.id === r.id ? Object.assign({}, r, { pts: B.roomDrag.cur }) : r);
+  B.roomNow = roomNow;
   function drawRooms(ctx, sc) {
-    const z = B.cam.z, mine = App.Audio && App.Audio.myRoom ? App.Audio.myRoom() : null;
-    for (const r of sc.rooms || []) {
-      if (!r.pts || r.pts.length < 3) continue;
-      const sel = B.selectedRoom === r.id;
+    const z = B.cam.z;
+    for (const r0 of sc.rooms || []) {
+      if (!r0.pts || r0.pts.length < 3) continue;
+      const r = roomNow(r0), sel = B.selectedRoom === r.id;
       ctx.save();
       roomPath(ctx, r.pts);
-      ctx.fillStyle = sel ? 'rgba(95,208,200,.16)' : 'rgba(95,208,200,.07)'; ctx.fill();
-      ctx.setLineDash([10 / z, 5 / z]); ctx.lineWidth = (sel ? 3 : 2) / z; ctx.strokeStyle = sel ? '#fff' : ROOM_C; ctx.stroke();
+      ctx.setLineDash([10 / z, 6 / z]); ctx.lineWidth = (sel ? 3 : 2) / z; ctx.strokeStyle = sel ? '#fff' : ROOM_C; ctx.stroke();
       ctx.setLineDash([]);
-      // etiqueta no canto de cima: nome e música
-      const top = r.pts.reduce((a, p) => (p[1] < a[1] || (p[1] === a[1] && p[0] < a[0]) ? p : a), r.pts[0]);
-      const lbl = (r.name || 'Sala') + (r.music ? '  ♪ ' + App.Audio.label(r.music.name) : '  · sem música') + (mine && mine.id === r.id ? '  (ouvindo)' : '');
-      ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      const tw = ctx.measureText(lbl).width, lx = top[0] + 6 / z, ly = top[1] + 12 / z;
-      roundRect(ctx, lx - 5 / z, ly - 8 / z, tw + 10 / z, 16 / z, 4 / z);
-      ctx.fillStyle = 'rgba(12,22,24,.88)'; ctx.fill();
-      ctx.lineWidth = 1 / z; ctx.strokeStyle = sel ? '#fff' : ROOM_C; ctx.stroke();
-      ctx.fillStyle = r.music ? ROOM_C : '#9aa'; ctx.fillText(lbl, lx, ly + 0.5 / z);
+      // cantos: bolinhas sempre; maiores no selecionado (arraste para ajustar)
+      for (const [x, y] of r.pts) {
+        ctx.beginPath(); ctx.arc(x, y, (sel ? 6 : 3) / z, 0, Math.PI * 2);
+        ctx.fillStyle = sel ? '#fff' : ROOM_C; ctx.fill();
+        if (sel) { ctx.lineWidth = 2 / z; ctx.strokeStyle = ROOM_C; ctx.stroke(); }
+      }
+      if (sel) {
+        const top = r.pts.reduce((a, p) => (p[1] < a[1] || (p[1] === a[1] && p[0] < a[0]) ? p : a), r.pts[0]);
+        const lbl = r.name || 'Isolamento';
+        ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(lbl).width, lx = top[0] + 10 / z, ly = top[1] - 14 / z;
+        roundRect(ctx, lx - 5 / z, ly - 8 / z, tw + 10 / z, 16 / z, 4 / z);
+        ctx.fillStyle = 'rgba(20,14,28,.9)'; ctx.fill();
+        ctx.fillStyle = '#e9d5ff'; ctx.fillText(lbl, lx, ly + 0.5 / z);
+      }
       ctx.restore();
     }
     // rascunhos
     ctx.save();
-    ctx.setLineDash([10 / z, 5 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = ROOM_C; ctx.fillStyle = 'rgba(95,208,200,.12)';
-    if (B.roomDraft) { const d = norm(B.roomDraft); ctx.fillRect(d.x, d.y, d.w, d.h); ctx.strokeRect(d.x, d.y, d.w, d.h); }
+    ctx.setLineDash([10 / z, 6 / z]); ctx.lineWidth = 2 / z; ctx.strokeStyle = ROOM_C;
+    if (B.roomDraft && B.roomDraft.moved) { const d = norm(B.roomDraft); ctx.strokeRect(d.x, d.y, d.w, d.h); }
     if (B.roomPoly && B.roomPoly.pts.length) {
       const pts = B.roomPoly.pts.concat(B.roomPoly.hover ? [B.roomPoly.hover] : []);
       ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
@@ -854,21 +869,54 @@
     }
     ctx.restore();
   }
+  // Encaixe: ponta de parede perto (até 12 px na tela), senão canto da grade. Alt solta.
+  function snapIso(sc, p, e) {
+    if (e && e.altKey) return { x: Math.round(p.x), y: Math.round(p.y) };
+    const tol = 12 / B.cam.z;
+    let best = null, bd = tol;
+    for (const w of sc.walls || []) for (const [x, y] of [[w.x1, w.y1], [w.x2, w.y2]]) { const d = Math.hypot(p.x - x, p.y - y); if (d <= bd) { bd = d; best = { x, y }; } }
+    if (best) return best;
+    return B.style.snap ? snapVertex(sc, p) : { x: Math.round(p.x), y: Math.round(p.y) };
+  }
+  B.snapIso = snapIso;
+  // Canto do isolamento perto do ponto (índice) e trecho da borda perto do ponto (índice do canto de saída)
+  function roomCornerAt(r, p) { const tol = 9 / B.cam.z; return r.pts.findIndex(([x, y]) => Math.hypot(p.x - x, p.y - y) <= tol); }
+  function roomEdgeAt(r, p) {
+    const tol = 8 / B.cam.z;
+    for (let i = 0; i < r.pts.length; i++) {
+      const [x1, y1] = r.pts[i], [x2, y2] = r.pts[(i + 1) % r.pts.length];
+      if (distSeg(p.x, p.y, x1, y1, x2, y2) <= tol) return i;
+    }
+    return -1;
+  }
   function finishRoomPoly(sc) {
     const pts = [];
     for (const p of (B.roomPoly && B.roomPoly.pts) || []) { const l = pts[pts.length - 1]; if (!l || l[0] !== p[0] || l[1] !== p[1]) pts.push(p); }
     B.roomPoly = null;
-    if (pts.length < 3) { U.toast('Uma sala precisa de pelo menos 3 cantos.'); return; }
+    if (pts.length < 3) { U.toast('O isolamento precisa de pelo menos 3 cantos.'); return; }
     addRoom(sc, pts);
   }
   function addRoom(sc, pts) {
     const n = (sc.rooms || []).length + 1;
-    const room = { id: U.uid('room_'), name: 'Sala ' + n, pts: pts.map(([x, y]) => [Math.round(x), Math.round(y)]), music: null, at: Date.now(), vol: 1, ambient: 'stop' };
+    const room = { id: U.uid('room_'), name: 'Isolamento ' + n, pts: pts.map(([x, y]) => [Math.round(x), Math.round(y)]), outside: 'stop', ambient: 'stop' };
     S().dispatch({ type: 'room.add', sceneId: sc.id, room });
     B.selectedRoom = room.id; B.selected = null; B.selectedSound = null;
-    U.toast('Sala criada. Solte uma música dentro dela ou escolha no painel.');
+    U.toast('Isolamento criado: nenhum som do mapa atravessa a borda.');
   }
   B.addRoom = addRoom;
+  // Arraste de um canto (encaixa) ou do isolamento inteiro (meio quadrado)
+  function dragRoom(sc, d, p, e) {
+    if (d.mode === 'vertex') {
+      const q = snapIso(sc, p, e);
+      d.cur = d.start.map((pt, i) => (i === d.i ? [q.x, q.y] : pt));
+      d.moved = d.moved || Math.hypot(q.x - d.start[d.i][0], q.y - d.start[d.i][1]) > 1;
+      return;
+    }
+    let dx = p.x - d.p0.x, dy = p.y - d.p0.y;
+    if (B.style.snap && !e.altKey) { const half = sc.grid / 2; dx = Math.round(dx / half) * half; dy = Math.round(dy / half) * half; }
+    d.cur = d.start.map(([x, y]) => [x + dx, y + dy]);
+    d.moved = d.moved || Math.abs(dx) + Math.abs(dy) > 0;
+  }
 
   function drawSounds(ctx, sc) {
     const z = B.cam.z;
@@ -1124,6 +1172,43 @@
     return null;
   }
   B.anyObjectAt = anyObjectAt;
+  // ---------- Botão direito (Plano 28) ----------
+  // Tudo que está no ponto, do de cima para o de baixo: [{kind, obj}]
+  B.hitAll = function (sc, p) {
+    const out = [], gm = S().gmView();
+    const n = noteAt(sc, p); if (n) out.push({ kind: 'note', obj: n });
+    const l = lightAt(sc, p); if (l) out.push({ kind: 'light', obj: l.o });
+    const s = soundAt(sc, p); if (s) out.push({ kind: 'sound', obj: s });
+    const w = wallAt(sc, p);
+    if (w && w.door && (gm || B.layers.walls !== false)) out.push({ kind: 'door', obj: w });
+    const list = visibleTokens(sc);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i], sz = (t.size || 1) * sc.grid;
+      if (B.silhouettes.has(t.id)) continue;
+      if (p.x >= t.x && p.x <= t.x + sz && p.y >= t.y && p.y <= t.y + sz) out.push({ kind: 'token', obj: t });
+    }
+    const pr = propAt(sc, p);
+    if (pr) { const ti = out.findIndex((x) => x.kind === 'token'); if (ti >= 0 && (pr.z || 0) > (out[ti].obj.z || 0)) out.splice(ti, 0, { kind: 'prop', obj: pr }); else out.push({ kind: 'prop', obj: pr }); }
+    if (gm && B.layers.triggers) for (const tr of (sc.triggers || []).slice().reverse()) {
+      const c = TG().center(tr);
+      if (Math.hypot(p.x - c.x, p.y - c.y) <= 15 / B.cam.z || TG().inside(sc, tr, p)) out.push({ kind: 'trigger', obj: tr });
+    }
+    if (gm && w && !w.door) out.push({ kind: 'wall', obj: w });
+    if (gm && B.layers.rooms) { const r = App.Audio && App.Audio.roomAt(sc, p); if (r) out.push({ kind: 'room', obj: r }); }
+    return out;
+  };
+  // Seleciona só este objeto (o painel mostra ele)
+  B.selectObj = function (kind, obj) {
+    clearSingles();
+    if (B.multi) B.multi.clear();
+    const f = { token: 'selected', prop: 'selectedProp', light: 'selectedLight', trigger: 'selectedTrigger', sound: 'selectedSound', note: 'selectedNote', door: 'selectedDoor', room: 'selectedRoom' }[kind];
+    if (f && obj) B[f] = obj.id;
+    B.requestRender();
+    if (App.UI) App.UI.refresh();
+  };
+  // Usa os atalhos de teclado que já existem (Delete, Ctrl+D…) sobre a seleção atual
+  B.keyAct = (key, ctrl) => onKey({ key, code: '', ctrlKey: !!ctrl, metaKey: false, shiftKey: false, altKey: false, target: document.body, preventDefault() {} });
+
   function pickAt(sc, p) {
     const P = B.picking;
     let res = null;
@@ -2300,7 +2385,7 @@
   // ---------- efeitos do resultado: números subindo, golpe, explosão ----------
   function animActive() {
     const sc = S().currentScene();
-    return B.pings.length || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
+    return B.pings.length || B.remote.size || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
   }
   function ensureAnim() {
     if (B.animating) return;
@@ -2309,6 +2394,7 @@
       const now = performance.now();
       B.pings = B.pings.filter((q) => now - q.t < 1800);
       B.fx = B.fx.filter((f) => now - f.t < f.dur);
+      pruneRemote();
       B.render();
       if (animActive()) requestAnimationFrame(step); else { B.animating = false; B.render(); }
     };
@@ -2430,6 +2516,112 @@
     }
   }
 
+  // ---------- régua e arraste para todos (Plano 30) ----------
+  // B.remote: réguas e arrastes de quem está na mesa (inclusive a minha régua, que fica uns segundos depois de soltar).
+  // Em tempo real vão ~10 vezes por segundo enquanto a pessoa mede ou arrasta; no modo desempenho, só ao soltar.
+  B.remote = new Map();
+  B.rulerShare = true; // régua do mestre: mostrar aos jogadores
+  const LIVE_MS = 100, BEAT_MS = 1500, STALE_MS = 5000;
+  const liveOn = () => !!(S().state && (S().state.rules || {}).liveRuler);
+  const trailMsNow = () => Number((S().state.rules || {}).trailSecs ?? 3) * 1000;
+  let shareLast = 0, shareTimer = null, shareBeat = null, liveSent = { ruler: false, drag: false };
+  function rulerPts() { return B.ruler ? [B.ruler.a].concat(B.ruler.points || [], [B.ruler.b]) : null; }
+  function dragPts(sc) {
+    const d = B.drag, t = d && sc.tokens[d.id];
+    if (!t || !d.moved) return null;
+    const g = sc.grid, s = (t.size || 1) * g;
+    const end = B.style.snap ? { x: Math.round(d.x / g) * g + s / 2, y: Math.round(d.y / g) * g + s / 2 } : { x: d.x + s / 2, y: d.y + s / 2 };
+    return [{ x: d.sx + s / 2, y: d.sy + s / 2 }].concat(d.points || [], [end]);
+  }
+  // O mestre não mostra token escondido; a régua dele só vai se "Mostrar aos jogadores" estiver ligado
+  function mayShare(sc, kind) {
+    if (S().role === 'player') return true;
+    if (kind === 'ruler') return B.rulerShare !== false;
+    const t = B.drag && sc.tokens[B.drag.id];
+    return !!(t && !t.hidden);
+  }
+  function shareMsg(sc, kind, pts, extra) {
+    return Object.assign({ t: 'ruler', kind, sceneId: sc.id, from: S().me.id, name: S().me.name, color: S().me.color,
+      tokenId: kind === 'drag' && B.drag ? B.drag.id : null, pts: (pts || []).slice(0, 66).map((p) => [Math.round(p.x), Math.round(p.y)]) }, extra || {});
+  }
+  function sendShare(msg) { if (App.Net && App.Net.isOnline()) App.Net.shareRuler(msg); }
+  // Enquanto mede ou arrasta (tempo real): manda o ponto atual, no máximo a cada 100 ms, e um sinal de vida parado
+  function shareLive() {
+    if (!liveOn()) return;
+    const now = performance.now();
+    if (now - shareLast < LIVE_MS) { if (!shareTimer) shareTimer = setTimeout(() => { shareTimer = null; shareLive(); }, LIVE_MS - (now - shareLast)); return; }
+    const sc = S().currentScene();
+    if (!sc) return;
+    shareLast = now;
+    let any = false;
+    for (const [kind, pts] of [['ruler', rulerPts()], ['drag', B.drag ? dragPts(sc) : null]]) {
+      if (!pts || !mayShare(sc, kind)) continue;
+      sendShare(shareMsg(sc, kind, pts)); liveSent[kind] = true; any = true;
+    }
+    if (any && !shareBeat) shareBeat = setInterval(() => { if (B.ruler || (B.drag && B.drag.moved)) { shareLast = 0; shareLive(); } else { clearInterval(shareBeat); shareBeat = null; } }, BEAT_MS);
+  }
+  // Soltou: a régua fica trailSecs segundos para todos (e para mim); o arraste vira o rastro do movimento
+  function shareEnd(sc, kind, pts) {
+    if (shareTimer) { clearTimeout(shareTimer); shareTimer = null; }
+    if (kind === 'ruler' && pts && pts.length >= 2 && Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y) > 2) {
+      if (trailMsNow() > 0) {
+        B.remote.set('me:ruler', { kind, sceneId: sc.id, pts: pts.map((p) => ({ x: p.x, y: p.y })), name: '', color: '', done: true, t: performance.now() });
+        ensureAnim();
+      }
+      if (mayShare(sc, kind)) { sendShare(shareMsg(sc, kind, pts, { done: true })); liveSent.ruler = false; return; }
+    }
+    if (liveSent[kind]) sendShare(shareMsg(sc, kind, null, { clear: true }));
+    liveSent[kind] = false;
+  }
+  // Chegou a régua ou o arraste de alguém
+  B.onRuler = function (m) {
+    if (!m || (m.kind !== 'ruler' && m.kind !== 'drag')) return;
+    const key = String(m.from || '').slice(0, 40) + ':' + m.kind;
+    const sc = S().currentScene();
+    if (m.clear || !sc || m.sceneId !== sc.id) { if (B.remote.delete(key)) B.requestRender(); return; }
+    const pts = (Array.isArray(m.pts) ? m.pts : []).slice(0, 66).map((p) => ({ x: Number(p && p[0]) || 0, y: Number(p && p[1]) || 0 }));
+    if (pts.length < 2) return;
+    if (m.done && trailMsNow() <= 0) { B.remote.delete(key); B.requestRender(); return; }
+    B.remote.set(key, { kind: m.kind, sceneId: m.sceneId, tokenId: m.tokenId ? String(m.tokenId) : null, pts,
+      color: U.safeColor(m.color, C.gold), name: String(m.name || '').slice(0, 30), done: !!m.done, t: performance.now() });
+    ensureAnim();
+    B.requestRender();
+  };
+  function remoteAlpha(r, now) {
+    const age = now - r.t;
+    if (r.done) { const ms = trailMsNow(); return age > ms ? 0 : Math.min(1, (ms - age) / 600); }
+    return age > STALE_MS ? 0 : 1;
+  }
+  function pruneRemote() {
+    const now = performance.now();
+    for (const [k, r] of B.remote) if (remoteAlpha(r, now) <= 0) B.remote.delete(k);
+  }
+  function drawRemote(ctx, sc, tokens) {
+    pruneRemote();
+    if (!B.remote.size) return;
+    const now = performance.now(), z = B.cam.z, seen = new Set(tokens.map((t) => t.id));
+    for (const r of B.remote.values()) {
+      if (r.sceneId !== sc.id) continue;
+      // arraste de token que esta tela não enxerga (escondido, no escuro, atrás de parede): não mostra
+      if (r.kind === 'drag' && !(r.tokenId && seen.has(r.tokenId))) continue;
+      const alpha = remoteAlpha(r, now);
+      if (alpha <= 0) continue;
+      drawPath(ctx, sc, r.pts, { alpha, trail: r.done });
+      if (!r.name) continue;
+      const a = r.pts[0];
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = '600 ' + 11 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      const tw = ctx.measureText(r.name).width;
+      roundRect(ctx, a.x - tw / 2 - 6 / z, a.y - 28 / z, tw + 12 / z, 18 / z, 5 / z);
+      ctx.fillStyle = C.plate; ctx.fill();
+      ctx.lineWidth = 1.5 / z; ctx.strokeStyle = r.color; ctx.stroke();
+      ctx.fillStyle = r.color; ctx.fillText(r.name, a.x, a.y - 12 / z);
+      ctx.restore();
+    }
+  }
+  B.shareTest = { rulerPts, dragPts, shareLive, shareEnd }; // para os testes
+
   // ---------- interação ----------
   function startPan(e) { B.pan = { sx: e.clientX, sy: e.clientY, cx: B.cam.x, cy: B.cam.y }; B.canvas.style.cursor = 'grabbing'; }
 
@@ -2438,6 +2630,8 @@
     const sc = S().currentScene();
     if (!sc) return;
     const p = toWorld(e), gm = S().gmView();
+    // Direito: arrastar move a câmera; clicar sem arrastar abre o menu (Plano 28, em onUp)
+    if (e.button === 2) B.rdown = { cx: e.clientX, cy: e.clientY, p, cam: { x: B.cam.x, y: B.cam.y } };
     if (e.button === 1 || e.button === 2 || B.spaceDown || B.tool === 'pan') { startPan(e); return; }
     if (e.button !== 0) return;
     const st = B.style;
@@ -2507,16 +2701,26 @@
       }
       case 'room': {
         if (!gm) break;
-        const q = st.snap && !e.altKey ? snapVertex(sc, p) : { x: Math.round(p.x), y: Math.round(p.y) };
-        if (B.roomMode === 'poly') {
-          const P = B.roomPoly;
-          if (!P) { B.roomPoly = { pts: [[q.x, q.y]], hover: null }; B.selectedRoom = null; break; }
+        const q = snapIso(sc, p, e);
+        const P = B.roomPoly;
+        if (P) {
+          // desenhando ponto a ponto: cada clique é um canto; fecha no primeiro
           const [fx, fy] = P.pts[0];
           if (P.pts.length >= 3 && Math.hypot(q.x - fx, q.y - fy) <= 10 / B.cam.z) { finishRoomPoly(sc); break; }
           P.pts.push([q.x, q.y]);
           break;
         }
-        B.roomDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, p0: { x: p.x, y: p.y } };
+        const sel = B.selectedRoom && (sc.rooms || []).find((r) => r.id === B.selectedRoom);
+        if (sel && !e.shiftKey) {
+          const vi = roomCornerAt(sel, p);
+          if (vi >= 0) { B.roomDrag = { id: sel.id, sceneId: sc.id, mode: 'vertex', i: vi, start: sel.pts.map((x) => x.slice()), cur: sel.pts, p0: { x: p.x, y: p.y }, moved: false }; break; }
+          if (App.Audio.inPoly(p, sel.pts) || roomEdgeAt(sel, p) >= 0) { B.roomDrag = { id: sel.id, sceneId: sc.id, mode: 'move', start: sel.pts.map((x) => x.slice()), cur: sel.pts, p0: { x: p.x, y: p.y }, moved: false }; break; }
+        }
+        const other = !e.shiftKey && App.Audio.roomAt(sc, p);
+        if (other) { B.selectObj('room', other); B.roomDrag = { id: other.id, sceneId: sc.id, mode: 'move', start: other.pts.map((x) => x.slice()), cur: other.pts, p0: { x: p.x, y: p.y }, moved: false }; break; }
+        // vazio: arrastar = retângulo; só clicar = começa o desenho ponto a ponto
+        B.selectedRoom = null;
+        B.roomDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, q0: q, p0: { x: p.x, y: p.y }, moved: false };
         break;
       }
       case 'light': {
@@ -2604,6 +2808,7 @@
           break;
         }
         B.selectedSound = null;
+        B.selectedRoom = null; // isolamento só se seleciona pela lista, pelo botão direito ou pela ferramenta
         const pick = (q, mode, extra) => {
           B.selectedProp = q.id; B.selected = null; B.selectedRoom = null;
           if (q.locked || !mode) return;
@@ -2692,7 +2897,7 @@
       if (sc0) { const w = toWorld(e), q = B.style.snap && !e.altKey ? snapVertex(sc0, w) : w; P.hover = [q.x, q.y]; B.requestRender(); }
     }
     if (B.hurtDraft) { B.hurtDraft.b = toWorld(e); B.requestRender(); return; }
-    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.propDrag && !B.lightDrag && !B.lightDraft && !B.wallPencil && !B.trigDrag && !B.trigDraft && !B.lasso && !B.multiDrag && !B.noteDrag) return;
+    if (!B.drag && !B.ruler && !B.draft && !B.fogDraft && !B.erasing && !B.wallDraft && !B.soundDrag && !B.roomDraft && !B.roomDrag && !B.propDrag && !B.lightDrag && !B.lightDraft && !B.wallPencil && !B.trigDrag && !B.trigDraft && !B.lasso && !B.multiDrag && !B.noteDrag) return;
     const sc = S().currentScene();
     if (!sc) return;
     const p = toWorld(e), snap = B.style.snap;
@@ -2701,6 +2906,7 @@
       if (Math.abs(B.drag.x - B.drag.sx) + Math.abs(B.drag.y - B.drag.sy) > 3) B.drag.moved = true;
     }
     if (B.ruler) B.ruler.b = snap ? snapPt(sc, p) : p;
+    if (B.ruler || (B.drag && B.drag.moved)) shareLive();
     if (B.draft) {
       if (B.draft.type === 'path') {
         const pts = B.draft.points, lx = pts[pts.length - 2], ly = pts[pts.length - 1];
@@ -2716,7 +2922,8 @@
       const pts = B.wallPencil.pts, [lx, ly] = pts[pts.length - 1];
       if (Math.hypot(p.x - lx, p.y - ly) > 3 / B.cam.z) pts.push([p.x, p.y]);
     }
-    if (B.roomDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.roomDraft.x2 = q.x; B.roomDraft.y2 = q.y; }
+    if (B.roomDraft) { const q = snapIso(sc, p, e); B.roomDraft.x2 = q.x; B.roomDraft.y2 = q.y; if (Math.hypot(p.x - B.roomDraft.p0.x, p.y - B.roomDraft.p0.y) > 6 / B.cam.z) B.roomDraft.moved = true; }
+    if (B.roomDrag) dragRoom(sc, B.roomDrag, p, e);
     if (B.propDrag) dragProp(B.propDrag, p, e);
     if (B.lightDrag) dragLight(sc, B.lightDrag, p, e);
     if (B.trigDrag) dragTrigger(sc, B.trigDrag, p, e);
@@ -2750,6 +2957,16 @@
   function onUp(e) {
     const sc = S().currentScene();
     if (B.pan) { B.pan = null; B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair'; }
+    if (e.button === 2 && B.rdown) {
+      const r = B.rdown;
+      B.rdown = null;
+      if (sc && Math.hypot(e.clientX - r.cx, e.clientY - r.cy) < 5 && !B.drag && !B.ruler && !B.picking && App.UI && App.UI.contextMenu) {
+        B.cam.x = r.cam.x; B.cam.y = r.cam.y;
+        App.UI.contextMenu(e.clientX, e.clientY, sc, r.p, B.hitAll(sc, r.p));
+        B.requestRender();
+      }
+      return;
+    }
     if (B.hurtDraft) {
       const d = B.hurtDraft, he = B.hurtEdit;
       B.hurtDraft = null; B.hurtEdit = null;
@@ -2767,6 +2984,7 @@
     if (B.drag) {
       const d = B.drag;
       B.drag = null;
+      if (sc) shareEnd(sc, 'drag', null);
       if (d.moved && sc) {
         let x = d.x, y = d.y;
         if (B.style.snap && !e.altKey) { x = Math.round(x / sc.grid) * sc.grid; y = Math.round(y / sc.grid) * sc.grid; }
@@ -2839,6 +3057,7 @@
       if (d.moved) B.addLight(sc, draftLight(sc, d));
       else B.addLight(sc, d.shape === 'cone' ? { kind: B.lightKind, shape: 'cone', x: d.x, y: d.y, bright: 6, dim: 10, dir: 0, angle: 60 } : { kind: B.lightKind, shape: 'circle', x: d.x, y: d.y });
     }
+    if (B.ruler && sc) shareEnd(sc, 'ruler', rulerPts());
     B.ruler = null;
     if (B.draft && sc) {
       const d = B.draft;
@@ -2889,13 +3108,13 @@
     if (B.roomDraft && sc) {
       const d = B.roomDraft, r = norm(d);
       B.roomDraft = null;
-      if (r.w >= sc.grid / 2 && r.h >= sc.grid / 2) addRoom(sc, [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]);
-      else {
-        // Clique sem arrastar: seleciona a sala que está ali
-        const room = App.Audio.roomAt(sc, d.p0);
-        B.selectedRoom = room ? room.id : null;
-        if (room) { B.selected = null; B.selectedSound = null; }
-      }
+      if (d.moved && r.w >= sc.grid / 2 && r.h >= sc.grid / 2) addRoom(sc, [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]);
+      else if (!d.moved) B.roomPoly = { pts: [[d.q0.x, d.q0.y]], hover: null }; // primeiro canto do desenho ponto a ponto
+    }
+    if (B.roomDrag) {
+      const d = B.roomDrag;
+      B.roomDrag = null;
+      if (d.moved && sc) S().dispatch({ type: 'room.update', sceneId: d.sceneId, id: d.id, patch: { pts: d.cur.map(([x, y]) => [Math.round(x), Math.round(y)]) } });
     }
     B.erasing = false;
     B.requestRender();
@@ -2936,6 +3155,7 @@
       const pts = (B.ruler.points = B.ruler.points || []);
       pts.push({ x: B.ruler.b.x, y: B.ruler.b.y });
     }
+    shareLive();
     B.requestRender();
   }
 
@@ -2955,6 +3175,24 @@
     const sc = S().currentScene();
     if (!sc) return;
     if (B.tool === 'room' && B.roomPoly) { finishRoomPoly(sc); B.requestRender(); return; }
+    if (B.tool === 'room' && B.selectedRoom && S().gmView()) {
+      const r = (sc.rooms || []).find((x) => x.id === B.selectedRoom), p = toWorld(e);
+      if (r) {
+        const vi = roomCornerAt(r, p);
+        if (vi >= 0) {
+          if (r.pts.length <= 3) { U.toast('O isolamento precisa de pelo menos 3 cantos.'); return; }
+          S().dispatch({ type: 'room.update', sceneId: sc.id, id: r.id, patch: { pts: r.pts.filter((_, i) => i !== vi) } });
+          return;
+        }
+        const ei = roomEdgeAt(r, p);
+        if (ei >= 0) {
+          const q = snapIso(sc, p, e), pts = r.pts.map((x) => x.slice());
+          pts.splice(ei + 1, 0, [q.x, q.y]);
+          S().dispatch({ type: 'room.update', sceneId: sc.id, id: r.id, patch: { pts } });
+          return;
+        }
+      }
+    }
     if (B.tool === 'light' && B.lightPoly) { finishLightPoly(sc); B.requestRender(); return; }
     if (B.tool === 'trigger' && B.trigPoly) { finishTrigPoly(sc); B.requestRender(); return; }
     // Dois cliques no marcador de luz: acende ou apaga

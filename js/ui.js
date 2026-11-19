@@ -42,7 +42,7 @@
     { id: 'prop', icon: 'image', title: 'Imagem (I): coloque imagens soltas no mapa\nArraste arquivos do computador para o mapa ou use a biblioteca', gm: true, edit: true },
     { id: 'note', icon: 'file-text', title: 'Nota (N): alfinete com anotações só suas (os jogadores nunca veem)\nClique no mapa para criar; clique no alfinete para abrir', gm: true, edit: true },
     { id: 'trigger', icon: 'zap', title: 'Gatilho (T): o mapa reage quando alguém entra, sai ou clica numa imagem\nPortas, luzes, tokens, sons, armadilhas, névoa, teletransporte', gm: true, edit: true },
-    { id: 'room', icon: 'music', title: 'Sala de som (M): área à prova de som, com música própria\nArraste um retângulo (ou clique nos cantos no modo polígono)', gm: true, edit: true },
+    { id: 'room', icon: 'volume-x', title: 'Isolamento de som (M): borda que nenhum som do mapa atravessa\nClique em cada canto (ou arraste um retângulo). Não tapa a visão nem impede de andar', gm: true, edit: true },
   ];
   const DOCK = [
     { id: 'chat', icon: 'message-square', label: 'Chat' },
@@ -128,6 +128,15 @@
   try { Object.assign(UI.collapsed, JSON.parse(localStorage.getItem('vesper.paineis') || '{}')); } catch { /* sem armazenamento */ }
   // Painel do token flutua sobre o mapa no modo Apresentar e quando a barra da direita está recolhida
   function hudFloats() { return UI.mode === 'play' || !!UI.collapsed.right; }
+  // O que está selecionado agora (para saber se o painel flutuante foi pedido para isto)
+  UI.hudFor = null;
+  UI.selKey = function () {
+    const B = App.Board;
+    if (!B) return '';
+    if (B.multi && B.multi.size) return 'multi';
+    for (const k of ['selectedNote', 'selectedTrigger', 'selectedDoor', 'selectedLight', 'selectedSound', 'selectedProp', 'selectedRoom', 'selected']) if (B[k]) return k + ':' + B[k];
+    return '';
+  };
   function placeHud() {
     const hud = $('#token-hud');
     if (!hud) return;
@@ -361,15 +370,15 @@
   function renderToolOpts() {
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
-    if (!t || !(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'room' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'note') || UI.mode !== 'edit') { box.hidden = true; return; }
+    const gmRuler = t && t.id === 'ruler' && S().gmView();
+    if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; return; }
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
     fitToolOpts(box);
     const rsc = S().currentScene();
-    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.wallMode + B.roomMode + campaignImages().join(',') + JSON.stringify(((rsc && rsc.rooms) || []).map((r) => [r.id, r.name, r.music && r.music.name])) + B.selectedRoom
-      + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled) + B.doorLocked + B.trigShape + B.selectedTrigger
-      + JSON.stringify(((rsc && rsc.triggers) || []).map((x) => [x.id, x.name, App.Triggers.stateLabel(x)]))
+    const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.wallMode + campaignImages().join(',')
+      + B.rulerShare + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled) + B.doorLocked + B.trigShape
       + B.noteColor + JSON.stringify(((rsc && rsc.notes) || []).map((n) => [n.id, n.title, n.color])) + B.selectedNote;
     box.hidden = false;
     if (box._sig === sig) return;
@@ -414,24 +423,21 @@
         h('span', { class: 'eyebrow' }, 'Notas desta cena'), search, listBox);
       return;
     }
+    if (t.id === 'ruler') {
+      box.append(h('span', { class: 'eyebrow' }, 'Régua'),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: B.rulerShare !== false, onchange: (e) => { B.rulerShare = e.target.checked; redo(); } }), 'Mostrar aos jogadores'),
+        h('p', { class: 'hint', style: { margin: 0 } }, B.rulerShare !== false
+          ? 'Os jogadores veem a sua régua com o seu nome. Botão direito enquanto mede marca um ponto de passagem.'
+          : 'Só você vê a régua (para medir escondido).'));
+      return;
+    }
     if (t.id === 'trigger') {
-      const list = (rsc && rsc.triggers) || [], TG = App.Triggers;
       const hint = { rect: 'Clique num quadrado (placa de pressão) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
         poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
       box.append(h('span', { class: 'eyebrow' }, 'Área do gatilho'),
         h('div', { class: 'seg' }, [['rect', 'Retângulo'], ['circle', 'Círculo'], ['poly', 'Polígono']].map(([k, l]) =>
           h('button', { class: B.trigShape === k ? 'on' : '', onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }, l))),
-        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Clicar no marcador abre a configuração. Os jogadores nunca veem a área.'),
-        h('span', { class: 'eyebrow' }, 'Gatilhos da cena'),
-        list.length ? h('div', { class: 'trig-list' }, list.map((x) => {
-          const stl = TG.stateLabel(x), on = x.enabled !== false;
-          return h('div', { class: 'trig-row' + (B.selectedTrigger === x.id ? ' on' : '') },
-            h('span', { class: 'tr-dot ' + trigStateClass(stl), title: stl }),
-            h('button', { class: 'tr-name', title: 'Configurar', onclick: () => { UI.openTrigger(rsc.id, x.id); redo(); } }, x.name || 'Gatilho'),
-            iconBtn(on ? 'eye' : 'eye-off', on ? 'Ligado (clique para desligar)' : 'Desligado (clique para ligar)', () => S().dispatch({ type: 'trigger.update', sceneId: rsc.id, id: x.id, patch: { enabled: !on } })),
-            iconBtn('play', 'Testar (simula no mapa)', () => TG.simulate(rsc.id, x.id), { class: 'icon-btn tr-test' }));
-        })) : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhum ainda.'),
-        list.length ? h('button', { class: 'btn primary small block', title: 'Volta todos a Pronto (para testar de novo)', onclick: () => { S().dispatch({ type: 'trigger.rearmAll', sceneId: rsc.id }); U.toast('Todos os gatilhos rearmados.'); } }, ic('refresh-cw'), 'Rearmar todos') : '');
+        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Clicar no marcador abre a configuração. Os jogadores nunca veem a área.'));
       return;
     }
     if (t.id === 'door') {
@@ -459,21 +465,6 @@
           : 'Clique num marcador para editar (cor, alcance, tremular); as alças mudam o alcance e a direção. Dois cliques acendem ou apagam.'),
         rsc && !rsc.light.enabled ? h('div', { class: 'warn-box' }, h('span', {}, 'A iluminação está desligada nesta cena: as luzes não fazem efeito.'),
           btnI('lightbulb', 'Ligar iluminação', { class: 'btn small primary', onclick: () => S().dispatch({ type: 'scene.update', id: rsc.id, patch: { light: Object.assign({}, rsc.light, { enabled: true, global: false }) } }) })) : '');
-      return;
-    }
-    if (t.id === 'room') {
-      const rooms = (rsc && rsc.rooms) || [];
-      box.append(h('span', { class: 'eyebrow' }, 'Desenhar sala'),
-        h('div', { class: 'seg' },
-          h('button', { class: B.roomMode === 'rect' ? 'on' : '', onclick: () => { B.roomMode = 'rect'; B.roomPoly = null; redo(); } }, 'Retângulo'),
-          h('button', { class: B.roomMode === 'poly' ? 'on' : '', onclick: () => { B.roomMode = 'poly'; redo(); } }, 'Polígono')),
-        h('p', { class: 'hint', style: { margin: 0 } }, B.roomMode === 'rect'
-          ? 'Arraste de um canto a outro. Clique numa sala para editar.'
-          : 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter. Esc cancela.'),
-        h('span', { class: 'eyebrow' }, 'Salas desta cena'),
-        rooms.length ? h('div', { class: 'room-list' }, rooms.map((r) => h('button', { class: 'room-item' + (B.selectedRoom === r.id ? ' on' : ''), onclick: () => { B.selectedRoom = r.id; B.selected = null; B.selectedSound = null; App.Board.requestRender(); UI.refresh(); redo(); } },
-          h('b', {}, r.name || 'Sala'), h('small', {}, r.music ? App.Audio.label(r.music.name) : 'sem música'))))
-          : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhuma ainda.'));
       return;
     }
     if (t.id === 'wall') {
@@ -847,7 +838,7 @@
       row('map', 'image', 'Mapa base', sc.bg ? 1 : 0));
     if (gm) box.append(row('walls', 'brick-wall', 'Paredes e portas', (sc.walls || []).length));
     if (gm) box.append(row('sounds', 'volume-2', 'Sons no mapa', (sc.sounds || []).length));
-    if (gm) box.append(row('rooms', 'music', 'Salas de som', (sc.rooms || []).length));
+    if (gm) box.append(row('rooms', 'volume-x', 'Isolamentos de som', (sc.rooms || []).length));
     box.append(row('props', 'image', 'Imagens', (sc.props || []).filter((p) => gm || !p.hidden).length));
     if (gm) box.append(row('lights', 'lightbulb', 'Pontos de luz (marcadores)', (sc.lights || []).length));
     if (gm) box.append(row('triggers', 'zap', 'Gatilhos', (sc.triggers || []).length));
@@ -1356,7 +1347,7 @@
       const q = U.slug(UI.audioQ || ''), filt = UI.audioFilter || 'all';
       const list = all.filter((n) => filt === 'all' || Au.catOf(n) === filt);
       p.append(h('h4', {}, 'Biblioteca'),
-        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Arraste uma faixa para o mapa: música e ambiente ficam tocando daquele ponto (música solta dentro de uma sala de som vira a música da sala inteira); efeito fica parado esperando o seu play (no painel ou com dois cliques no marcador). Os jogadores ouvem conforme a distância.'),
+        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Arraste uma faixa para o mapa: música e ambiente ficam tocando daquele ponto (dentro de um isolamento de som, só quem está dentro ouve); efeito fica parado esperando o seu play (no painel ou com dois cliques no marcador). Os jogadores ouvem conforme a distância.'),
         h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar faixa…', value: UI.audioQ || '', oninput: (e) => {
           UI.audioQ = e.target.value;
           const qq = U.slug(UI.audioQ);
@@ -1977,6 +1968,12 @@
   UI.updateHud = function (sc, t) {
     const hud = $('#token-hud'), empty = $('#props-empty');
     if (!hud) return;
+    // Plano 28: flutuando sobre o mapa, o painel só abre pelo menu do botão direito (clique esquerdo só seleciona e move)
+    if (hudFloats() && UI.hudFor !== UI.selKey()) {
+      if (!hud.hidden) { hud.hidden = true; hud._sig = null; }
+      if (empty) empty.hidden = false;
+      return;
+    }
     const csc = S().currentScene(), B = App.Board;
     if (S().gmView() && B.multi && B.multi.size && csc) { multiHud(hud, empty, csc); return; }
     const note = S().gmView() && B.selectedNote && csc && (csc.notes || []).find((x) => x.id === B.selectedNote);
@@ -2352,7 +2349,13 @@
           btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'prop.delete', sceneId: sc.id, id: p.id }); App.Board.selectedProp = null; App.Board.requestRender(); } })));
     }
     hud.hidden = false;
-    hud.style.transform = '';
+    if (!hudFloats()) { hud.style.transform = ''; return; }
+    // Flutuando: ao lado da imagem (como a luz), sem cobrir a imagem nem as ferramentas
+    const a = App.Board.toScreen(p.x, p.y), b = App.Board.toScreen(p.x + p.w, p.y + p.h);
+    const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x), top = Math.min(a.y, b.y);
+    const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight, hw = hud.offsetWidth;
+    const x = U.clamp(right + 30 + hw > W - 14 ? left - hw - 30 : right + 30, 14, Math.max(14, W - hw - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(top, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
   }
 
   // Direção em 8 botões (0° = direita, 90° = baixo, como no mapa)
@@ -2896,44 +2899,44 @@
     hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
   }
 
-  // Sala de som: nome, música própria, volume e o que acontece com o ambiente de fora
+  // Isolamento de som: nome, música de fora, ambiente de fora, ajustar e apagar
   function roomHud(hud, empty, sc, room) {
     if (empty) empty.hidden = true;
-    const Au = App.Audio;
-    const sig = JSON.stringify(['room', room, UI.mode, Au.files.size]);
+    const sig = JSON.stringify(['room', room, UI.mode, App.Board.tool]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
       const upd = (patch) => S().dispatch({ type: 'room.update', sceneId: sc.id, id: room.id, patch });
-      const tracks = [...Au.files.keys()].sort((a, b) => (Au.catOf(a) === 'music' ? 0 : 1) - (Au.catOf(b) === 'music' ? 0 : 1) || a.localeCompare(b));
-      const cur = room.music && room.music.name;
-      if (cur && !tracks.includes(cur)) tracks.unshift(cur);
-      const volLbl = h('span', {}, Math.round((room.vol ?? 1) * 100) + '%');
+      const seg = (cur, opts, key) => h('div', { class: 'seg' }, opts.map(([k, l]) => h('button', { class: cur === k ? 'on' : '', onclick: () => upd({ [key]: k }) }, l)));
+      const inside = (sc.sounds || []).filter((s) => App.Audio.roomAt(sc, s) && App.Audio.roomAt(sc, s).id === room.id).length;
+      const adjusting = App.Board.tool === 'room';
       hud.append(
-        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble room' + (room.music ? ' on' : '') }, ic('music')),
-          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: room.name || '', placeholder: 'Nome da sala', onchange: (e) => upd({ name: e.target.value.trim() || 'Sala' }) }),
-            h('div', { class: 'hud-sub' }, 'Sala de som · nada entra nem sai'))),
+        h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble iso' }, ic('volume-x')),
+          h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: room.name || '', placeholder: 'Nome', onchange: (e) => upd({ name: e.target.value.trim() || 'Isolamento' }) }),
+            h('div', { class: 'hud-sub' }, 'Isolamento de som · ' + room.pts.length + ' cantos'))),
         h('div', { class: 'hud-section' },
-          h('label', { class: 'col' }, h('span', { class: 'eyebrow' }, 'Música da sala'),
-            h('select', { value: cur || '', onchange: (e) => Au.setRoomMusic(sc, room, e.target.value || null) },
-              h('option', { value: '' }, 'Sem música (só isola o som)'),
-              tracks.map((n) => h('option', { value: n }, Au.label(n) + (Au.catOf(n) === 'music' ? '' : ' · ' + (Au.catOf(n) === 'ambient' ? 'ambiente' : 'efeito')))))),
-          tracks.length ? '' : h('p', { class: 'hint', style: { margin: 0 } }, 'Escolha a pasta de músicas no painel Som para listar as faixas.'),
-          h('div', { class: 'snd-row' }, h('span', {}, 'Volume'), volLbl),
-          h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: room.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } }),
+          h('span', { class: 'eyebrow' }, 'Música de fora (quem está dentro)'),
+          seg(room.outside || 'stop', [['keep', 'Continua'], ['stop', 'Para']], 'outside'),
           h('span', { class: 'eyebrow' }, 'Ambiente de fora (chuva, vento…)'),
-          h('div', { class: 'seg' }, [['stop', 'Para'], ['muffle', 'Abafado'], ['keep', 'Continua']].map(([k, l]) =>
-            h('button', { class: (room.ambient || 'stop') === k ? 'on' : '', onclick: () => upd({ ambient: k }) }, l)))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem entra na sala ouve só a música dela: a música da cena para, e os efeitos continuam. Sons do mapa dentro da sala só se ouvem aqui dentro, e os de fora não entram. Solte uma música dentro da sala para trocar.'),
+          seg(room.ambient || 'stop', [['stop', 'Para'], ['muffle', 'Abafado'], ['keep', 'Continua']], 'ambient')),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhum som do mapa atravessa a borda: o que toca dentro só se ouve dentro, e o de fora não entra. Efeitos tocados para todos continuam.' + (inside ? ' Sons do mapa aqui dentro: ' + inside + '.' : ' Solte uma faixa aqui dentro para tocar só para quem estiver dentro.')),
+        adjusting
+          ? h('p', { class: 'hint', style: { margin: 0 } }, 'Ajustar: arraste um canto ou a borda. Dois cliques na borda criam um canto; dois cliques num canto apagam.')
+          : '',
         h('div', { class: 'hud-btns' },
-          room.music ? btnI('refresh-cw', 'Recomeçar', { title: 'Volta a música da sala ao início para todos', onclick: () => upd({ at: Date.now() }) }) : '',
+          adjusting ? '' : btnI('pencil', 'Ajustar formato', { title: 'Mostra os cantos para arrastar (ferramenta Isolamento de som)', onclick: () => { App.Board.setTool('room'); App.Board.selectedRoom = room.id; App.Board.requestRender(); UI.refresh(); } }),
           h('span', { class: 'grow' }),
-          btnI('trash-2', 'Apagar sala', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'room.delete', sceneId: sc.id, id: room.id }); App.Board.selectedRoom = null; App.Board.requestRender(); } })));
+          btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'room.delete', sceneId: sc.id, id: room.id }); App.Board.selectedRoom = null; App.Board.requestRender(); } })));
     }
     hud.hidden = false;
-    hud.style.transform = '';
+    if (!hudFloats()) { hud.style.transform = ''; return; }
+    // Flutuando: ao lado do canto mais à direita do isolamento, sem cobrir as ferramentas
+    const pts = room.pts.map(([x, y]) => App.Board.toScreen(x, y));
+    const right = Math.max(...pts.map((p) => p.x)), left = Math.min(...pts.map((p) => p.x)), top = Math.min(...pts.map((p) => p.y));
+    const W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight, hw = hud.offsetWidth;
+    const x = U.clamp(right + 20 + hw > W - 14 ? left - hw - 20 : right + 20, 70, Math.max(70, W - hw - 14));
+    hud.style.transform = `translate(${x}px, ${U.clamp(top, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
   }
-
   function soundHud(hud, empty, sc, snd) {
     if (empty) empty.hidden = true;
     const sig = JSON.stringify(['snd', snd, UI.mode, App.Triggers.allTags(sc)]);
@@ -2960,6 +2963,13 @@
           h('div', { class: 'snd-row' }, h('span', {}, 'Volume'), volLbl),
           h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: snd.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } })),
         legend,
+        (() => {
+          const iso = App.Audio.roomAt(sc, snd);
+          if (!iso) return '';
+          return h('div', { class: 'hud-section' },
+            h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!snd.fill, onchange: (e) => upd({ fill: e.target.checked }) }), 'Igual na área inteira do isolamento'),
+            h('p', { class: 'hint', style: { margin: 0 } }, 'Dentro de "' + (iso.name || 'Isolamento') + '": só quem está dentro ouve.' + (snd.fill ? ' Mesmo volume em qualquer canto, sem depender da distância.' : '')));
+        })(),
         h('div', { class: 'hud-section' }, tagField(sc, snd, (v) => upd({ tag: v }))),
         h('p', { class: 'hint', style: { margin: 0 } }, 'Cada jogador ouve pelo próprio token: mais alto perto do ponto, do lado em que o som está. Atrás de paredes (área apagada no mapa) chega abafado, a ' + Math.round(App.Audio.OCCLUDED * 100) + '%. Arraste o marcador para mudar de lugar.'),
         h('div', { class: 'hud-btns' },
@@ -3415,6 +3425,10 @@
         h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Depois de mover, o caminho fica no mapa para todos verem por onde o token passou' },
           h('span', { class: 'grow' }, 'Rastro do movimento (segundos, 0 = não mostra)'),
           h('input', { type: 'number', class: 'num', min: 0, max: 30, step: 1, value: R.trailSecs ?? 3, onchange: (e) => setR('trailSecs', U.clamp(Math.round(Number(e.target.value) || 0), 0, 30)) })),
+        h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Em tempo real: todos veem a régua e o caminho do token enquanto a pessoa mede ou arrasta.\nDesempenho: só quando ela solta (manda menos coisa pela rede).' },
+          h('span', { class: 'grow' }, 'Régua e movimento dos outros'),
+          h('select', { value: R.liveRuler ? 'live' : 'perf', onchange: (e) => setR('liveRuler', e.target.value === 'live') },
+            h('option', { value: 'perf' }, 'Desempenho (ao soltar)'), h('option', { value: 'live' }, 'Em tempo real'))),
         h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'O que já foi visto fica no mapa, escurecido. Liga por cena em Iluminação.' },
           h('span', { class: 'grow' }, 'Memória de exploração'),
           h('select', { value: R.exploreMode === 'player' ? 'player' : 'group', onchange: (e) => setR('exploreMode', e.target.value) },

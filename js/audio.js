@@ -241,8 +241,7 @@
     if (!st) return false;
     const au = st.audio;
     return (au.music && au.music.name === name) || (au.ambient && au.ambient.name === name)
-      || !!(sc && (sc.sounds || []).some((x) => x.name === name))
-      || !!(sc && (sc.rooms || []).some((r) => r.music && r.music.name === name));
+      || !!(sc && (sc.sounds || []).some((x) => x.name === name));
   }
   function openStream(r, name, mime) {
     const ms = new MediaSource();
@@ -448,9 +447,10 @@
     const home = A.roomAt(sc, s);
     let best = null;
     for (const p of lis) {
+      if (A.roomAt(sc, p) !== home) continue; // isolamento de som: nada entra nem sai
+      if (s.fill && home) { if (!best || best.v < 1) best = { v: 1, pan: 0, occl: false }; continue; }
       const d = Math.hypot(p.x - s.x, p.y - s.y);
       if (d > R) continue;
-      if (A.roomAt(sc, p) !== home) continue; // sala de som: nada entra nem sai
       const occl = !!(App.Light && App.Light.blocked(sc, p.x, p.y, s.x, s.y));
       const v = A.volumeAt(d / R) * (occl ? OCCLUDED : 1);
       if (!best || v > best.v) best = { v, pan: U.clamp((s.x - p.x) / Math.min(R, 6 * g), -1, 1) * 0.85, occl };
@@ -544,9 +544,10 @@
     el.play().catch((e) => { if (e.name === 'NotAllowedError') setBlocked(true); });
   }
 
-  // ---------- Salas de som ----------
-  // Área fechada à prova de som: o que toca dentro só se ouve dentro, e o de fora não entra.
-  // A música da sala tem prioridade: para quem está dentro, a música da cena para (e o ambiente conforme a sala).
+  // ---------- Isolamento de som ----------
+  // Borda que nenhum som do mapa atravessa: o que toca dentro só se ouve dentro, e o de fora não entra.
+  // Não tapa a visão nem impede de andar. Para quem está dentro, a música da cena continua ou para (r.outside)
+  // e o ambiente de fora para, fica abafado ou continua (r.ambient).
   function inPoly(p, pts) {
     let ins = false;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -556,7 +557,7 @@
     return ins;
   }
   const polyArea = (pts) => Math.abs(pts.reduce((a, [x, y], i) => { const [x2, y2] = pts[(i + 1) % pts.length]; return a + x * y2 - x2 * y; }, 0)) / 2;
-  // A sala (a menor, se uma estiver dentro da outra) que contém o ponto, ou null
+  // O isolamento (o menor, se um estiver dentro do outro) que contém o ponto, ou null
   A.roomAt = function (sc, p) {
     let best = null, area = Infinity;
     for (const r of (sc && sc.rooms) || []) {
@@ -567,64 +568,31 @@
     return best;
   };
   A.inPoly = inPoly;
-  // Em que sala este cliente está: com vários tokens, ganha a sala que tem música
+  // Em que isolamento este cliente está: com vários tokens, ganha o que para a música de fora
   function myRoom(sc) {
     if (!sc || !(sc.rooms || []).length) return null;
     const rooms = listeners(sc).map((p) => A.roomAt(sc, p)).filter(Boolean);
-    return rooms.find((r) => r.music) || rooms[0] || null;
+    return rooms.find((r) => r.outside !== 'keep') || rooms[0] || null;
   }
   A.myRoom = () => myRoom(S().currentScene());
   // Quanto cada canal global toca agora (1 = normal): a sala abafa ou para
   A.duckState = { music: 1, ambient: 1 };
   function duck(ch) { return A.duckState[ch] ?? 1; }
   const AMB = { stop: 0, muffle: 0.3, keep: 1 };
-  const roomCh = { el: null, key: null, name: null };
-  A.roomCh = roomCh;
   function setDuck(ch, v) {
     if (A.duckState[ch] === v) return;
     A.duckState[ch] = v;
     const c = A.ch[ch], st = S().state;
     if (c && c.name && !c.el.paused && st) fadeTo(c.el, (st.audio.vol[ch] ?? 0.6) * v, 900);
   }
-  let roomBusy = false;
-  async function updateRoom(sc) {
+  // Música e ambiente de fora para quem está dentro do isolamento
+  function updateRoom(sc) {
     const st = S().state;
     if (!st) return;
     const r = myRoom(sc);
-    setDuck('music', r && r.music ? 0 : 1);
+    setDuck('music', r && r.outside !== 'keep' ? 0 : 1);
     setDuck('ambient', r ? (AMB[r.ambient || 'stop'] ?? 0) : 1);
-    const m = r && r.music;
-    const key = m ? [r.id, m.name, r.at].join('|') : null;
-    const vol = m ? (r.vol ?? 1) * (st.audio.vol.music ?? 0.6) : 0;
-    if (!roomCh.el) { roomCh.el = new Audio(); roomCh.el.loop = true; roomCh.el.preload = 'auto'; }
-    const el = roomCh.el;
-    if (key === roomCh.key) { if (m && !el.paused && !el._fadeBusy) fadeTo(el, vol, 300); return; }
-    if (roomBusy) return;
-    roomBusy = true;
-    try {
-      if (roomCh.name && !el.paused) await fadeOut(el, 900);
-      if (!m) { el.pause(); roomCh.key = null; roomCh.name = null; return; }
-      const url = await urlFor(m.name, m.size);
-      if (!url) return; // jogador ainda baixando: tenta no próximo tick
-      if (roomCh.name !== m.name) {
-        el.src = url;
-        await new Promise((res) => { if (el.readyState >= 1) res(); else { el.onloadedmetadata = res; el.onerror = res; setTimeout(res, 4000); } });
-      }
-      roomCh.name = m.name; roomCh.key = key;
-      // Todos na sala ouvem o mesmo trecho: a música começou em r.at
-      const t = Math.max(0, (Date.now() - (r.at || Date.now())) / 1000);
-      if (isFinite(el.duration) && el.duration > 0 && !A.streaming.has(m.name)) { try { el.currentTime = t % el.duration; } catch { /* */ } }
-      el.volume = 0;
-      // Não espera o play terminar (o navegador pode demorar a começar): a sala não pode travar
-      el.play().then(() => { if (roomCh.key === key) fadeTo(el, vol, 1200); })
-        .catch((e) => { if (e.name === 'NotAllowedError') { roomCh.key = null; setBlocked(true); } });
-    } finally { roomBusy = false; }
   }
-  // Mestre: troca a música de uma sala (null = sala só isola o som)
-  A.setRoomMusic = function (sc, room, name) {
-    D({ type: 'room.update', sceneId: sc.id, id: room.id, patch: { music: name ? { name, size: A.sizes[name] || 0 } : null, at: Date.now() } });
-    if (name) A.preload([name]);
-  };
 
   A.sync = function () {
     if (!S().state) return;
@@ -643,13 +611,8 @@
   A.dropAt = function (name, p) {
     const sc = S().currentScene();
     if (!sc || !S().gmView()) return;
-    const room = A.catOf(name) === 'music' && A.roomAt(sc, p);
-    if (room) {
-      A.setRoomMusic(sc, room, name);
-      App.Board.selectedRoom = room.id; App.Board.selectedSound = null; App.Board.selected = null; App.Board.requestRender();
-      U.toast('Música da sala ' + (room.name || '') + ': ' + A.label(name));
-      return;
-    }
+    const iso = A.roomAt(sc, p);
+    if (iso) U.toast('Dentro de "' + (iso.name || 'Isolamento') + '": só quem está dentro ouve.');
     const once = A.catOf(name) === 'sfx';
     const s = { id: U.uid('snd_'), name, size: A.sizes[name] || 0, x: Math.round(p.x), y: Math.round(p.y),
       r: once ? 12 : 8, vol: 1, on: !once, once, at: Date.now() };
@@ -685,7 +648,6 @@
         if (actxObj) actxObj.resume().catch(() => {});
         for (const c of Object.values(A.ch)) c.key = null;
         for (const n of A.spots.values()) n.key = null;
-        roomCh.key = null;
         A.sync();
       } });
       b.innerHTML = App.Icons.svg('volume-2') + '<span><b>Ativar som</b>Clique para ouvir a música da mesa</span>';

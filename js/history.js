@@ -29,12 +29,12 @@
     if (type === 'batch') return ['walls', 'props', 'lights', 'triggers', 'sounds', 'rooms', 'drawings', 'notes', 'tokens'];
     return null;
   };
-  const LABEL = { walls: 'paredes', props: 'imagens', lights: 'luzes', triggers: 'gatilhos', sounds: 'sons', rooms: 'salas de som', drawings: 'desenhos', fog: 'névoa', notes: 'notas', groups: 'grupos', tokens: 'tokens' };
+  const LABEL = { walls: 'paredes', props: 'imagens', lights: 'luzes', triggers: 'gatilhos', sounds: 'sons', rooms: 'isolamentos de som', drawings: 'desenhos', fog: 'névoa', notes: 'notas', groups: 'grupos', tokens: 'tokens' };
   const VERB = { add: 'criar', delete: 'apagar', update: 'mudar', move: 'mover', clear: 'limpar', door: 'porta', lock: 'trancar', vis: 'visibilidade' };
   function labelOf(a) {
     if (a.label) return a.label;
     const [p, v] = String(a.type).split('.');
-    const what = { wall: 'parede', prop: 'imagem', lightpt: 'luz', trigger: 'gatilho', sound: 'som', room: 'sala de som', drawing: 'desenho', fog: 'névoa', note: 'nota', group: 'grupo', token: 'token', order: 'nível' }[p] || p;
+    const what = { wall: 'parede', prop: 'imagem', lightpt: 'luz', trigger: 'gatilho', sound: 'som', room: 'isolamento de som', drawing: 'desenho', fog: 'névoa', note: 'nota', group: 'grupo', token: 'token', order: 'nível' }[p] || p;
     return (VERB[v] ? VERB[v] + ' ' : '') + what;
   }
 

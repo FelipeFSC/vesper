@@ -94,6 +94,10 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - `drawPath`: trechos com distância, total, vermelho onde atravessa parede (só aviso). `pathCost` soma na medida da cena; na 1-2-1 as diagonais acumulam entre trechos.
 - **Sem espiar (Plano 11):** jogador arrastando com algum trecho que atravessa parede que tapa a visão dele (`Light.moveBlocked` com a altura do olho: absoluta, cobertura total, porta fechada; muro baixo só para quem é mais baixo que ele) fica cego (tela preta, só o próprio token e o caminho vermelho, sem mensagem). Soltar assim não move (o token volta); setas também param. `permit()` confere o caminho inteiro de `token.move` vindo de jogador (posição atual → pontos → destino). O mestre não tem trava. "Atravessa" testa duas linhas paralelas a 1 px: pega o canto de sala na diagonal e deixa passar rente à ponta solta de uma parede (vale também para o vermelho).
 - `token.move` leva `path` e `at` → `t.lastMove`; o token vai direto ao destino (sem deslizar, Plano 7) e todos veem o rastro por `rules.trailSecs` segundos (Mesa → Regras; 0 desliga).
+  - "Novo" = chegou com a mesa aberta (`B.moveSeen`), sem comparar relógios; o mestre carimba `at` do movimento do jogador com o relógio dele (Plano 30).
+- **Régua e movimento para todos (Plano 30):** a régua de qualquer um aparece para todos na mesma cena, com o nome de quem mede, e fica `trailSecs` segundos depois de soltar (inclusive para quem mediu).
+  - Mesa → Regras → "Régua e movimento dos outros": **Desempenho** (padrão, `rules.liveRuler: false`) manda só ao soltar; **Em tempo real** manda a régua e o arraste do token ~10×/s, com sinal de vida a cada 1,5 s (some depois de 5 s sem notícia).
+  - Régua do mestre: "Mostrar aos jogadores" (opções da régua, ligado por padrão). Token escondido do mestre não vai; quem não enxerga o token não vê o arraste dele.
 
 ## Visibilidade dos tokens
 - **Visível / Vulto / Invisível** (`t.hidden`, `t.masked`). Vulto: jogadores veem um círculo escuro com "?", sem imagem, nome, vida nem condições; podem atacá-lo; o nome aparece como "Vulto" no chat, na mira e no combate. O mestre vê o token com um aro tracejado.
@@ -131,13 +135,13 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Pasta escolhida pelo mestre (`Sons/` com `musicas`, `ambiente`, `Efeitos`). A campanha guarda só nomes; os jogadores recebem as faixas por P2P (streaming de mp3 grandes) e guardam em cache.
 - Canais: música, ambiente (contínuos, com volume), efeitos (uma vez). Trilha da cena toca ao ativar.
 - Sons no mapa: volume pela distância, lado esquerdo/direito, abafado atrás de paredes.
-- **Salas de som** (ferramenta M, retângulo ou polígono): à prova de som. Música da sala toca na sala inteira; para quem está dentro, a música da cena para (volume 0, continua em sincronia), o ambiente de fora para/abafa/continua, efeitos seguem. Cada jogador ouve pelo próprio token; o mestre, pelo centro da câmera.
+- **Isolamento de som** (ferramenta M, Plano 29): borda que nenhum som do mapa atravessa ("parede de algodão"); não tapa visão nem impede de andar; só o mestre vê. Desenho ponto a ponto (encaixa na grade e nas pontas de parede) ou retângulo arrastando. Ajuste: arrastar canto ou borda, dois cliques na borda criam canto e num canto apagam. Para quem está dentro: **Música de fora** Continua/Para (`r.outside`) e **Ambiente de fora** Para/Abafado/Continua (`r.ambient`). A música de dentro é um som do mapa comum; opção **"Igual na área inteira do isolamento"** (`s.fill`) toca com o mesmo volume em qualquer canto. Salas antigas com música viram isolamento + som do mapa no centro (`migrate`).
 
 ## Gatilhos (Plano 14, `js/triggers.js`; ainda sem tutorial/wiki)
 - Ferramenta **Gatilho** (`T`, só o mestre): retângulo (clique = 1 quadrado), círculo ou polígono. Jogadores nunca veem a área.
 - **Quando:** entrar (inclusive passando por cima no meio do caminho), sair, clicar numa imagem ligada (`propId`; jogador clica, o mestre confere dono e visibilidade). **Disparar agora** no painel (mesmo gasto).
 - **Quem:** grupo (`Combat.side` = party, padrão), criaturas, qualquer, escolhidos. **Arrastar como mestre não dispara**; em "ver como" dispara.
-- **Vezes:** uma (padrão), sempre, N; espera entre disparos; gasto = cinza; Rearmar / Rearmar todos; Ligado.
+- **Vezes:** uma (padrão), sempre, N; espera entre disparos; gasto = cinza; Rearmar (no painel, na janela e no botão direito; o "Rearmar todos" do menu da ferramenta saiu); Ligado.
 - **Perguntar antes**: fila no mestre (`#trig-ask`, Disparar/Ignorar). **Parar o movimento**: o mestre corta o caminho no primeiro quadrado da área antes de aplicar (o jogador recebe a posição corrigida).
 - **Ações** em ordem, atraso acumulado: porta (abrir/fechar/trancar/destrancar/alternar), luz (acender/apagar/alternar), token ou grupo (aparecer/sumir/vulto), som (efeito, som do mapa, música, ambiente), armadilha (`useAction` com `a.trap`: teste + dano, com Desfazer; atinge quem disparou ou, no botão, quem está na área), névoa (revelar/esconder o retângulo da área), teletransporte (ponto deste mapa, ou outra cena: o token passa para lá e quem o controla vai junto), outro gatilho (ligar/desligar/rearmar/disparar; profundidade máx. 5). "Escolher no mapa" (`B.pick`).
 - **Configurar** (Plano 15): janela flutuante `trigger:<id>` (SE | ENTÃO, cartões com arrastar, "No mapa" esconde a janela); painel da direita só com resumo; lista no quadro da ferramenta (estado, ligar, testar). **Testar = simulação** (`simulate`: piscar no mapa do mestre + prévia de som; não muda estado).
@@ -173,6 +177,11 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Por cena (Iluminação → Memória de exploração; Esquecer o explorado). Regra da campanha: do grupo ou de cada jogador.
 - O já visto fica ~25% e sem tokens na tela do jogador; o contorno das paredes vale nas áreas lembradas. Espiar no arraste não grava.
 
+## Menu do botão direito (Plano 28, `js/ctxmenu.js`; ainda sem tutorial/wiki)
+- Direito sem arrastar abre o menu do que está no ponto (`B.hitAll`): token, imagem, luz, gatilho, porta, parede, som, nota, mapa vazio ou seleção múltipla. Arrastar com o direito continua movendo a câmera; durante o arraste de token ou régua, marca ponto.
+- Painel flutuante (Apresentar ou barra da direita recolhida): só abre pelo menu (`UI.hudFor`); o clique esquerdo só seleciona e move.
+- Jogador: no próprio token, Ficha, Painel, Ações e Condições; no mapa vazio, Ping.
+
 ## Painéis
 - Atualizam na hora; só esperam quando alguém digita (`isTyping`).
 - Barras laterais recolhem (Plano 15): faixa de ícones; lembrado em `localStorage` `vesper.paineis`. Direita recolhida = painel do selecionado flutua (`hudFloats`/`placeHud`). Larguras via `--lw`/`--rw` no `#app`.
@@ -180,4 +189,4 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - Painel Mesa: conexão, salvar/exportar, regras, listas da campanha (atributos, barras, condições) como etiquetas.
 
 ## Atalhos
-`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `T` gatilho · `N` nota · `M` sala de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.
+`V` selecionar · `H` câmera · `R` régua · `P` ping · `D` desenho · `L` linha · `B` retângulo · `E` círculo · `X` borracha · `F`/`G` névoa · `W` parede · `O` porta · `U` luz · `T` gatilho · `N` nota · `M` isolamento de som · `I` imagem · `1`–`9` ações · setas movem · `Delete` remove · `Esc` cancela · `Alt` sem encaixe.

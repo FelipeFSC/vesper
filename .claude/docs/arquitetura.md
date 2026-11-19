@@ -21,7 +21,7 @@
 | `js/images.js` | Converte imagens para WebP (mapas até 4096 px, tokens até 512 px), deduplica por hash, `toWebP` |
 | `js/light.js` | Luz e visão: paredes que bloqueiam (`wallsFor(eyeH)`), polígono de visibilidade, fontes (tokens e `sc.lights`), níveis (`levelAt`, `levelFor`), `pointVisible`, desenho da luz, cor e tremor |
 | `js/combat.js` | Alcance, lados, alvos válidos, área, chance de acerto, **cobertura**, sombra, voo (`flyOf`, `topOf`, `sightH`) |
-| `js/audio.js` | Pasta de músicas, canais música/ambiente/efeito, sons no mapa, **salas de som**, envio das faixas aos jogadores |
+| `js/audio.js` | Pasta de músicas, canais música/ambiente/efeito, sons no mapa, **isolamento de som**, envio das faixas aos jogadores |
 | `js/scan.js` | Scan de paredes e portas (Plano 22): imagem reduzida, máscaras (lado de fora, cor, escuro), contorno/afinamento, Douglas-Peucker, endireitar, portas por exemplo (correlação), Web Worker criado do texto de `CORE`; importar `.dd2vtt`/`.uvtt` |
 | `js/anim.js` | Animação (Plano 21): tempo e curvas (`progress`), `view(sc)` = cena como aparece agora, `play`/`stop`/`preview`, relógio do mestre (`now`, `setClock`), área de dano das imagens (`hurtPoly`, golpe no tick do mestre) |
 | `js/triggers.js` | Gatilhos (Plano 14): geometria e caminho (`crossing`), estado (pronto/gasto), detecção no mestre (`beforeMove` no `commit` de `token.move` de jogador; `click`), fila "perguntar", execução das ações com atraso (`fire`) |
@@ -30,6 +30,7 @@
 | `js/net.js` | PeerJS: host, join, envio de ações e estado |
 | `js/board.js` | Canvas do mapa: câmera, ferramentas, tokens, paredes, salas, mira, efeitos |
 | `js/ui.js` | Interface: laterais, dock, painel do token, fichas (abas), combate, cenas, painel Mesa, modais |
+| `js/ctxmenu.js` | Menu do botão direito (Plano 28): opções por tipo de objeto e do mapa vazio, "Colocar ficha aqui", submenus. O tabuleiro decide o clique e lista o que está no ponto (`B.hitAll`) |
 | `js/tutorial.js` | Tutorial interativo (`?tutorial`), lista `STEPS`, campanha de demonstração |
 | `js/main.js` | Menu inicial (fundo animado, teclado, trocar fundo; Criar ficha abre `ficha.html`) |
 | `js/units.js` | Conversor de unidades (pés, milhas, libras… → m, km, kg, L), opcional, com a preferência no navegador |
@@ -62,7 +63,7 @@ cena
   light {enabled, global}
   cover {enabled, heights {high, three, half}, shadow {high, three, half}, levels {three, half}, bonus {three, half}, show, lean}
   sounds [{id, name, x, y, r, vol, on, once, at}]
-  rooms [{id, name, pts [[x,y]…], music {name,size}, at, vol, ambient stop|muffle|keep}]
+  rooms [{id, name, pts [[x,y]…], outside stop|keep, ambient stop|muffle|keep}]   (isolamentos de som; sounds[].fill = igual na área inteira)
   groups [{id, name}]
   props [{id, img, name, x, y, w, h, rot, flip, hidden, opacity, locked, z}]   (z compartilhado com tokens.z)
   triggers [{id, name, shape circle|rect|poly, x, y, r, pts, on enter|leave|click, propId, who party|foes|any|pick, whoIds,
@@ -96,3 +97,7 @@ cena
 - **Animação:** o estado guarda a posição de verdade; quem desenha usa `App.Anim.view(sc)` (o `B.render`, a exploração e o dano já usam). Nunca mande posição por quadro: `Anim.play` grava uma vez e o mestre termina com `anim.end`.
 - **Ações de montagem entram no Ctrl+Z sozinhas** (`History.wants`: prefixos `wall/prop/lightpt/trigger/sound/room/drawing/fog/note/group/token`, `order.move`). Ações automáticas (gatilhos, cálculo de exploração) passam `noUndo: true`. Várias ações = um passo: `App.History.batch(rótulo, fn)`.
 - Painéis flutuantes precisam caber na tela: limite de altura + rolagem por dentro (`fitToolOpts`, `fitWin`, `max-height` no CSS). Testar com `menus.js` numa tela baixa.
+
+## Régua para todos (Plano 30)
+- Mensagem leve `{ t: 'ruler', kind: 'ruler'|'drag', sceneId, from, name, color, tokenId, pts, done, clear }` (`App.Net.shareRuler`): jogador → mestre (que carimba `from` e `name`) → outros. Não muda o estado nem entra no desfazer.
+- `B.remote` (Map `quem:tipo`) guarda o que chegou; `drawRemote` desenha e `pruneRemote` limpa (soltou: `trailSecs`; ao vivo: 5 s sem sinal).

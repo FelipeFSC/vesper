@@ -101,6 +101,7 @@
     actOnTurn: false,   // em combate, jogador só usa ações na própria vez
     hideNumbers: true,  // jogadores não veem Defesa/PV de quem não controlam
     trailSecs: 3,       // segundos que o caminho de um movimento fica no mapa para todos (0 = não mostra)
+    liveRuler: false,   // régua e arraste dos outros: true = em tempo real | false = desempenho (só ao soltar)
     exploreMode: 'group', // memória de exploração: 'group' (o que um viu, todos lembram) | 'player' (cada um a sua)
   };
 
@@ -142,6 +143,20 @@
       sc.cover = App.Combat.coverCfg(sc);
       sc.sounds = Array.isArray(sc.sounds) ? sc.sounds : [];
       sc.rooms = Array.isArray(sc.rooms) ? sc.rooms : [];
+      // Plano 29: "sala de som" com música própria virou "isolamento de som".
+      // A música da sala vira um som do mapa no meio (igual na área inteira) e a música de fora para.
+      sc.sounds = Array.isArray(sc.sounds) ? sc.sounds : [];
+      for (const r of sc.rooms) {
+        if (r.outside) continue;
+        if (r.music && r.music.name && Array.isArray(r.pts) && r.pts.length >= 3) {
+          const cx = r.pts.reduce((a, p) => a + p[0], 0) / r.pts.length, cy = r.pts.reduce((a, p) => a + p[1], 0) / r.pts.length;
+          const far = Math.max(...r.pts.map(([x, y]) => Math.hypot(x - cx, y - cy)));
+          sc.sounds.push({ id: U.uid('snd_'), name: r.music.name, size: r.music.size || 0, x: Math.round(cx), y: Math.round(cy),
+            r: Math.max(1, Math.ceil(far / (sc.grid || 70)) + 1), vol: r.vol ?? 1, on: true, once: false, at: r.at || Date.now(), fill: true });
+          r.outside = 'stop';
+        } else r.outside = 'keep';
+        delete r.music; delete r.vol; delete r.at;
+      }
       sc.groups = Array.isArray(sc.groups) ? sc.groups : [];
       sc.props = Array.isArray(sc.props) ? sc.props : [];
       sc.lights = Array.isArray(sc.lights) ? sc.lights : [];
@@ -621,6 +636,8 @@
     remoteAction(a, pid) {
       if (!a || typeof a.type !== 'string') return;
       a.by = pid;
+      // Hora do movimento pelo relógio do mestre (o do jogador pode estar adiantado ou atrasado)
+      if (a.type === 'token.move') a.at = Date.now();
       if (a.type === 'act.use') { this.useAction(a, pid); return; }
       if (a.type === 'trigger.click') { try { App.Triggers.click(a, pid); } catch (e) { console.warn(e); } return; }
       let ok = false;

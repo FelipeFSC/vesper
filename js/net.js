@@ -3,8 +3,8 @@
  * Rede P2P com PeerJS (WebRTC).
  * O mestre é o host: recebe as ações dos jogadores, valida, aplica e retransmite.
  * Mensagens:
- *   jogador -> mestre: hello, action, asset, ping, audio-req
- *   mestre -> jogador: welcome (estado completo + imagens), state, action, asset, presence, ping,
+ *   jogador -> mestre: hello, action, asset, ping, ruler, audio-req
+ *   mestre -> jogador: welcome (estado completo + imagens), state, action, asset, presence, ping, ruler,
  *                      audio-chunk (faixa em pedaços), audio-preload, audio-missing
  */
 (function (App) {
@@ -98,6 +98,15 @@
         N.broadcast(msg);
         App.Board.addPing(msg);
         break;
+      case 'ruler': {
+        // Régua ou arraste de um jogador (Plano 30): o mestre carimba quem é e repassa aos outros
+        if (msg.kind !== 'ruler' && msg.kind !== 'drag') break;
+        const m = { t: 'ruler', kind: msg.kind, sceneId: String(msg.sceneId || ''), from: entry.playerId, name: entry.name, color: msg.color,
+          tokenId: msg.tokenId ? String(msg.tokenId) : null, pts: Array.isArray(msg.pts) ? msg.pts.slice(0, 66) : [], done: !!msg.done, clear: !!msg.clear };
+        N.broadcast(m, conn.peer);
+        App.Board.onRuler(m);
+        break;
+      }
       case 'audio-req':
         // Jogador pediu uma faixa: o mestre envia o arquivo em pedaços
         if (App.Audio && typeof msg.name === 'string') App.Audio.serve(conn, msg.name);
@@ -239,6 +248,9 @@
       case 'clock':
         if (App.Anim) App.Anim.setClock(msg.now);
         break;
+      case 'ruler':
+        if (msg.from !== S().me.id) App.Board.onRuler(msg);
+        break;
       case 'audio-chunk':
       case 'audio-preload':
       case 'audio-missing':
@@ -265,6 +277,12 @@
   N.ping = function (p) {
     if (S().role === 'player') N.send(p);
     else { N.broadcast(p); App.Board.addPing(p); }
+  };
+
+  // Régua e arraste para os outros (Plano 30)
+  N.shareRuler = function (msg) {
+    if (S().role === 'player') N.send(msg);
+    else N.broadcast(msg);
   };
 
   App.Net = N;

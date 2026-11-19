@@ -9,12 +9,16 @@
 | `bestiario.js` | Plano 25 (precisa de `data/5etools/`): a mesa abre sem carregar a base, botão na aba Fichas, índice inteiro sem nenhum livro, filtros (livro, NPC, tipo, versões antigas, ND, busca), prévia carrega só o livro da criatura, ficha sem marcações, unidades Brasil/originais, abas Descrição e Imagens, token da web (simulado) na ficha, PV/Defesa/atributos, sem ações e com `dados5e`, não duplica, dragão 3×3 com visão no escuro, Rolar PV, pasta local e escolha à mão por cima do token, Meu bestiário, jogador. `#shot` + `-shot` = foto com os tokens de verdade |
 | `tokenpronto.js` | Plano 26: token pronto × retrato pelos pixels (canto, centro, borda), 1×1 e 3×3, trocar na ficha e voltar, seleção com condição, `migrate` das fichas do 5etools |
 | `animsom.js` | Plano 27: editor de animação em janela (barras, vírgula, modelos, curva, adicionar/duplicar/remover, prévia local, tocar/parar, começa sozinha, ação do gatilho) e parar som (efeito + parar com atraso, parar depois de, parar todos os efeitos, som do mapa de uma vez, parar todos os sons, opções no cartão). WAV gerado no teste. `#shot` + `-shot` = foto do editor |
+| `ctxmenu.js` | Plano 28: clique direito de verdade; menus do token (ações, condições), luz, gatilho, porta, parede, mapa vazio (colocar ficha aqui, luz aqui, recolher a barra), Outros aqui, arrastar move a câmera, painel flutuante só pelo menu, menu cabe na tela, jogador. `#shot` + `-shot` = foto do menu do token com as ações |
 | `cover.js` | Cobertura: meia/¾, altura do alvo, encostado no muro, bônus no ataque, sombra e vulto |
 | `high.js` | Os quatro tipos de parede com alvos de 1,8 m e 4 m |
 | `eye.js` | Altura de quem olha (personagem baixo atrás de muros) |
 | `fly.js` | Voo: ver e atacar por cima dos muros, parede absoluta, painel do voo |
-| `rooms.js` | Salas de som: desenho, isolamento, música da sala e pausa da música da cena |
-| `roomplay2.js` | Salas de som tocando faixas reais da pasta `Sons/musicas` |
+| `iso.js` | Isolamento de som: desenho, ajuste do formato (cantos, mover, criar e apagar canto, desfazer), regras do som, campanha antiga, painel e menu |
+| `iso_shot.js` | Foto do isolamento selecionado (`-shot`) |
+| `isohud.js` | Painel do isolamento com a barra da direita recolhida: abre ao lado do isolamento e fecha ao clicar no vazio |
+| `prophud.js` | Painel da imagem com a barra da direita recolhida: abre ao lado da imagem, como o da luz |
+| `shareruler.js` | Plano 30 (rede simulada): rastro com relógio atrasado, movimento velho não aparece, mestre carimba a hora, régua desempenho/tempo real (mensagens, sinal de vida), "Mostrar aos jogadores", arraste ao vivo, token escondido, régua de outro (cena, cancelar, some depois de trailSecs e sem sinal), opção em Mesa → Regras |
 | `groups.js` | Vulto, grupos de tokens e nomes no chat |
 | `pscene.js` | Jogadores separados em cenas |
 | `props.js` | Imagens no mapa: soltar arquivo, níveis, mover, redimensionar, girar, travar, invisível, biblioteca, Ctrl+D, Delete, exportar |

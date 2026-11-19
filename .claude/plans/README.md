@@ -51,3 +51,6 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 25 | [Bestiário a partir do 5etools](25-bestiario-5etools.md) | Implementado (testes do usuário) |
 | 26 | [Token pronto no tabuleiro](26-token-pronto-no-tabuleiro.md) | Implementado (testes do usuário) |
 | 27 | [Editor de animação maior e parar som pelo gatilho](27-editor-de-animacao-e-parar-som.md) | Implementado (testes do usuário) |
+| 28 | [Menu do botão direito](28-menu-do-botao-direito.md) | Implementado (testes do usuário) |
+| 29 | [Isolamento de som](29-isolamento-de-som.md) | Implementado (testes do usuário) |
+| 30 | [Régua e rastro do movimento para todos](30-regua-e-rastro-para-todos.md) | Implementado (testes do usuário) |

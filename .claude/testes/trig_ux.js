@@ -75,13 +75,9 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push(`testar (1,4 s): ${f2.join(' / ')}`);
     log.push(`nada mudou de verdade: ${before === JSON.stringify([sc().walls, sc().lights, Object.values(sc().tokens).map((t) => [t.hidden, t.masked]), tr().used])}`);
 
-    // 6) lista da ferramenta: estado, ligar/desligar, testar
+    // 6) menu da ferramenta: só a forma da área (a lista de gatilhos saiu a pedido do usuário)
     UI.refresh(); await W(200);
-    const row = [...document.querySelectorAll('#tool-opts .trig-row')].find((r) => r.textContent.includes('Porta de entrada'));
-    log.push(`lista: linha = ${!!row} · bolinha = ${row && row.querySelector('.tr-dot').className} · botões = ${row && [...row.querySelectorAll('.icon-btn')].map((b) => b.title.split(' (')[0]).join(', ')}`);
-    row.querySelector('[title^="Ligado"]').click(); await W(200);
-    log.push(`desligar pela lista: ligado = ${tr().enabled !== false} · bolinha = ${[...document.querySelectorAll('#tool-opts .trig-row')].find((r) => r.textContent.includes('Porta de entrada')).querySelector('.tr-dot').className}`);
-    S.dispatch({ type: 'trigger.update', sceneId: sid, id: tr0.id, patch: { enabled: true } });
+    log.push(`menu da ferramenta: formas = ${[...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | ')} · lista de gatilhos = ${document.querySelectorAll('#tool-opts .trig-row').length}`);
 
     // 7) barras recolhidas
     const w0 = B.w;
