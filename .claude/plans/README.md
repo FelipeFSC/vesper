@@ -57,4 +57,7 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 31 | [Portais e escadas](31-portais-e-escadas.md) | Implementado (testes do usuário) |
 | 32 | [Procurar portas pela ferramenta Porta](32-procurar-portas-na-ferramenta-porta.md) | Implementado (testes do usuário) |
 | 33 | [Histórias (várias mesas preparadas)](33-historias.md) | Implementado (testes do usuário) |
-| 34 | [Procurar paredes em mapas com textura](34-scan-mapas-com-textura.md) | Em andamento |
+| 34 | [Procurar paredes em mapas com textura](34-scan-mapas-com-textura.md) | Primeira versão (testes do usuário) |
+| 35 | [Portal: área de chegada desenhada e marcador para os jogadores](35-portal-area-de-chegada-e-icones.md) | Implementado (testes do usuário) |
+| 36 | [Acompanhar os jogadores](36-acompanhar-jogadores.md) | Implementado (testes do usuário) |
+| 37 | [Remover jogador e jogador sem ficha não vê o mapa](37-remover-jogador-e-sem-ficha.md) | Implementado (testes do usuário) |

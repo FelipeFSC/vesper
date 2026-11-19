@@ -2,6 +2,12 @@
 /* Ícones Lucide (https://lucide.dev) — licença ISC. Embutidos para funcionar offline. */
 (function (App) {
   const P = {
+    "stairs-up": "<path d=\"M3 21h5v-5h5v-5h5V6h3\"/><path d=\"m4 7 3-3 3 3\"/><path d=\"M7 4v7\"/>",
+    "stairs-down": "<path d=\"M3 21h5v-5h5v-5h5V6h3\"/><path d=\"m4 8 3 3 3-3\"/><path d=\"M7 3v8\"/>",
+    "log-out": "<path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\"/><polyline points=\"16 17 21 12 16 7\"/><line x1=\"21\" x2=\"9\" y1=\"12\" y2=\"12\"/>",
+    "arrow-right": "<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>",
+    "mountain": "<path d=\"m8 3 4 8 5-5 5 15H2L8 3z\"/>",
+    "sailboat": "<path d=\"M22 18H2a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z\"/><path d=\"M21 14 10 2 3 14h18Z\"/><path d=\"M10 2v16\"/>",
     "arrow-up": "<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>",
     "book-open": "<path d=\"M12 7v14\"/><path d=\"M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z\"/>",
     "brick-wall": "<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M12 9v6\"/><path d=\"M16 15v6\"/><path d=\"M16 3v6\"/><path d=\"M3 15h18\"/><path d=\"M3 9h18\"/><path d=\"M8 15v6\"/><path d=\"M8 3v6\"/>",
@@ -102,5 +108,6 @@
     "zap": "<path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\"/>"
   };
   const svg = (n, cls) => '<svg class="ico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[n] || '') + '</svg>';
-  App.Icons = { svg, has: (n) => !!P[n] };
+  // raw = o desenho do ícone (para virar imagem no mapa, como o marcador do portal)
+  App.Icons = { svg, has: (n) => !!P[n], raw: (n) => P[n] || '' };
 })(window.App);

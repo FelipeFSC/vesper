@@ -211,7 +211,7 @@
 
   let reconnectTimer = null;
   function scheduleReconnect() {
-    if (reconnectTimer) return;
+    if (reconnectTimer || N.kicked) return;
     N.retry++;
     status('connecting', 'Reconectando… (' + N.retry + ')');
     reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, Math.min(10000, 1500 * N.retry));
@@ -251,6 +251,12 @@
       case 'ruler':
         if (msg.from !== S().me.id) App.Board.onRuler(msg);
         break;
+      case 'kicked':
+        // o mestre tirou este jogador da mesa: não tenta reconectar sozinho
+        N.kicked = true;
+        status('error', 'Fora da mesa');
+        U.toast('O mestre tirou você da mesa. Para voltar, entre de novo com o código.', 'error', 8000);
+        break;
       case 'audio-chunk':
       case 'audio-preload':
       case 'audio-missing':
@@ -279,6 +285,16 @@
     else { N.broadcast(p); App.Board.addPing(p); }
   };
 
+  // Plano 37: o mestre tira um jogador da mesa. Ele é avisado e desconectado (pode entrar de novo com o código)
+  N.kick = function (pid) {
+    for (const [peerId, e] of N.conns) {
+      if (e.playerId !== pid) continue;
+      try { e.conn.send({ t: 'kicked' }); } catch { /* */ }
+      setTimeout(() => { try { e.conn.close(); } catch { /* */ } }, 300);
+      N.conns.delete(peerId);
+    }
+    broadcastPresence();
+  };
   // Régua e arraste para os outros (Plano 30)
   N.shareRuler = function (msg) {
     if (S().role === 'player') N.send(msg);

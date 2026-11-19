@@ -21,9 +21,14 @@
 | `shareruler.js` | Plano 30 (rede simulada): rastro com relógio atrasado, movimento velho não aparece, mestre carimba a hora, régua desempenho/tempo real (mensagens, sinal de vida), "Mostrar aos jogadores", arraste ao vivo, token escondido, régua de outro (cena, cancelar, some depois de trailSecs e sem sinal), opção em Mesa → Regras |
 | `portal.js` | Plano 31: ferramenta Portal (K), mesmo mapa, três juntos, desligado, "quem passa", mestre arrastando (câmera), sub-cena pela lista, outra cena com ida e volta e "Escolher no mapa" lá, não volta sozinho, tirar a volta, menu, "Portal aqui", migração, exportar/importar com sub-cena, apagar (manter/apagar tudo) |
 | `portal_shot.js` | Foto do portal selecionado, linha até o destino e lista de cenas com sub-cenas (`-shot`) |
+| `portal2.js` | Plano 35: Desenhar a chegada (mesmo mapa e outra cena, Esc), sorteio dentro da área, 3 juntos, volta com a forma desenhada, marcador (ícone par, nome, visão do jogador por pixels), linha, portal antigo. `#shot` + `-shot` = foto da visão do jogador |
+| `party.js` | Plano 36: coluna de jogadores (Editar recolhida, Apresentar aberta), Ir até em outra cena, Seguir (andar e portal), Esc, Ver como, dois cliques, jogador não vê. `#shot` + `-shot` = foto |
+| `nofile.js` | Plano 37: jogador sem token no escuro (com e sem luz, token escondido), remover pelo menu da coluna e em Mover jogadores (aviso e desconexão, fichas com o mestre), entrar de novo, jogador não remove |
 | `doorscan.js` | Plano 32: Procurar portas pela ferramenta Porta (só portas, palpite pelas paredes do mapa, paredes existentes ganham a passagem, desfazer, janela completa na Parede) |
 | `stories.js` | Plano 33 (rodar com `-query ''`): campanha antiga vira história, tela de cartões, menu do cartão, duplicar/renomear/imagem/apagar, nova história abre a mesa, salva na certa, ordem, importar como nova. Com `-query '?historias=offline'`: a tela abre sozinha (Voltar ao menu). Usa `App.Storage.mem` porque o IndexedDB não responde no Edge sem tela |
 | `stories_shot.js` | Foto da tela de Histórias (`-query '' -shot`) |
+| `scanreal.js` | Plano 34: busca de paredes no mapa da fortaleza (`_mapa_fortaleza.jpg`, fora do git) com foto. Hash `#<modo>-<textura>-<sens>[-z]`, ex. `?tutorial#floor-20-35-z` |
+| `scandiag.js` | Plano 34: diagnóstico (imagem borrada, bordas acima do limite em vermelho, chão enchido em verde). Hash `#<textura>-<sens>`, com `-shot` e `-size '1100,900'` |
 | `groups.js` | Vulto, grupos de tokens e nomes no chat |
 | `pscene.js` | Jogadores separados em cenas |
 | `props.js` | Imagens no mapa: soltar arquivo, níveis, mover, redimensionar, girar, travar, invisível, biblioteca, Ctrl+D, Delete, exportar |

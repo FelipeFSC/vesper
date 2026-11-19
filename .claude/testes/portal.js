@@ -36,7 +36,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('painel: ' + [...document.querySelectorAll('#token-hud .eyebrow')].map((e) => e.textContent).join(' | ') + ' · sem destino: ' + /Escolha o ponto/.test($('#token-hud').textContent));
 
     // 2) mesmo mapa (trem): escolher o ponto no mapa e passar
-    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Escolher no mapa/.test(b.textContent)).click(); await W(50);
+    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Desenhar a chegada/.test(b.textContent)).click(); await W(50);
     click(2.5 * g, 6.5 * g); await W(80);
     const d1 = TG.portalDest(sc(), trs().find((t) => t.id === p1.id));
     log.push(`destino escolhido: (${d1.x / g - 0.5}, ${d1.y / g - 0.5}) · mesmo mapa: ${d1.scene.id === sid}`);
@@ -97,7 +97,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const back = (S.state.scenes[subId].triggers || []).find((t) => t.portal);
     log.push(`destino na sub-cena: ida e volta criada = ${!!back} (${back && back.name}) · volta aponta para cá: ${back && TG.portalAct(back).portalId === p2.id}`);
     B.selectObj('trigger', trs().find((t) => t.id === p2.id)); UI.refresh(); B.render(); await W(100);
-    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Escolher no mapa/.test(b.textContent)).click(); await W(150);
+    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Desenhar a chegada/.test(b.textContent)).click(); await W(150);
     B.render(); log.push('escolher no mapa: tela foi para a sub-cena = ' + (sc().id === subId) + ' · escolhendo = ' + !!B.picking);
     click(5.5 * g, 5.5 * g); await W(100); B.render(); await W(100);
     const back2 = (S.state.scenes[subId].triggers || []).find((t) => t.id === back.id), bc = TG.center(back2);

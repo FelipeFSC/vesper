@@ -304,6 +304,14 @@
       if (!m) return false;
       Object.assign(m, a.patch);
     },
+    // Plano 37: sai da lista e das cenas separadas; as fichas e os tokens dele passam a ser do mestre (dono vazio)
+    'player.remove': (s, a) => {
+      if (!s.players[a.id]) return false;
+      delete s.players[a.id];
+      if (s.playerScenes) delete s.playerScenes[a.id];
+      for (const ac of Object.values(s.actors)) if (ac.owner === a.id) ac.owner = '';
+      for (const sc of Object.values(s.scenes)) for (const t of Object.values(sc.tokens)) if (t.owner === a.id) t.owner = '';
+    },
     'player.upsert': (s, a) => {
       s.players[a.id] = Object.assign({}, s.players[a.id], { name: String(a.name || 'Jogador').slice(0, 40), color: U.safeColor(a.color, '#38bdf8') });
     },

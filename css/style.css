@@ -862,6 +862,14 @@ input.grp-name:hover, input.grp-name:focus { border-color: var(--line2) !importa
 /* Gatilhos (Plano 14) */
 .snd-bubble.trig.on { background: #e0609a; color: #fff; }
 .snd-bubble.portal.on { background: #38bdf8; color: #0b1a22; }
+/* Marcador do portal (Plano 35): ícones prontos e imagem enviada */
+.mk-icons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.mk-icon { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); cursor: pointer; padding: 0; overflow: hidden; }
+.mk-icon:hover { border-color: var(--line2); }
+.mk-icon.on { border-color: #38bdf8; background: rgba(56, 189, 248, .14); color: #fff; }
+.mk-icon .ico { width: 18px; height: 18px; }
+.mk-icon img { width: 100%; height: 100%; object-fit: cover; }
+.hud-input { width: 100%; }
 .trig-acts { display: flex; flex-direction: column; gap: 8px; }
 .trig-act { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel2); }
 .ta-head { display: flex; align-items: center; gap: 4px; }
@@ -1140,3 +1148,29 @@ input.grp-name:hover, input.grp-name:focus { border-color: var(--line2) !importa
 
 /* Isolamento de som (Plano 29) */
 .snd-bubble.iso { background: rgba(192, 132, 252, .18); color: #e9d5ff; }
+
+/* Acompanhar os jogadores (Plano 36): coluna no canto direito do mapa e barra "Seguindo" */
+#party-col { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); z-index: 13; display: flex; flex-direction: column; gap: 12px; align-items: center;
+  padding: 10px 8px; border-radius: 999px; background: rgba(14, 12, 22, .55); border: 1px solid rgba(255, 255, 255, .08); backdrop-filter: blur(4px); }
+#party-col.closed { padding: 4px; }
+#party-col[hidden] { display: none; }
+.party-av { position: relative; width: 54px; height: 54px; border-radius: 50%; border: 3px solid; padding: 0; cursor: pointer; box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+  display: grid; place-items: center; color: #fff; font: 600 20px/1 var(--serif); transition: transform .15s; }
+.party-av:hover { transform: scale(1.08); }
+.party-av.none { opacity: .55; }
+.party-av.viewing, .party-av.following { box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 6px 18px rgba(0, 0, 0, .45); }
+.party-dot { position: absolute; right: -1px; bottom: -1px; width: 13px; height: 13px; border-radius: 50%; background: #5f5e6a; border: 2px solid #15131d; }
+.party-dot.on { background: #4fd17a; }
+.party-toggle .ico { width: 18px; height: 18px; }
+.party-menu { position: fixed; z-index: 400; min-width: 220px; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px;
+  background: rgba(20, 16, 32, .98); border: 1px solid var(--line2); box-shadow: var(--shadow); }
+.pm-head { display: flex; flex-direction: column; gap: 2px; }
+.pm-head small { color: var(--muted); font-size: 11.5px; }
+.pm-row { display: flex; align-items: center; gap: 6px; }
+.pm-tok { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-row .btn { flex: 1; }
+.pm-row .pm-tok + .btn, .pm-row .pm-tok ~ .btn { flex: 0 0 auto; }
+#follow-bar { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 10px; padding: 5px 6px 5px 12px;
+  border-radius: 10px; background: rgba(56, 189, 248, .16); border: 1px solid rgba(56, 189, 248, .45); color: var(--text); font-size: 12.5px; }
+#follow-bar[hidden] { display: none; }
+#follow-bar .ico { width: 16px; height: 16px; color: #7dd3fc; }

@@ -19,7 +19,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const sc = S.state.scenes[sc0.id], g = sc.grid;
     // cliques (em quadrados) no chão das salas da fortaleza, ou no lado de fora
     const D = 1932 / N, P = (x, y) => ({ x: (x / D) * g, y: (y / D) * g });
-    const floorSeeds = [[1340, 450], [1700, 470], [1380, 1000], [1600, 1000], [1720, 800], [1450, 340], [1450, 1660], [1700, 1440], [1350, 1500], [1640, 640], [1640, 1330]].map(([x, y]) => P(x, y));
+    const floorSeeds = [[1340, 450], [1700, 470], [1380, 1000], [1600, 1000], [1720, 800], [1700, 1440], [1350, 1500], [1640, 640], [1640, 1330]].map(([x, y]) => P(x, y));
     const outSeeds = [P(1150, 150), P(1800, 1850)];
     UI.openScan(); await W(100);
     Object.assign(UI.scanOpts, { by: mode, seeds: mode === 'floor' ? floorSeeds : mode === 'dark' ? [] : outSeeds, smooth: Number(tex) / 100, sens: Number(sens) / 100, minSize: 0.1 });

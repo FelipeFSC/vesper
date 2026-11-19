@@ -212,6 +212,7 @@
     renderSceneLabel();
     renderInitStrip();
     renderBoardActions();
+    renderParty();
     renderLeft();
     renderRight();
     renderDock();
@@ -520,6 +521,93 @@
     if (sc) el.append(h('b', {}, sc.name), h('span', {}, `${sc.cols}×${sc.rows} · 1 quadrado = ${String(sc.cellDist).replace('.', ',')} ${sc.unit}`));
   }
 
+  // =============== Acompanhar os jogadores (Plano 36) ===============
+  // Coluna no canto direito do mapa (só o mestre): um círculo por jogador com o token da ficha dele.
+  // Clique: Ir até, Seguir, Ver como. No modo Editar fica recolhida num botão.
+  UI.partyOpen = false;
+  function partyTokens(pid) {
+    const st = S().state, sid = S().sceneIdOf(pid), sc = st.scenes[sid];
+    if (!sc) return { sc: null, list: [] };
+    // os tokens do jogador; se ele não tiver nenhum, os do grupo todo (dono 'Todos')
+    const ownerOf = (t) => (t.owner != null ? t.owner : (S().actorOf(t) || {}).owner);
+    const mine = Object.values(sc.tokens).filter((t) => ownerOf(t) === pid);
+    const list = mine.length ? mine : Object.values(sc.tokens).filter((t) => ownerOf(t) === 'all');
+    list.sort((a, b) => ((S().actorOf(a) || {}).kind === 'pc' ? 0 : 1) - ((S().actorOf(b) || {}).kind === 'pc' ? 0 : 1));
+    return { sc, list };
+  }
+  let partyMenu = null;
+  function closePartyMenu() { if (partyMenu) { partyMenu.remove(); partyMenu = null; } }
+  // Plano 37: tira o jogador da mesa (pode entrar de novo com o código); fichas e tokens dele ficam com o mestre
+  UI.removePlayer = function (pid) {
+    const p = S().state.players[pid];
+    if (!p || !confirm('Remover ' + p.name + ' da mesa? Ele é desconectado e sai da lista; pode entrar de novo com o código. As fichas e os tokens dele ficam com você.')) return false;
+    if (S().viewAs === pid) UI.setViewAs(null);
+    if (App.Board.follow && App.Board.follow.pid === pid) App.Board.stopFollow();
+    S().dispatch({ type: 'player.remove', id: pid });
+    App.Net.kick(pid);
+    U.toast(p.name + ' saiu da mesa.');
+    return true;
+  };
+  function partyMenuFor(pid, anchor) {
+    if (partyMenu && partyMenu.dataset.pid === pid) { closePartyMenu(); return; }
+    closePartyMenu();
+    const st = S().state, p = st.players[pid], B = App.Board, { sc, list } = partyTokens(pid);
+    const m = h('div', { class: 'party-menu', 'data-pid': pid },
+      h('div', { class: 'pm-head' }, h('b', {}, p.name), h('small', {}, sc ? 'Cena: ' + sc.name : 'Sem cena')),
+      list.length ? list.map((t) => h('div', { class: 'pm-row' },
+        list.length > 1 ? h('span', { class: 'pm-tok' }, t.name) : '',
+        btnI('map-pin', 'Ir até', { class: 'btn small', title: 'Sua tela vai até o token (os jogadores não mudam de cena). Atalho: dois cliques no círculo', onclick: () => { closePartyMenu(); B.stopFollow(); if (S().viewAs) UI.setViewAs(null); B.focusToken(sc.id, t.id); } }),
+        btnI('eye', B.follow && B.follow.tokenId === t.id ? 'Seguindo' : 'Seguir', { class: 'btn small' + (B.follow && B.follow.tokenId === t.id ? ' on' : ''), title: 'A câmera acompanha o token (inclusive pelos portais). Esc para', onclick: () => { closePartyMenu(); if (B.follow && B.follow.tokenId === t.id) B.stopFollow(); else { if (S().viewAs && S().viewAs !== pid) UI.setViewAs(null); B.startFollow(pid, sc.id, t.id); } } })))
+        : h('p', { class: 'hint', style: { margin: 0 } }, 'Nenhum token deste jogador na cena dele.'),
+      S().viewAs === pid
+        ? btnI('scan-eye', 'Voltar a ser mestre', { class: 'btn small primary block', onclick: () => { closePartyMenu(); UI.setViewAs(null); } })
+        : btnI('scan-eye', 'Ver como ' + p.name, { class: 'btn small block', title: 'Sua tela fica igual à dele: visão, luz, névoa e som', onclick: () => { closePartyMenu(); UI.setViewAs(pid); const T = list[0]; if (T && sc) setTimeout(() => B.focusToken(sc.id, T.id), 0); } }),
+      list.length ? '' : h('p', { class: 'hint', style: { margin: 0 } }, 'Sem token na cena: ' + p.name + ' não vê nada do mapa.'),
+      btnI('trash-2', 'Remover da mesa', { class: 'btn small danger block', onclick: () => { closePartyMenu(); UI.removePlayer(pid); } }));
+    document.body.append(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = Math.max(10, r.left - m.offsetWidth - 10) + 'px';
+    m.style.top = U.clamp(r.top + r.height / 2 - m.offsetHeight / 2, 10, window.innerHeight - m.offsetHeight - 10) + 'px';
+    partyMenu = m;
+  }
+  document.addEventListener('pointerdown', (e) => { if (partyMenu && !e.target.closest('.party-menu, .party-av')) closePartyMenu(); });
+  function renderParty() {
+    const col = $('#party-col'), bar = $('#follow-bar'), B = App.Board, st = S().state;
+    if (!col || !bar) return;
+    const gm = S().isGM() && st, players = gm ? Object.entries(st.players) : [];
+    // barra "Seguindo"
+    const F = B.follow;
+    const fsig = F ? F.name + F.pid : '';
+    if (bar._sig !== fsig) {
+      bar._sig = fsig; bar.innerHTML = '';
+      bar.hidden = !F;
+      if (F) bar.append(ic('eye'), h('span', {}, 'Seguindo ', h('b', {}, F.name || 'token')), h('button', { class: 'btn primary small', title: 'Esc', onclick: () => B.stopFollow() }, 'Parar'));
+    }
+    if (!gm || !players.length) { col.hidden = true; return; }
+    const play = UI.mode === 'play', open = play || UI.partyOpen, online = new Set(S().online);
+    const sig = JSON.stringify([play, open, S().viewAs, F && F.tokenId, [...online], players.map(([pid, p]) => { const { sc, list } = partyTokens(pid); return [pid, p.name, p.color, sc && sc.id, sc && sc.name, list.map((t) => [t.id, t.name, t.img, (S().actorOf(t) || {}).img])]; })]);
+    col.hidden = false;
+    if (col._sig === sig) return;
+    col._sig = sig;
+    col.innerHTML = '';
+    col.classList.toggle('closed', !open);
+    if (!play) col.append(iconBtn(open ? 'chevron-right' : 'users', open ? 'Recolher os jogadores' : 'Jogadores: ir até, seguir ou ver como', () => { UI.partyOpen = !UI.partyOpen; closePartyMenu(); renderParty(); }, { class: 'icon-btn party-toggle' }));
+    if (!open) return;
+    for (const [pid, p] of players) {
+      const { sc, list } = partyTokens(pid), t = list[0], a = t && S().actorOf(t);
+      const src = App.Images.src((t && t.img) || (a && a.img));
+      const col2 = U.safeColor(p.color, '#8b72f0'), on = online.has(pid);
+      const av = h('button', { class: 'party-av' + (t ? '' : ' none') + (S().viewAs === pid ? ' viewing' : '') + (F && F.pid === pid ? ' following' : ''),
+        title: p.name + (t ? ' · ' + t.name : '') + (sc ? ' · ' + sc.name : '') + (on ? '' : ' (desconectado)'),
+        style: { borderColor: col2, background: src ? `center/cover url(${src})` : `radial-gradient(circle at 35% 30%, ${col2}, #1b1730)` },
+        onclick: (e) => partyMenuFor(pid, e.currentTarget),
+        ondblclick: () => { closePartyMenu(); if (t && sc) { B.stopFollow(); if (S().viewAs) UI.setViewAs(null); B.focusToken(sc.id, t.id); } } },
+      src ? '' : h('span', {}, initials((t && t.name) || p.name, 1)), h('i', { class: 'party-dot' + (on ? ' on' : '') }));
+      col.append(av);
+    }
+  }
+  UI.renderParty = renderParty;
+
   function renderBoardActions() {
     const box = $('#board-actions'), gm = S().gmView(), B = App.Board, sc = S().currentScene();
     const sig = [gm, B.style.snap, !!sc].join();
@@ -827,7 +915,9 @@
           list.append(h('label', { class: 'move-row' + (locked ? ' locked' : '') },
             h('input', { type: 'checkbox', checked: chosen.has(pid), disabled: locked, onchange: (e) => { if (e.target.checked) chosen.add(pid); else chosen.delete(pid); } }),
             avatar({ name: p.name, color: p.color }, 26),
-            h('span', { class: 'grow' }, h('b', {}, p.name), h('small', {}, (online.has(pid) ? '' : 'desconectado · ') + where(pid)))));
+            h('span', { class: 'grow' }, h('b', {}, p.name), h('small', {}, (online.has(pid) ? '' : 'desconectado · ') + where(pid))),
+            // Plano 37: tirar da mesa (pode entrar de novo com o código)
+            iconBtn('trash-2', 'Remover ' + p.name + ' da mesa', (e) => { e.preventDefault(); if (UI.removePlayer(pid)) { players.splice(players.findIndex(([x]) => x === pid), 1); chosen.delete(pid); draw(); } })));
         }
       };
       draw();
@@ -1541,7 +1631,7 @@
       h('p', { class: 'hint', style: { margin: 0 } }, OD ? 'As portas sugeridas aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta). Onde já existe parede, a porta abre a passagem nela.' : 'As sugestões aparecem tracejadas no mapa. Clique numa para tirar (ou pôr de volta); Shift + arrastar tira várias. Depois ajuste com o lápis e a borracha.'),
       OD ? '' : h('span', { class: 'eyebrow' }, '1. O que separa as salas'),
       OD ? '' : h('div', { class: 'seg scan-by' }, [['outside', 'Lado de fora'], ['floor', 'Chão das salas'], ['wall', 'Cor da parede'], ['dark', 'Escuro']].map(([k, l]) =>
-        h('button', { class: o.by === k ? 'on' : '', onclick: () => set({ by: k, seeds: k === o.by ? o.seeds : [] }) }, l))),
+        h('button', { class: o.by === k ? 'on' : '', onclick: () => set(Object.assign({ by: k, seeds: k === o.by ? o.seeds : [] }, k === 'floor' && k !== o.by && !o.smooth ? { smooth: 0.2, sens: 0.35 } : {})) }, l))),
       OD ? '' : h('p', { class: 'hint', style: { margin: 0 } }, BY[o.by]),
       !OD && o.by !== 'dark' ? h('div', { class: 'row' }, h('div', { class: 'grow scan-seeds' }, o.seeds.length ? o.seeds.map(swatch) : h('span', { class: 'ta-target none' }, 'Nenhum clique ainda')),
         btnI('map-pin', o.seeds.length ? 'Mais' : 'Clicar no mapa', { class: 'btn small primary', onclick: pickSeeds }),
@@ -2647,7 +2737,7 @@
   function portalHud(hud, empty, sc, tr) {
     if (empty) empty.hidden = true;
     const TG = App.Triggers, st = S().state, act = TG.portalAct(tr) || {}, d = TG.portalDest(sc, tr), partner = TG.portalPartner(sc, tr);
-    const sig = JSON.stringify(['portal', UI.mode, tr, partner && partner.tr, st.sceneOrder.map((id) => [id, st.scenes[id].name, st.scenes[id].parent])]);
+    const sig = JSON.stringify(['portal', UI.mode, tr, partner && partner.tr, d && d.area, st.sceneOrder.map((id) => [id, st.scenes[id].name, st.scenes[id].parent]), tr.mark && tr.mark.img && !!App.Images.src(tr.mark.img)]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -2655,12 +2745,33 @@
       const upd = (patch) => S().dispatch({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch });
       const far = d && d.scene.id !== sc.id;
       const cellTxt = (x, y) => { const g = d.scene.grid; return '(' + (Math.floor(x / g) + 1) + ', ' + (Math.floor(y / g) + 1) + ')'; };
-      const where = !d ? 'A cena de destino não existe mais' : d.center ? (far ? 'Chega no meio do mapa: escolha o ponto' : 'Escolha o ponto de chegada') : 'Chega em ' + cellTxt(d.x, d.y) + (partner ? ', no portal de volta' : '');
-      const pick = () => {
-        const done = (p) => TG.setPortalDest(sc.id, tr.id, { x: p.x, y: p.y });
-        if (far) B.pickInScene(d.scene.id, done, { trigger: tr.id });
-        else B.pick('point', done, null, { exclude: tr.id });
+      // Plano 35: a chegada é uma área desenhada; cada um cai num quadrado livre sorteado dentro dela
+      const nCells = d && d.area ? TG.areaCells(d.scene, d.area) : 0;
+      const where = !d ? 'A cena de destino não existe mais' : d.center ? (far ? 'Chega no meio do mapa: desenhe a área de chegada' : 'Desenhe a área de chegada') : d.area ? 'Chega num lugar sorteado dentro da área' + (partner ? ' do portal de volta' : '') + ' (' + nCells + (nCells === 1 ? ' quadrado)' : ' quadrados)') : 'Chega em ' + cellTxt(d.x, d.y);
+      const pick = () => { if (d) B.drawArea(d.scene.id, (geo) => TG.setPortalArea(sc.id, tr.id, geo), { trigger: tr.id }); };
+      // marcador para os jogadores
+      const mk = TG.newMark(tr.mark || {});
+      const setMark = (patch, both) => {
+        upd({ mark: Object.assign({}, mk, patch) });
+        // ligar ou desligar vale para a volta também (com o ícone par)
+        if (both && partner) { const pm = TG.newMark(partner.tr.mark || {}); S().dispatch({ type: 'trigger.update', sceneId: partner.scene.id, id: partner.tr.id, patch: { mark: Object.assign(pm, { show: patch.show }, partner.tr.mark ? {} : { icon: TG.MARK_PAIR[mk.icon] || mk.icon, color: mk.color }) } }); }
       };
+      const iconBtns = TG.MARK_ICONS.map(([k, icn, l]) => h('button', { class: 'mk-icon' + (mk.icon === k ? ' on' : ''), title: l, onclick: () => setMark({ icon: k }) }, ic(icn)))
+        .concat([h('button', { class: 'mk-icon' + (mk.icon === 'img' ? ' on' : ''), title: 'Enviar uma imagem do computador', onclick: async () => {
+          const file = await U.pickFile('image/*');
+          if (!file) return;
+          const im = await App.Images.add(file, 256);
+          if (im) setMark({ icon: 'img', img: im.id });
+        } }, mk.icon === 'img' && mk.img && App.Images.src(mk.img) ? h('img', { src: App.Images.src(mk.img), alt: '' }) : ic('upload'))]);
+      const markBox = h('div', { class: 'hud-section' },
+        h('span', { class: 'eyebrow' }, 'Para os jogadores'),
+        h('label', { class: 'check', title: 'Pontilhado brilhante e um ícone no mapa. Cada jogador só vê o que o token dele enxerga' }, h('input', { type: 'checkbox', checked: !!mk.show, onchange: (e) => setMark({ show: e.target.checked }, true) }), 'Mostrar aos jogadores' + (partner ? ' (vale para a volta também)' : '')),
+        mk.show ? h('div', { class: 'seg' }, [['area', 'Área'], ['line', 'Linha']].map(([k, l]) => h('button', { class: mk.style === k ? 'on' : '', title: k === 'area' ? 'O pontilhado preenche a borda da área inteira' : 'Você desenha onde fica a linha (ex.: na soleira da porta)', onclick: () => { if (k === 'line' && !mk.line) B.drawMarkLine((line) => setMark({ style: 'line', line })); else setMark({ style: k }); } }, l))) : '',
+        mk.show && mk.style === 'line' ? h('div', { class: 'row' }, h('span', { class: 'grow hint', style: { margin: 0 } }, mk.line ? 'Linha desenhada.' : 'Desenhe a linha.'), btnI('pen-line', mk.line ? 'Desenhar de novo' : 'Desenhar a linha', { class: 'btn small', onclick: () => B.drawMarkLine((line) => setMark({ style: 'line', line })) })) : '',
+        mk.show ? h('div', { class: 'mk-icons' }, iconBtns) : '',
+        mk.show ? h('div', { class: 'row', style: { gap: '8px' } }, h('span', { class: 'hint grow', style: { margin: 0 } }, 'Cor'), h('input', { type: 'color', value: U.safeColor(mk.color, '#38bdf8'), onchange: (e) => setMark({ color: e.target.value }) })) : '',
+        mk.show ? h('input', { class: 'hud-input', value: mk.label || '', placeholder: 'Nome para os jogadores (opcional, ex.: Andar de baixo)', maxlength: 40, onchange: (e) => setMark({ label: e.target.value.trim() }) }) : '',
+        mk.show ? h('p', { class: 'hint', style: { margin: 0 } }, 'O nome aparece quando o jogador passa o mouse no ícone. Cada um só vê o marcador onde o token dele enxerga.') : '');
       hud.append(
         h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble portal' + (on ? ' on' : '') }, ic('sparkles')),
           h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: tr.name || '', placeholder: 'Nome', onchange: (e) => upd({ name: e.target.value.trim() || 'Portal' }) }),
@@ -2670,7 +2781,7 @@
           h('select', { value: act.sceneId && act.sceneId !== sc.id ? act.sceneId : '', onchange: (e) => TG.setPortalDest(sc.id, tr.id, { sceneId: e.target.value || null }) },
             UI.portalTargets(sc).map(([v, l]) => h('option', { value: v }, l))),
           h('div', { class: 'row' }, h('span', { class: 'grow hint', style: { margin: 0 } }, where),
-            btnI('map-pin', 'Escolher no mapa', { class: 'btn small', title: far ? 'Sua tela vai para a outra cena; clique no ponto e ela volta' : 'Clique no ponto de chegada', onclick: pick }))),
+            btnI('pencil', 'Desenhar a chegada', { class: 'btn small', title: (far ? 'Sua tela vai para a outra cena; desenhe a área e ela volta. ' : '') + 'Forma nas opções da ferramenta: Retângulo, Círculo ou Polígono', onclick: pick }))),
         h('div', { class: 'hud-section' },
           h('label', { class: 'check', title: 'Cria um portal no ponto de chegada que traz de volta para cá' },
             h('input', { type: 'checkbox', checked: !!partner, disabled: !d, onchange: (e) => { if (e.target.checked) TG.linkPortal(sc.id, tr.id); else TG.unlinkPortal(sc.id, tr.id); } }), 'Ida e volta'),
@@ -2679,7 +2790,8 @@
           h('select', { value: tr.who || 'any', onchange: (e) => upd({ who: e.target.value }) }, TG.WHO.filter(([k]) => k !== 'pick').map(([k, l]) => h('option', { value: k }, l))),
           h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, onchange: (e) => upd({ enabled: e.target.checked }) }), 'Ligado (desligue para bloquear a passagem)'),
           h('label', { class: 'check', title: 'Brilho azul na saída e na chegada, para todos que veem' }, h('input', { type: 'checkbox', checked: tr.fx !== false, onchange: (e) => { upd({ fx: e.target.checked }); if (partner) S().dispatch({ type: 'trigger.update', sceneId: partner.scene.id, id: partner.tr.id, patch: { fx: e.target.checked } }); } }), 'Efeito de brilho ao passar' + (partner ? ' (vale para a volta também)' : ''))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem pisa na área vai para o destino. Em outra cena, quem controla o token vai junto; o resto do grupo fica onde está. Os jogadores não veem o portal.'),
+        markBox,
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem pisa na área vai para o destino. Em outra cena, quem controla o token vai junto; o resto do grupo fica onde está.'),
         h('div', { class: 'hud-btns' },
           far ? btnI('map', 'Ir para o destino', { title: 'Abre a outra cena na sua tela (os jogadores não mudam)', onclick: () => { S().viewSceneId = d.scene.id; S().emit('local'); } }) : '',
           h('span', { class: 'grow' }),

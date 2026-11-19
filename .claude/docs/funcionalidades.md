@@ -206,3 +206,15 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - "Abrir mesa online" e "Preparar tabuleiro" abrem a tela **Histórias**: um cartão por mesa preparada (imagem, nome, "há X", cenas) e **+ Nova história** no fim; a última mexida primeiro.
 - Cartão: Renomear, Trocar imagem, Usar o mapa da cena, Duplicar, Exportar, Apagar. Imagem padrão = miniatura do mapa da cena do grupo.
 - Importar campanha dentro da mesa: criar história nova ou substituir a atual. Voltar ao menu (mestre) volta para a tela de Histórias.
+
+## Portal: chegada desenhada e marcador (Plano 35)
+- "Desenhar a chegada" (`B.drawArea`): o próximo desenho da ferramenta Portal vira a área de chegada (`T.setPortalArea`). Com volta, muda a forma da volta; sem volta, `act.area`.
+- Chegada: quadrado livre sorteado dentro da área (`T.freeSpotIn`).
+- Marcador (`tr.mark`): Mostrar aos jogadores, estilo Área ou Linha, ícone (8 prontos ou imagem), cor, nome com o mouse em cima. Desenhado embaixo dos tokens (escuridão e névoa escondem o que o jogador não vê).
+
+## Acompanhar os jogadores (Plano 36)
+- Coluna de jogadores no canto direito do mapa (só o mestre; recolhida no Editar): Ir até (`B.focusToken`), Seguir (`B.startFollow`, acompanha inclusive pelos portais; Esc para), Ver como. Dois cliques = Ir até.
+
+## Remover jogador e sem token (Plano 37)
+- "Remover da mesa" (coluna de jogadores e Mover jogadores): `player.remove` + `App.Net.kick`; fichas e tokens dele ficam com o mestre; pode entrar de novo com o código.
+- Jogador sem token visível que controla na cena dele (escondido não conta) não vê nada do mapa (tela escura com aviso), com ou sem iluminação.

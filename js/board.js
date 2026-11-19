@@ -360,6 +360,7 @@
 
   // ---------- render ----------
   B.render = function () {
+    if (B.follow) { try { followStep(); } catch (e) { console.warn(e); } }
     const ctx = B.ctx;
     if (!ctx || !B.w) return;
     const { dpr, cam } = B;
@@ -383,6 +384,18 @@
       if (B.afterScene && B.afterScene.sceneId === sc.id) { if (B.afterScene.trigger) B.selectedTrigger = B.afterScene.trigger; if (B.afterScene.cam) Object.assign(B.cam, B.afterScene.cam); B.afterScene = null; } }
 
     const g = sc.grid, W = sc.cols * g, H = sc.rows * g, gm = S().gmView();
+    // Plano 37: jogador sem token na cena (ou com o token escondido pelo mestre) não vê nada do mapa
+    if (!gm && !Object.values(sc.tokens).some((t) => !t.hidden && S().canControl(t))) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#07060c'; ctx.fillRect(0, 0, B.w, B.h);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#d8d3ea'; ctx.font = '600 18px ' + SANS;
+      ctx.fillText('Você ainda não tem um personagem nesta cena.', B.w / 2, B.h / 2 - 12);
+      ctx.fillStyle = '#8f8d9a'; ctx.font = '14px ' + SANS;
+      ctx.fillText('Peça ao mestre para colocar o seu token.', B.w / 2, B.h / 2 + 16);
+      App.UI && App.UI.updateHud(null, null);
+      return;
+    }
     ctx.setTransform(dpr * cam.z, 0, 0, dpr * cam.z, -cam.x * cam.z * dpr, -cam.y * cam.z * dpr);
 
     const L = B.layers;
@@ -443,6 +456,7 @@
     const props = L.props ? (sc.props || []).filter((p) => gm || !p.hidden) : [];
     const items = tokens.map((t) => ({ t, z: t.z || 0, k: 1 })).concat(props.map((p) => ({ p, z: p.z || 0, k: 0 })))
       .sort((a, b) => a.z - b.z || a.k - b.k);
+    if (L.triggers || asPlayer) drawPortalMarks(ctx, sc);
     for (const it of items) {
       if (it.p) { drawProp(ctx, it.p); continue; }
       const t = it.t;
@@ -495,6 +509,7 @@
     if (B.ruler) drawPath(ctx, sc, [B.ruler.a].concat(B.ruler.points || [], [B.ruler.b]));
     drawRemote(ctx, sc, tokens);
     drawWarps(ctx);
+    drawMarkLabel(ctx, sc, viewers);
     if (B.fogDraft) {
       const r = norm(B.fogDraft);
       ctx.save();
@@ -1119,6 +1134,13 @@
   const draftRadius = (sc, d) => Math.max(0.5, Math.round((Math.hypot(d.p.x - d.x, d.p.y - d.y) / sc.grid) * 2) / 2);
   B.addTrigger = function (sc, part) {
     if (!sc || !S().gmView()) return null;
+    if (B.areaPick && B.areaPick.sceneId === sc.id) {
+      const P = B.areaPick, geo = Object.assign({ shape: 'circle', x: 0, y: 0, r: 0.5 }, part);
+      if (geo.shape !== 'circle' && geo.pts) { const c = TG().center(geo); geo.x = Math.round(c.x); geo.y = Math.round(c.y); }
+      B.areaPick = null;
+      P.cb(geo); P.done();
+      return null;
+    }
     const wantPortal = part && 'portal' in part ? !!part.portal : B.tool === 'portal';
     const tr = wantPortal ? TG().newPortal(sc, part) : TG().newTrigger(sc, Object.assign({}, part, { portal: undefined }));
     if (tr.shape !== 'circle' && tr.pts) { const c = TG().center(tr); tr.x = Math.round(c.x); tr.y = Math.round(c.y); }
@@ -2579,6 +2601,172 @@
    * Escolher o ponto de chegada de um portal em outra cena: a tela do mestre vai para a cena de destino,
    * ele clica no ponto e volta para onde estava, com o portal selecionado.
    */
+  /*
+   * Desenhar uma área com a ferramenta Portal (Plano 35: área de chegada). Em outra cena, a tela vai para lá e volta.
+   * cb(geo) recebe {shape, x, y, r, pts}; Esc cancela.
+   */
+  B.drawArea = function (destId, cb, back) {
+    const st = S().state, here = S().currentScene();
+    if (!st.scenes[destId] || !here) return;
+    const camBack = { x: B.cam.x, y: B.cam.y, z: B.cam.z }, toolBack = B.tool, far = destId !== here.id;
+    const done = () => {
+      B.setTool(toolBack === 'portal' ? 'portal' : toolBack);
+      if (far) { B.afterScene = Object.assign({ sceneId: here.id, cam: camBack }, back || {}); S().viewSceneId = here.id === st.activeSceneId ? null : here.id; S().emit('local'); }
+      else if (back && back.trigger) { B.selectedTrigger = back.trigger; if (App.UI) App.UI.refresh(); }
+      B.requestRender();
+    };
+    B.setTool('portal');
+    B.areaPick = { sceneId: destId, cb, done };
+    if (far) { S().viewSceneId = destId; S().emit('local'); }
+    U.toast('Desenhe a área de chegada (Retângulo, Círculo ou Polígono nas opções da ferramenta). Esc cancela.', 'info', 5000);
+  };
+  B.cancelArea = function () { const P = B.areaPick; if (!P) return; B.areaPick = null; P.done(); };
+  // Linha do marcador: dois cliques (encaixam no meio-quadrado)
+  B.drawMarkLine = function (cb, back) {
+    const pts = [], half = () => (S().currentScene() || {}).grid / 2 || 35;
+    const snap = (p) => ({ x: Math.round(p.x / half()) * half(), y: Math.round(p.y / half()) * half() });
+    const second = () => B.pick('point', (p) => { pts.push(snap(p)); }, () => { if (pts.length === 2) cb(pts.map((q) => [q.x, q.y])); if (back) back(); }, { raw: true });
+    B.pick('point', (p) => { pts.push(snap(p)); setTimeout(second, 0); }, () => { if (!pts.length && back) back(); }, { raw: true });
+    U.toast('Clique no começo e no fim da linha. Esc cancela.', 'info', 4000);
+  };
+
+  // ---------- marcador do portal para os jogadores (Plano 35) ----------
+  // Pontilhado brilhante (na área inteira ou numa linha) e um ícone no meio. Desenhado embaixo dos tokens: a escuridão
+  // e a névoa por cima escondem o que o jogador não vê. O nome aparece com o mouse em cima do ícone.
+  const markIcons = new Map();
+  function markIcon(key, color) {
+    const k = key + color;
+    let e = markIcons.get(k);
+    if (!e) {
+      const name = (TG().MARK_ICONS.find((x) => x[0] === key) || TG().MARK_ICONS[0])[1];
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + App.Icons.raw(name) + '</svg>';
+      const im = new Image();
+      im.onload = () => B.requestRender();
+      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      e = im; markIcons.set(k, e);
+    }
+    return e.complete && e.naturalWidth ? e : null;
+  }
+  // Pontos ao longo da borda da área (ou da linha), um a cada ~0,3 quadrado
+  function markDots(sc, tr) {
+    const g = sc.grid, step = g * 0.24, out = [], mk = tr.mark;
+    const seg = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / step)); for (let i = 0; i < n; i++) out.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]); };
+    if (mk.style === 'line' && mk.line && mk.line.length === 2) { seg(mk.line[0], mk.line[1]); out.push(mk.line[1].slice()); return out; }
+    if (tr.shape === 'circle') { const R = (Number(tr.r) || 0.5) * g, n = Math.max(8, Math.round((2 * Math.PI * R) / step)); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push([tr.x + Math.cos(a) * R, tr.y + Math.sin(a) * R]); } return out; }
+    const P = tr.pts || [];
+    for (let i = 0; i < P.length; i++) seg(P[i], P[(i + 1) % P.length]);
+    return out;
+  }
+  function markSpot(tr) {
+    const mk = tr.mark;
+    if (mk.style === 'line' && mk.line && mk.line.length === 2) return { x: (mk.line[0][0] + mk.line[1][0]) / 2, y: (mk.line[0][1] + mk.line[1][1]) / 2 };
+    return TG().center(tr);
+  }
+  B.markSpot = markSpot;
+  let markTick = null;
+  function drawPortalMarks(ctx, sc) {
+    const list = (sc.triggers || []).filter((t) => t.portal && t.mark && t.mark.show && t.enabled !== false);
+    if (!list.length) return;
+    const g = sc.grid, now = performance.now() / 1000;
+    for (const tr of list) {
+      const mk = tr.mark, col = U.safeColor(mk.color, PORTAL_C), c = markSpot(tr);
+      ctx.save();
+      // área: um véu bem leve por dentro
+      if (mk.style !== 'line') { trigPath(ctx, sc, tr); ctx.globalAlpha = 0.09; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.fillStyle = col;
+      markDots(sc, tr).forEach(([x, y], i) => {
+        ctx.globalAlpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(now * 2.4 + i * 0.75));
+        ctx.beginPath(); ctx.arc(x, y, g * 0.055, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1; ctx.shadowBlur = 14;
+      // ícone numa bolinha
+      const R = g * 0.3;
+      ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.fillStyle = 'rgba(10, 14, 24, .82)'; ctx.fill();
+      ctx.shadowBlur = 0; ctx.lineWidth = g * 0.035; ctx.strokeStyle = col; ctx.stroke();
+      const img = mk.icon === 'img' && mk.img ? App.Images.get(mk.img) : markIcon(mk.icon || 'portal', col);
+      if (img) {
+        ctx.save(); ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.92, 0, Math.PI * 2); ctx.clip();
+        const sz = mk.icon === 'img' ? R * 2 : R * 1.15;
+        ctx.drawImage(img, c.x - sz / 2, c.y - sz / 2, sz, sz);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+    // os pontos piscam devagar: redesenha umas 8 vezes por segundo enquanto há marcador na cena
+    if (!markTick) markTick = setTimeout(() => { markTick = null; B.requestRender(); }, 120);
+  }
+  // Nome do portal com o mouse em cima do ícone (o jogador só vê se o ponto está à vista)
+  B.markHover = null;
+  function markAt(sc, p) {
+    const g = sc.grid;
+    return (sc.triggers || []).find((t) => t.portal && t.mark && t.mark.show && t.enabled !== false && t.mark.label && Math.hypot(p.x - markSpot(t).x, p.y - markSpot(t).y) <= g * 0.34) || null;
+  }
+  function drawMarkLabel(ctx, sc, viewers) {
+    const tr = B.markHover && (sc.triggers || []).find((t) => t.id === B.markHover);
+    if (!tr || !tr.mark || !tr.mark.show || !tr.mark.label) return;
+    const c = markSpot(tr), gm = S().gmView();
+    if (!gm && (fogCovers(sc, c) || (viewers && !LT().pointVisible(sc, c, viewers, posOf)))) return;
+    const z = B.cam.z, col = U.safeColor(tr.mark.color, PORTAL_C), label = String(tr.mark.label).slice(0, 40);
+    ctx.save();
+    ctx.font = '600 ' + 13 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(label).width, y = c.y - sc.grid * 0.3 - 18 / z;
+    roundRect(ctx, c.x - tw / 2 - 10 / z, y - 12 / z, tw + 20 / z, 24 / z, 12 / z);
+    ctx.fillStyle = 'rgba(10, 14, 24, .9)'; ctx.fill();
+    ctx.lineWidth = 1.2 / z; ctx.strokeStyle = col; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.fillText(label, c.x, y + 0.5 / z);
+    ctx.restore();
+  }
+
+  // ---------- acompanhar os jogadores (Plano 36) ----------
+  // Câmera com o token no meio da tela (z = zoom atual)
+  function camOn(sc, t) { const s2 = ((t.size || 1) * sc.grid) / 2, z = B.cam.z; return { x: t.x + s2 - B.w / 2 / z, y: t.y + s2 - B.h / 2 / z, z }; }
+  // Ir até: a tela do mestre abre a cena do token (o grupo não muda) e centraliza nele
+  B.focusToken = function (sceneId, tokenId) {
+    const st = S().state, dsc = st && st.scenes[sceneId], t = dsc && dsc.tokens[tokenId];
+    if (!t) return false;
+    const here = S().currentScene();
+    if (here && here.id === sceneId) { Object.assign(B.cam, camOn(dsc, t)); B.requestRender(); return true; }
+    B.afterScene = { sceneId, cam: camOn(dsc, t) };
+    if (!S().viewAs) { S().viewSceneId = sceneId === st.activeSceneId ? null : sceneId; S().emit('local'); }
+    B.requestRender();
+    return true;
+  };
+  // Seguir: a câmera acompanha o token (andou, passou pelo portal, mudou de cena). Pelo jogador e pela ficha,
+  // porque o portal para outra cena cria um token novo (outro id, mesma ficha)
+  B.follow = null;
+  B.startFollow = function (pid, sceneId, tokenId) {
+    const t = S().state.scenes[sceneId] && S().state.scenes[sceneId].tokens[tokenId];
+    if (!t) return;
+    B.follow = { pid, actorId: t.actorId || null, tokenId, name: t.name, key: null };
+    B.focusToken(sceneId, tokenId);
+    if (App.UI) App.UI.refresh();
+  };
+  B.stopFollow = function () { if (!B.follow) return; B.follow = null; if (App.UI) App.UI.refresh(); };
+  function followTarget() {
+    const F = B.follow, st = S().state;
+    if (!F || !st) return null;
+    const sid = F.pid ? S().sceneIdOf(F.pid) : null, order = sid ? [sid].concat(st.sceneOrder.filter((x) => x !== sid)) : st.sceneOrder;
+    for (const id of order) {
+      const sc = st.scenes[id];
+      if (!sc) continue;
+      const t = sc.tokens[F.tokenId] || (F.actorId && Object.values(sc.tokens).find((x) => x.actorId === F.actorId && (!F.pid || S().canControl(x, F.pid))));
+      if (t) return { sc, t };
+    }
+    return null;
+  }
+  function followStep() {
+    const T = followTarget();
+    if (!T) return;
+    const F = B.follow, here = S().currentScene();
+    F.tokenId = T.t.id;
+    if (!here || here.id !== T.sc.id) {
+      if (!S().viewAs) { B.afterScene = { sceneId: T.sc.id, cam: camOn(T.sc, T.t) }; S().viewSceneId = T.sc.id === S().state.activeSceneId ? null : T.sc.id; S().emit('local'); F.key = T.sc.id + ':' + T.t.x + ',' + T.t.y; }
+      return;
+    }
+    const key = T.sc.id + ':' + T.t.x + ',' + T.t.y;
+    if (key !== F.key) { F.key = key; Object.assign(B.cam, camOn(T.sc, T.t)); }
+  }
+
   B.pickInScene = function (destId, cb, back) {
     const st = S().state, here = S().currentScene();
     if (!st.scenes[destId] || !here) return;
@@ -2968,6 +3156,8 @@
       // nota sob o mouse: mostra o começo do texto
       const sc0 = S().currentScene(), hn = sc0 && !B.noteDrag ? noteAt(sc0, B.mouseWorld) : null, hid = hn ? hn.id : null;
       if (hid !== B.hoverNote) { B.hoverNote = hid; B.requestRender(); }
+      const hm = sc0 ? markAt(sc0, B.mouseWorld) : null, hmid = hm ? hm.id : null;
+      if (hmid !== B.markHover) { B.markHover = hmid; B.requestRender(); }
     }
     for (const P of [B.roomPoly, B.lightPoly, B.trigPoly]) {
       if (!P || e.target !== B.canvas) continue;
@@ -3365,6 +3555,8 @@
       if (e.key === 'Escape') { B.roomPoly = null; B.requestRender(); return; }
       if (e.key === 'Backspace') { B.roomPoly.pts.pop(); if (!B.roomPoly.pts.length) B.roomPoly = null; B.requestRender(); return; }
     }
+    if (B.follow && e.key === 'Escape' && !B.picking && !B.areaPick && !B.drag) { B.stopFollow(); U.toast('Parou de seguir.'); return; }
+    if (B.areaPick && e.key === 'Escape') { if (B.trigPoly) { B.trigPoly = null; } B.cancelArea(); U.toast('Cancelado.'); return; }
     if (B.picking && e.key === 'Escape') { const multi = B.picking.multi; B.cancelPick(); U.toast(multi ? 'Pronto.' : 'Escolha cancelada.'); return; }
     if (B.picking && B.picking.multi && e.key === 'Enter') { B.cancelPick(); U.toast('Pronto.'); return; }
     if (B.hurtEdit && e.key === 'Escape') { const he = B.hurtEdit; B.hurtEdit = null; B.hurtDraft = null; B.canvas.style.cursor = CURSORS[B.tool] || 'crosshair'; if (he.onEnd) he.onEnd(); B.requestRender(); return; }
