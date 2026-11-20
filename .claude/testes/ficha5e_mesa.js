@@ -73,7 +73,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     win = UI_win(a);
     ok(win.querySelector('.sheet-footer') && ![...win.querySelectorAll('h4')].some((h) => h.textContent === 'Barras'), 'Configurar sem barras genéricas');
     // Exportar/importar pela mesa
-    const bun = App.Storage.actorBundle(a.id);
+    const bun = await App.Storage.actorBundle(a.id);
     ok(bun.actor.sistema === '5e' && bun.actor.dnd5e.classes[0].name === 'Fighter', 'exportar da mesa');
     if (location.hash === '#shot') { win.querySelector('[data-tab5="principal"]').click(); await W(300); }
     ok(!/\bnull\b|\bundefined\b|\bNaN\b/.test(UI_win(a).innerText), 'sem texto estranho');

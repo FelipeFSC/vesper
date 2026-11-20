@@ -1,4 +1,6 @@
 'use strict';
+import { flushSync, mount, unmount } from 'svelte';
+import AssistantSteps from '../src/ui/AssistantSteps.svelte';
 /*
  * Assistente de D&D 5e (Plano 51, parte B), no modelo do Charactermancer do Roll20: cria a ficha 5e pelos cadastros e sobe de nível.
  *   App.Assist5e.open({ actor, onDone(res) })   res = { d: dnd5e pronto, name }
@@ -24,7 +26,7 @@
   // append que ignora vazios (o append nativo escreve "null")
   const put = (el, ...kids) => { el.append(...kids.flat(Infinity).filter((x) => x != null && x !== false && x !== '')); return el; };
 
-  const A5 = {};
+  const A5 = App.Assist5e || {};
   App.Assist5e = A5;
   const STEPS = [['regras', 'settings-2', 'Regras'], ['classe', 'shield', 'Classe'], ['especie', 'footprints', 'Espécie'], ['antecedente', 'scroll-text', 'Antecedente'],
     ['atributos', 'dumbbell', 'Atributos'], ['escolhas', 'list-ordered', 'Escolhas'], ['magias', 'sparkles', 'Magias'], ['equip', 'backpack', 'Equipamento'], ['resumo', 'check', 'Resumo']];
@@ -494,8 +496,17 @@
       h('div', { class: 'win-body' }, h('p', { class: 'muted' }, 'Abrindo os cadastros…')));
     back.append(box);
     document.body.append(back);
-    function close() { back.remove(); A5.cur = null; }
+    let cancelled = false;
+    function close() {
+      cancelled = true;
+      if (A5.cur?.back === back) {
+        if (A5.cur.steps) void unmount(A5.cur.steps);
+        A5.cur = null;
+      }
+      back.remove();
+    }
     try { await loadAll(false); } catch (e) { box.querySelector('.win-body').textContent = 'Não consegui abrir os cadastros: ' + e.message; return; }
+    if (cancelled) return;
     A5.actor = opts.actor || null;
     A5.st = fresh(opts.actor);
     A5.onDone = opts.onDone;
@@ -516,8 +527,14 @@
     const steps = STEPS.filter(([id]) => !(st.mode === 'up' && (id === 'especie' || id === 'antecedente' || id === 'equip')) && !(id === 'magias' && !casterInfo() && !needs().some((c) => c.type === 'spell')));
     if (!steps.some((s) => s[0] === st.tab)) st.tab = steps[0][0];
     const body = h('div', { class: 'win-body a5-body' });
-    put(body, h('nav', { class: 'a5-steps' }, steps.map(([id, icon, label], i) => h('button', { class: (st.tab === id ? 'on' : '') + (W[id] ? ' warn' : ''), 'data-step': id, onclick: () => set((s) => { s.tab = id; }, false) },
-      h('span', { class: 'a5-n' }, String(i + 1)), ic(icon), h('span', { class: 'grow' }, label), W[id] && id !== 'resumo' ? ic('triangle-alert', 'a5-w') : id !== 'resumo' ? ic('check', 'a5-ok') : null))));
+    if (A5.cur.steps) void unmount(A5.cur.steps);
+    const stepIcons = steps.map(([id, icon, label]) => ({
+      id, label, icon: App.Icons.svg(icon), warn: !!W[id],
+      status: id === 'resumo' ? '' : W[id] ? App.Icons.svg('triangle-alert', 'a5-w') : App.Icons.svg('check', 'a5-ok'),
+    }));
+    A5.cur.steps = flushSync(() => mount(AssistantSteps, { target: body, props: {
+      steps: stepIcons, selected: st.tab, onselect: (id) => set((s) => { s.tab = id; }, false),
+    } }));
     const pane = h('div', { class: 'a5-pane' });
     const T = { regras: tabRegras, classe: tabClasse, especie: tabEspecie, antecedente: tabAntecedente, atributos: tabAtributos, escolhas: tabEscolhas, magias: tabMagias, equip: tabEquip, resumo: tabResumo }[st.tab];
     T(pane, W);
@@ -942,3 +959,4 @@
   A5.preview = () => { previewCache = null; return previewSheet(); };
   A5.build = () => { previewCache = null; return build(A5.st.base0); };
 })(window.App);
+export {};

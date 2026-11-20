@@ -438,14 +438,16 @@
   }
 
   const Sc = { core: CORE(), cache: null, worker: null, seq: 0, wait: new Map() };
-  // Worker criado a partir do texto do núcleo (sem build e sem arquivo extra)
+  // Worker criado a partir do mesmo núcleo usado pelo fallback síncrono.
   function worker() {
     if (Sc.worker !== null) return Sc.worker;
     try {
       const src = 'const C = (' + CORE.toString() + ')();\nonmessage = (e) => { const { id, cmd, args } = e.data; let r, err; try { r = C[cmd](...args); } catch (x) { err = String(x && x.message || x); } postMessage({ id, r, err }); };';
-      const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      let w;
+      try { w = new Worker(url); } finally { URL.revokeObjectURL(url); }
       w.onmessage = (e) => { const p = Sc.wait.get(e.data.id); if (!p) return; Sc.wait.delete(e.data.id); if (e.data.err) p.rej(new Error(e.data.err)); else p.res(e.data.r); };
-      w.onerror = () => { Sc.worker = false; for (const [id, p] of Sc.wait) { Sc.wait.delete(id); try { p.res(Sc.core[p.cmd](...p.args)); } catch (x) { p.rej(x); } } };
+      w.onerror = () => { w.terminate(); Sc.worker = false; for (const [id, p] of Sc.wait) { Sc.wait.delete(id); try { p.res(Sc.core[p.cmd](...p.args)); } catch (x) { p.rej(x); } } };
       Sc.worker = w;
     } catch { Sc.worker = false; }
     return Sc.worker;

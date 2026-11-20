@@ -1,4 +1,5 @@
 'use strict';
+import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } from '../src/services/image-assets.ts';
 /*
  * Página "Criar ficha" (ficha.html, Plano 23): monta fichas fora da mesa, com espaço.
  * As fichas ficam neste navegador (IndexedDB, chave 'fichas'), separadas da campanha.
@@ -23,7 +24,8 @@
   const SEL_KEY = 'vesper-ficha-sel';
 
   // ---------- Dados ----------
-  const F = { actors: {}, assets: {}, sel: null, filter: '', act: null, rolls: [] };
+  const F = { actors: {}, assets: Object.create(null), sel: null, filter: '', act: null, rolls: [] };
+  const urls = new ImageUrls();
   App.Ficha = F;
 
   let dbp = null;
@@ -45,14 +47,13 @@
     return new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
   }
   // Só as imagens que alguma ficha usa
-  function usedAssets(obj) {
-    const out = {};
-    for (const id of new Set(JSON.stringify(obj).match(/img_[0-9a-f]{16}/g) || [])) if (F.assets[id]) out[id] = F.assets[id];
-    return out;
-  }
+  const usedAssets = (obj) => referencedAssets(obj, F.assets);
   async function saveNow() {
     try {
-      await idbSet('fichas', { actors: F.actors, assets: usedAssets(F.actors), savedAt: Date.now() });
+      const assets = usedAssets(F.actors);
+      F.assets = assets;
+      urls.retain(new Set(Object.keys(assets)));
+      await idbSet('fichas', { actors: structuredClone(F.actors), assets, savedAt: Date.now() });
       const el = $('#fp-saved');
       if (el) { el.textContent = 'Salvo neste navegador · ' + U.fmtTime(); el.classList.add('on'); }
     } catch (e) { U.toast('Erro ao salvar no navegador: ' + e.message, 'error'); }
@@ -127,7 +128,7 @@
     return (w[0] || '?').slice(0, 1).toUpperCase();
   }
   function avatar(a, size) {
-    const src = a && a.img && F.assets[a.img];
+    const src = a?.img ? urls.src(a.img, F.assets[a.img]) : null;
     const col = U.safeColor(a && a.color, '#5f5e6a');
     return h('div', { class: 'avatar', style: {
       width: size + 'px', height: size + 'px', fontSize: size * 0.4 + 'px',
@@ -253,6 +254,7 @@
 
   function renderMain() {
     const main = $('#fp-main');
+    App.Ficha5e?.release(main.firstElementChild);
     main.innerHTML = '';
     const a = cur();
     if (!a) {
@@ -504,17 +506,19 @@
   async function fromBestiary() {
     const BS = App.Bestiary;
     const back = h('div', { class: 'modal-back' });
-    const close = () => back.remove();
+    const imageUrls = new ImageUrls();
+    const close = () => { back.remove(); imageUrls.clear(); };
     const list = h('div', { class: 'bst-list fp-bst-list' }, h('p', { class: 'muted' }, 'Abrindo o bestiário…'));
     let q = '';
     const fill = () => {
       list.innerHTML = '';
+      imageUrls.clear();
       const s = U.slug(q);
       if (!BS.list.length) { list.append(h('p', { class: 'empty' }, 'Bestiário vazio. Na pasta do Vésper, rode: node tools/importar-5etools.mjs')); return; }
       const L = BS.list.filter((e) => !s || U.slug(e.n).includes(s) || (e.ali || []).some((x) => U.slug(x).includes(s))).slice(0, 200);
       if (!L.length) list.append(h('p', { class: 'empty' }, 'Nada com esse nome.'));
       for (const e of L) list.append(h('button', { class: 'bst-item fp-bst-item', onclick: () => { close(); F.fromEntry(e); } },
-        BS.thumb(e, 34), h('div', { class: 'grow' }, h('div', { class: 'name' }, e.n), h('div', { class: 'sub' }, `${e.ty || '—'} · ND ${e.cr == null ? '—' : e.cr} · ${BS.bookName(e.s)} (${e.s})`))));
+        BS.thumb(e, 34, imageUrls), h('div', { class: 'grow' }, h('div', { class: 'name' }, e.n), h('div', { class: 'sub' }, `${e.ty || '—'} · ND ${e.cr == null ? '—' : e.cr} · ${BS.bookName(e.s)} (${e.s})`))));
     };
     const box = h('div', { class: 'modal fp-bst-modal' },
       h('div', { class: 'win-head' }, ic('book-open'), h('span', { class: 'win-title' }, 'A partir do bestiário'), iconBtn('x', 'Fechar', close)),
@@ -525,7 +529,7 @@
     back.append(box);
     back.addEventListener('pointerdown', (ev) => { if (ev.target === back) close(); });
     document.body.append(back);
-    try { await BS.load(); fill(); const s = box.querySelector('input'); if (s) s.focus(); }
+    try { await BS.load(); if (!back.isConnected) return; fill(); const s = box.querySelector('input'); if (s) s.focus(); }
     catch (err) { list.textContent = err.message; }
   }
   F.fromBestiary = fromBestiary;
@@ -536,7 +540,11 @@
     a.id = U.uid('ac_');
     try {
       const file = await BS.imageFile(e);
-      if (file) { const r = await App.Images.toWebP(file, App.Images.TOKEN); const id = 'img_' + U.hash(r.data); F.assets[id] = r.data; a.img = id; }
+      if (file) {
+        const r = await App.Images.toWebP(file, App.Images.TOKEN);
+        a.img = await App.Images.idOf(r.blob);
+        setAsset(F.assets, a.img, r.blob);
+      }
     } catch (err) { U.toast('Sem imagem: ' + err.message, 'error'); }
     F.actors[a.id] = a;
     select(a.id);
@@ -551,29 +559,31 @@
     if (!f) return;
     try {
       const r = await App.Images.toWebP(f, App.Images.TOKEN);
-      const id = 'img_' + U.hash(r.data);
-      F.assets[id] = r.data;
+      const id = await App.Images.idOf(r.blob);
+      setAsset(F.assets, id, r.blob);
       edit((x) => { x.img = id; });
     } catch (e) { U.toast(e.message, 'error'); }
   }
-  F.setImage = (data) => { const id = 'img_' + U.hash(data); F.assets[id] = data; edit((x) => { x.img = id; }); };
+  F.setImage = (data) => { const id = 'img_' + U.hash(data); setAsset(F.assets, id, data); edit((x) => { x.img = id; }); };
 
-  function bundle(a) {
+  async function bundle(a) {
     const obj = { format: 'mesarpg-actor', version: 1, actor: U.clone(a) };
-    obj.assets = usedAssets(obj);
+    obj.assets = await encodeAssets(usedAssets(obj));
     return obj;
   }
   F.bundle = bundle;
-  function exportActor(a) {
+  async function exportActor(a) {
     const d = new Date();
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    U.download(`ficha_${U.slug(a.name) || 'personagem'}_${stamp}.json`, JSON.stringify(bundle(a)));
-    U.toast('Ficha exportada.');
+    try {
+      U.download(`ficha_${U.slug(a.name) || 'personagem'}_${stamp}.json`, JSON.stringify(await bundle(a)));
+      U.toast('Ficha exportada.');
+    } catch (e) { U.toast('Não consegui exportar a ficha: ' + e.message, 'error'); }
   }
 
   function importObj(obj) {
     if (!obj || obj.format !== 'mesarpg-actor' || !obj.actor) throw new Error('Esse arquivo não é uma ficha. Exporte a ficha pela mesa (Configurar → Exportar).');
-    for (const [id, data] of Object.entries(obj.assets || {})) if (/^img_[0-9a-f]{16}$/.test(id) && typeof data === 'string') F.assets[id] = data;
+    for (const [id, data] of Object.entries(obj.assets || {})) if (/^img_[0-9a-f]{16}$/.test(id) && typeof data === 'string') setAsset(F.assets, id, data);
     const a = U.clone(obj.actor);
     a.id = U.uid('ac_');
     a.kind = KIND[a.kind] ? a.kind : 'pc';
@@ -618,7 +628,7 @@
     let saved = null;
     try { saved = await Promise.race([idbGet('fichas'), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]); }
     catch { U.toast('Não consegui acessar o salvamento do navegador. Use Exportar para guardar a ficha.', 'error', 7000); }
-    if (saved) { F.actors = saved.actors || {}; F.assets = saved.assets || {}; }
+    if (saved) { F.actors = saved.actors || {}; F.assets = binaryAssets(saved.assets || {}); }
     // Plano 53: fichas antigas do bestiário viram ficha de criatura 5e
     if (App.Bestiary && App.Bestiary.upgrade) for (const a of Object.values(F.actors)) { try { App.Bestiary.upgrade(a); } catch (e) { console.error(e); } }
     let sel = null;

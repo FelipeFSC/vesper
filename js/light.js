@@ -1,4 +1,8 @@
 'use strict';
+import { bounds } from '../src/geometry/spatial.ts';
+import { crosses } from '../src/geometry/visibility.ts';
+import { blocks, wallIndex, wallPolygon } from '../src/geometry/wall-visibility.ts';
+import { invalidateVision, prefetchVision } from '../src/geometry/vision-prefetch.ts';
 /*
  * Iluminação dinâmica.
  * - Parede absoluta e portas fechadas bloqueiam tudo. Cobertura total (muro alto) bloqueia a luz e a visão de quem não é mais alto que ele.
@@ -37,46 +41,48 @@
   const DARKVISION = [[0, 'Não'], [6, '6 quadrados'], [12, '12 quadrados'], [24, '24 quadrados']];
   const LEVELS = ['Escuridão', 'Meia luz', 'Luz plena'];
 
-  const L = { PRESETS, POINT_PRESETS, COLORS, DARKVISION, LEVELS, WARM, segKey: '', segs: [], walls: [], low: [], byEye: new Map(), cache: new Map(), canvases: [], areaCache: new Map() };
+  const L = { PRESETS, POINT_PRESETS, COLORS, DARKVISION, LEVELS, WARM,  cache: new Map(), canvases: [], areaCache: new Map() };
 
   const active = (sc) => !!(sc && sc.light && sc.light.enabled);
   L.active = active;
+
+  const scenes = new WeakMap();
+  let prepared;
+  let revision = 0;
+  const noWalls = [];
+  function use(next) {
+    if (prepared === next) return;
+    if (prepared) { prepared.cache.clear(); prepared.points = 0; }
+    invalidateVision();
+    prepared = next;
+    L.cache = next.cache;
+    L.areaCache = next.areaCache;
+  }
 
   // Segmentos que bloqueiam (paredes + portas fechadas) e as bordas do mapa
   function prepare(sc) {
     const cv = sc.cover || {};
     const key = sc.id + ':' + (sc.wallsV || 0) + ':' + sc.cols + 'x' + sc.rows + ':' + sc.grid + ':' + (cv.enabled !== false) + JSON.stringify(cv.heights || {});
-    if (L.segKey === key) return;
-    L.segKey = key;
-    L.cache.clear();
+    const source = sc.walls || noWalls;
+    const current = scenes.get(source);
+    if (current && current.key === key) { use(current); return; }
     const W = sc.cols * sc.grid, H = sc.rows * sc.grid;
     const cfg = App.Combat ? App.Combat.coverCfg(sc) : null, on = !!(cfg && cfg.enabled);
-    const segOf = new Map(), seg = (w) => { let s = segOf.get(w); if (!s) { s = [w.x1, w.y1, w.x2, w.y2]; segOf.set(w, s); } return s; };
     const type = (w) => (App.Combat ? App.Combat.wallType(w) : 'full');
-    const walls = (sc.walls || []).filter((w) => !(w.door && w.open));
-    // Portas fechadas mas destrancadas: tapam a luz e a visão, mas dá para atravessar
-    L.passDoors = new Set(walls.filter((w) => w.door && !w.locked).map(seg));
-    // Sempre bloqueiam: portas fechadas e parede absoluta (casa com telhado). Com a cobertura desligada, a cobertura total também.
-    L.walls = walls.filter((w) => type(w) === 'full' || (!on && type(w) === 'high')).map(seg);
-    // A luz passa por cima de ¾ e meia, mas não da cobertura total
-    L.lightWalls = L.walls.concat(on ? walls.filter((w) => type(w) === 'high').map(seg) : []);
-    L.border = [[0, 0, W, 0], [W, 0, W, H], [W, H, 0, H], [0, H, 0, 0]];
-    L.segs = L.lightWalls.concat(L.border);
-    // Muros com altura (alto, ¾ e meia): bloqueiam a visão de quem não é mais alto que eles
-    L.low = !on ? [] : walls.filter((w) => type(w) !== 'full').map((w) => ({ seg: seg(w), h: Number(cfg.heights[type(w)]) || 0 }));
-    L.byEye.clear();
-    L.areaCache.clear();
-  }
-  /*
-   * Paredes que bloqueiam a visão de quem tem eyeH metros: as totais e os muros
-   * da altura dele ou mais altos (quem é baixo não enxerga por cima). Sem eyeH = o que bloqueia a luz e o som.
-   */
-  function wallsFor(eyeH) {
-    if (!(eyeH > 0)) return L.lightWalls;
-    const k = Math.round(eyeH * 100);
-    let w = L.byEye.get(k);
-    if (!w) { w = L.walls.concat(L.low.filter((x) => x.h >= eyeH - 1e-9).map((x) => x.seg)); L.byEye.set(k, w); }
-    return w;
+    const walls = source.filter((w) => !(w.door && w.open)).map((wall) => ({
+      seg: [wall.x1, wall.y1, wall.x2, wall.y2], type: type(wall),
+      passable: wall.door && !wall.locked,
+    }));
+    const border = [[0, 0, W, 0], [W, 0, W, H], [W, H, 0, H], [0, H, 0, 0]];
+    const entries = walls.map(({ seg, type, passable }) => ({
+      seg, passable,
+      absolute: type === 'full' || (!on && type === 'high'),
+      stopsLight: type === 'full' || type === 'high',
+      height: on && type !== 'full' ? Number(cfg.heights[type]) || 0 : null,
+    }));
+    for (const seg of border) entries.push({ seg, border: true });
+    use({ key, revision: ++revision, entries, index: wallIndex(entries), cache: new Map(), points: 0, areaCache: new Map() });
+    scenes.set(source, prepared);
   }
   // Olho de quem olha: altura do corpo + altura do voo
   // Luz carregada por quem voa ilumina de cima: passa por cima dos muros mais baixos que ela
@@ -84,54 +90,48 @@
   L.eyeOf = (t) => (App.Combat && t ? App.Combat.topOf(t) : 0);
 
   // Polígono de visibilidade a partir de (ox, oy), limitado ao raio R
-  function visibility(sc, ox, oy, R, eyeH) {
-    prepare(sc);
-    const blockers = wallsFor(eyeH);
-    const key = Math.round(ox) + ',' + Math.round(oy) + ',' + Math.round(R) + ',' + (eyeH > 0 ? Math.round(eyeH * 100) : 'luz');
-    const hit = L.cache.get(key);
-    if (hit) return hit;
-    const segs = (blockers === L.lightWalls ? L.segs : blockers.concat(L.border)).filter((s) => Math.min(s[0], s[2]) <= ox + R && Math.max(s[0], s[2]) >= ox - R
-      && Math.min(s[1], s[3]) <= oy + R && Math.max(s[1], s[3]) >= oy - R);
-    const angles = [];
-    for (const s of segs) {
-      for (const [px, py] of [[s[0], s[1]], [s[2], s[3]]]) {
-        const a = Math.atan2(py - oy, px - ox);
-        angles.push(a - 1e-4, a, a + 1e-4);
-      }
+  const visibilityKey = (x, y, radius, eye) => x + ',' + y + ',' + radius + ',' + (eye > 0 ? eye : 'luz');
+  function remember(index, key, pts) {
+    while (index.cache.size >= 600 || (index.points + pts.length > 1_000_000 && index.cache.size)) {
+      const first = index.cache.keys().next().value;
+      index.points -= index.cache.get(first).length;
+      index.cache.delete(first);
     }
-    for (let i = 0; i < 64; i++) angles.push(-Math.PI + (i / 64) * Math.PI * 2);
-    angles.sort((a, b) => a - b);
-    const pts = [];
-    for (const a of angles) {
-      const dx = Math.cos(a), dy = Math.sin(a);
-      let tmin = R;
-      for (const s of segs) {
-        const ex = s[2] - s[0], ey = s[3] - s[1];
-        const den = dx * ey - dy * ex;
-        if (Math.abs(den) < 1e-9) continue;
-        const wx = s[0] - ox, wy = s[1] - oy;
-        const t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
-        if (t > 0 && u >= 0 && u <= 1 && t < tmin) tmin = t;
-      }
-      pts.push(ox + dx * tmin, oy + dy * tmin);
-    }
-    if (L.cache.size > 600) L.cache.clear();
-    L.cache.set(key, pts);
+    index.points += pts.length;
+    index.cache.set(key, pts);
     return pts;
   }
+
+  function visibility(sc, ox, oy, R, eyeH) {
+    prepare(sc);
+    const key = visibilityKey(ox, oy, R, eyeH);
+    const hit = L.cache.get(key);
+    if (hit) return hit;
+    return remember(prepared, key, wallPolygon(prepared.index, ox, oy, R, eyeH));
+  }
   L.visibility = visibility;
+  L.prefetch = function (sc, position, eye, getCurrentPosition) {
+    if ((sc.walls || []).length < 500) return;
+    prepare(sc);
+    const current = prepared;
+    const radius = Math.hypot(sc.cols * sc.grid, sc.rows * sc.grid) * 1.5;
+    const { x, y } = position;
+    const key = visibilityKey(x, y, radius, eye);
+    if (current.cache.has(key)) return;
+    prefetchVision({ revision: current.revision, entries: current.entries, x, y, radius, eye, done: (polygon) => {
+      const actual = getCurrentPosition();
+      if (actual?.x === x && actual.y === y && actual.eye === eye && prepared === current && !current.cache.has(key)) {
+        remember(current, key, polygon);
+      }
+    } });
+  };
+  L.invalidateVision = invalidateVision;
 
   // Algum segmento bloqueante cruza a linha a→b?
   function blocked(sc, ax, ay, bx, by, eyeH, skip) {
     prepare(sc);
-    const cross = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
-    for (const s of wallsFor(eyeH)) {
-      if (skip && skip.has(s)) continue;
-      const d1 = cross(s[0], s[1], s[2], s[3], ax, ay), d2 = cross(s[0], s[1], s[2], s[3], bx, by);
-      const d3 = cross(ax, ay, bx, by, s[0], s[1]), d4 = cross(ax, ay, bx, by, s[2], s[3]);
-      if (((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6))) return true;
-    }
-    return false;
+    return prepared.index.search(bounds(ax, ay, bx, by)).some((entry) =>
+      !entry.border && !(skip && entry.passable) && blocks(entry, eyeH) && crosses(entry.seg, ax, ay, bx, by));
   }
   L.blocked = blocked;
   /*
@@ -145,7 +145,7 @@
     if (!len) return false;
     prepare(sc);
     const nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
-    return [1, -1].every((k) => blocked(sc, a.x + nx * k, a.y + ny * k, b.x + nx * k, b.y + ny * k, eyeH, L.passDoors));
+    return [1, -1].every((k) => blocked(sc, a.x + nx * k, a.y + ny * k, b.x + nx * k, b.y + ny * k, eyeH, true));
   };
 
   const center = (sc, t) => { const s = (t.size || 1) * sc.grid; return { x: t.x + s / 2, y: t.y + s / 2 }; };
@@ -232,7 +232,7 @@
   // Pontos de dentro da área de onde a luz "sai" (assim as paredes fazem sombra e a luz não vaza)
   function areaSamples(sc, s) {
     prepare(sc);
-    const key = s.id + ':' + JSON.stringify(s.pts);
+    const key = s.id + ':' + s.edge + ':' + JSON.stringify(s.pts);
     let out = L.areaCache.get(key);
     if (out) return out;
     const b = bbox(s.pts), area = Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
@@ -298,9 +298,9 @@
 
   // Ponto visível para o conjunto de "olhos"? (meia luz ou mais, contando a visão no escuro)
   // targetTop: topo do alvo quando ele voa (vê-se por cima dos muros mais baixos; a luz também chega)
-  L.pointVisible = function (sc, p, viewers, posOf, targetTop) {
+  L.pointVisible = function (sc, p, viewers, posOf, targetTop, srcs) {
     let lv = null;
-    const lit = () => (lv == null ? (lv = levelAt(sc, p, posOf, targetTop)) : lv);
+    const lit = () => (lv == null ? (lv = levelAt(sc, p, posOf, targetTop, srcs)) : lv);
     if (!viewers.length) return lit() >= 1;
     for (const v of viewers) {
       const c = posOf ? posOf(v) : center(sc, v);
@@ -330,12 +330,28 @@
     x.clearRect(0, 0, w, h);
     return [c, x];
   }
-  function polyPath(x, pts) {
-    x.beginPath();
-    x.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]);
-    x.closePath();
+  const polygonPaths = new WeakMap();
+  function polyPath(pts) {
+    let path = polygonPaths.get(pts);
+    if (path) return path;
+    path = new Path2D();
+    path.moveTo(pts[0], pts[1]);
+    let x = pts[0], y = pts[1];
+    for (let i = 2; i < pts.length - 2; i += 2) {
+      const u = pts[i] - x, v = pts[i + 1] - y;
+      const dx = pts[i + 2] - x, dy = pts[i + 3] - y;
+      const length = dx * dx + dy * dy, projection = u * dx + v * dy;
+      // Descarta vértices que só subdividem a mesma aresta, com tolerância de arredondamento.
+      if (projection >= 0 && projection <= length && Math.abs(u * dy - v * dx) <= Math.sqrt(length) * 1e-9) continue;
+      x = pts[i]; y = pts[i + 1];
+      path.lineTo(x, y);
+    }
+    path.lineTo(pts[pts.length - 2], pts[pts.length - 1]);
+    path.closePath();
+    polygonPaths.set(pts, path);
+    return path;
   }
+  L.path = polyPath;
   function ptsPath(x, pts, fresh = true) {
     if (fresh) x.beginPath();
     pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py)));
@@ -377,8 +393,7 @@
       return g;
     };
     x.save();
-    polyPath(x, poly);
-    x.clip();
+    x.clip(polyPath(poly));
     if (s.shape === 'cone') {
       const wedge = (a0, a1) => { x.beginPath(); x.moveTo(s.x, s.y); x.arc(s.x, s.y, R + 1, a0, a1); x.closePath(); };
       x.fillStyle = grad(false); wedge(s.dir - s.half, s.dir + s.half); x.fill();
@@ -400,7 +415,16 @@
   L.render = function (ctx, sc, cam, W, H, opts) {
     const w = Math.max(1, Math.ceil(W)), h = Math.max(1, Math.ceil(H));
     const viewers = opts.viewers;
-    const srcs = sources(sc, opts.posOf);
+    const edge = 2 / cam.z;
+    const right = cam.x + W / cam.z, bottom = cam.y + H / cam.z;
+    const srcs = sources(sc, opts.posOf).filter((s) => {
+      if (s.shape === 'area') {
+        const b = bbox(s.pts), pad = s.edge + edge;
+        return b.x1 + pad >= cam.x && b.y1 + pad >= cam.y && b.x0 - pad <= right && b.y0 - pad <= bottom;
+      }
+      const radius = s.dim * (s.flicker ? 1.1 : 1) + edge;
+      return s.x + radius >= cam.x && s.y + radius >= cam.y && s.x - radius <= right && s.y - radius <= bottom;
+    });
     const darks = srcs.filter((s) => s.kind === 'dark'), lights = srcs.filter((s) => s.kind !== 'dark');
     if (!viewers && sc.light.global && !darks.length) return; // mestre, dia, sem escuridão: nada a escurecer
     const world = (x) => x.setTransform(cam.z, 0, 0, cam.z, -cam.x * cam.z, -cam.y * cam.z);
@@ -443,9 +467,8 @@
           tmp.fillRect(c.x - dv, c.y - dv, dv * 2, dv * 2);
         }
         tmp.globalCompositeOperation = 'destination-in';
-        polyPath(tmp, visibility(sc, c.x, c.y, diag, L.eyeOf(v)));
         tmp.fillStyle = '#fff';
-        tmp.fill();
+        tmp.fill(polyPath(visibility(sc, c.x, c.y, diag, L.eyeOf(v))));
         seen.drawImage(tmpC, 0, 0);
       }
     }

@@ -1,0 +1,71 @@
+{
+  "browser": "157.0.8103.79",
+  "rows": [
+    {
+      "run": 1,
+      "cache": "frio",
+      "readyMs": 9436.299999998882,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 171.59999999962747,
+      "filterMs": 3.400000000372529,
+      "readMs": 148.40000000037253,
+      "updatedRows": 16
+    },
+    {
+      "run": 1,
+      "cache": "quente",
+      "readyMs": 172.59999999962747,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 161.60000000149012,
+      "filterMs": 3.700000001117587,
+      "readMs": 112.29999999888241,
+      "updatedRows": 16
+    },
+    {
+      "run": 2,
+      "cache": "frio",
+      "readyMs": 9417.099999999627,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 163.19999999925494,
+      "filterMs": 4.599999999627471,
+      "readMs": 130.5,
+      "updatedRows": 16
+    },
+    {
+      "run": 2,
+      "cache": "quente",
+      "readyMs": 168.59999999962747,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 167.69999999925494,
+      "filterMs": 3.400000000372529,
+      "readMs": 117.5,
+      "updatedRows": 16
+    },
+    {
+      "run": 3,
+      "cache": "frio",
+      "readyMs": 9417.800000000745,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 159.5,
+      "filterMs": 3.700000001117587,
+      "readMs": 137.09999999962747,
+      "updatedRows": 16
+    },
+    {
+      "run": 3,
+      "cache": "quente",
+      "readyMs": 172.5,
+      "allRows": 16,
+      "query": "+1",
+      "filterToDomMs": 164.40000000037253,
+      "filterMs": 3.400000000372529,
+      "readMs": 114.5,
+      "updatedRows": 16
+    }
+  ]
+}

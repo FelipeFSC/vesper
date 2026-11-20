@@ -1,15 +1,18 @@
 'use strict';
+import { boardDpr } from '../src/board/resolution.ts';
+import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
 /* Tabuleiro: canvas com câmera (pan/zoom), grid, mapa, desenhos, tokens, névoa, régua e pings. */
 (function (App) {
   const { U } = App;
   const S = () => App.Store;
 
+  let frame = null;
   const B = {
     canvas: null, ctx: null, dpr: 1, w: 0, h: 0,
     cam: { x: 0, y: 0, z: 1 },
     tool: 'select', selected: null,
     drag: null, pan: null, ruler: null, draft: null, fogDraft: null, erasing: false,
-    pings: [], animating: false, spaceDown: false, needs: false, lastSceneId: null,
+    pings: [], animating: false, spaceDown: false, lastSceneId: null,
     fogCache: { key: null, canvas: null },
     style: { color: '#d9574f', width: 4, fill: 0, snap: true },
     layers: { tokens: true, drawings: true, fog: true, map: true, walls: true, light: true, sounds: true, rooms: true, props: true, lights: true, triggers: true, notes: true },
@@ -60,6 +63,11 @@
     B.canvas = canvas;
     B.ctx = canvas.getContext('2d');
     new ResizeObserver(() => B.resize()).observe(canvas.parentElement);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && frame !== null) { cancelAnimationFrame(frame); frame = null; }
+      if (!document.hidden) B.resize();
+    });
+    window.addEventListener('resize', B.resize);
     canvas.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -79,27 +87,47 @@
     canvas.addEventListener('drop', onDrop);
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', (e) => { if (e.code === 'Space') B.spaceDown = false; });
-    S().on((kind) => { scanFx(kind); B.requestRender(); });
+    S().on((kind, action) => {
+      scanFx(kind);
+      if (/^(reset|local|scene\.|wall\.|undo\.|token\.update)/.test(kind)) LT().invalidateVision();
+      if (kind === 'reset') { propIndexes = new WeakMap(); B.fogCache.key = null; }
+      if (/^(prop\.|anim\.|order\.|undo\.|scene\.update)/.test(kind)) {
+        const sc = S().state?.scenes[action?.sceneId || action?.id];
+        if (sc) propIndexes.delete(sc.props);
+        else propIndexes = new WeakMap();
+      }
+      if (kind !== 'presence' && !kind.startsWith('audio.') && !kind.startsWith('handout.')) B.requestRender();
+    });
     B.resize();
   };
 
   B.resize = function () {
     const r = B.canvas.parentElement.getBoundingClientRect();
-    B.dpr = window.devicePixelRatio || 1;
+    B.dpr = boardDpr(window.devicePixelRatio || 1);
     B.w = r.width; B.h = r.height;
-    B.canvas.width = Math.round(r.width * B.dpr);
-    B.canvas.height = Math.round(r.height * B.dpr);
+    const width = Math.round(r.width * B.dpr), height = Math.round(r.height * B.dpr);
+    if (B.canvas.width !== width) B.canvas.width = width;
+    if (B.canvas.height !== height) B.canvas.height = height;
     B.canvas.style.width = r.width + 'px';
     B.canvas.style.height = r.height + 'px';
-    B.render();
+    B.requestRender();
   };
 
   B.requestRender = function () {
-    if (B.needs || !B.ctx) return;
-    B.needs = true;
-    const run = () => { if (!B.needs) return; B.needs = false; B.render(); };
-    requestAnimationFrame(run);
-    setTimeout(run, 150); // reserva para abas em segundo plano
+    if (frame !== null || !B.ctx || document.hidden) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      if (B.animating) {
+        const now = performance.now();
+        B.pings = B.pings.filter((q) => now - q.t < 1800);
+        B.fx = B.fx.filter((f) => now - f.t < f.dur);
+        pruneRemote();
+        B.warps = B.warps.filter((w) => now - w.t < WARP_MS);
+      }
+      B.render();
+      B.animating = !!animActive();
+      if (B.animating) B.requestRender();
+    });
   };
 
   // ---------- mira (escolher alvos de uma ação) ----------
@@ -207,6 +235,17 @@
     return posOf(t);
   }
   B.lightPos = lightPos;
+  function prefetchView(sc, id) {
+    const token = sc?.tokens[id];
+    if (!token || S().gmView() || !LT().active(sc) || !S().canControl(token)) return;
+    const eye = LT().eyeOf(token), wallsV = sc.wallsV;
+    LT().prefetch(sc, lightPos(token), eye, () => {
+      const current = S().currentScene();
+      const actual = current?.tokens[id];
+      if (current === sc && current.wallsV === wallsV && actual) return { ...lightPos(actual), eye: LT().eyeOf(actual) };
+      return null;
+    });
+  }
   // ---------- movimento por um caminho ----------
   // Cada movimento novo (t.lastMove) ganha um início local; o token vai direto ao destino e o rastro fica trailSecs segundos
   B.moves = new Map();
@@ -302,13 +341,14 @@
   function visibleTokens(sc) {
     const gm = S().gmView(), viewers = lightViewers(sc);
     const ids = viewers && new Set(viewers.map((t) => t.id));
+    const sources = viewers ? LT().sources(sc, lightPos) : null;
     // Sombra dos muros baixos: só vale para quem joga (ou o mestre vendo como jogador)
     const eyes = gm ? null : (viewers || LT().viewers(sc));
     B.silhouettes.clear();
     return Object.values(sc.tokens).filter((t) => {
       if (t.hidden && !gm) return false;
       const top = CB().flyOf(t) > 0 ? CB().topOf(t) : 0;
-      if (viewers && !ids.has(t.id) && !LT().pointVisible(sc, posOf(t), viewers, lightPos, top)) return false;
+      if (viewers && !ids.has(t.id) && !LT().pointVisible(sc, posOf(t), viewers, lightPos, top, sources)) return false;
       // Vulto escolhido pelo mestre: o jogador vê só a silhueta
       if (t.masked && !gm && !S().canControl(t)) { B.silhouettes.add(t.id); return true; }
       if (eyes && eyes.length && !S().canControl(t)) {
@@ -468,8 +508,10 @@
     const blind = asPlayer && !!dragTok && pathBlind(sc, dragTok, dragCenters(sc, B.drag));
     const above = [];
     // Imagens e tokens na mesma ordem de nível (empate: a imagem fica embaixo)
-    const props = L.props ? (sc.props || []).filter((p) => gm || !p.hidden) : [];
-    const items = tokens.map((t) => ({ t, z: t.z || 0, k: 1 })).concat(props.map((p) => ({ p, z: p.z || 0, k: 0 })))
+    const viewport = cameraBounds(64);
+    const wallsInView = visibleWalls(sc);
+    const props = L.props ? propsIn(sc, viewport, true).filter((p) => gm || !p.hidden) : [];
+    const items = tokens.filter((t) => tokenIn(sc, t, viewport)).map((t) => ({ t, z: t.z || 0, k: 1 })).concat(props.map((p) => ({ p, z: p.z || 0, k: 0 })))
       .sort((a, b) => a.z - b.z || a.k - b.k);
     if (L.triggers || asPlayer) drawPortalMarks(ctx, sc);
     for (const it of items) {
@@ -490,7 +532,7 @@
       LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf: lightPos, explore: !gm && App.Explore ? App.Explore.maskCanvas(sc) : null });
       ctx.restore();
       if (LT().flickering(sc)) ensureAnim();
-      if (asPlayer && !blind) drawWallHints(ctx, sc, viewers);
+      if (asPlayer && !blind) drawWallHints(ctx, sc, viewers, wallsInView);
     }
     if (blind) {
       ctx.save();
@@ -505,7 +547,7 @@
     if (gm && L.sounds) drawSounds(ctx, sc);
     if (gm && L.lights) drawLightPoints(ctx, sc);
     if (gm && L.notes) drawNotes(ctx, sc);
-    drawWalls(ctx, sc, gm && L.walls && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door'), viewers);
+    drawWalls(ctx, sc, gm && L.walls && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door'), viewers, wallsInView);
     if (gm && B.selectedProp) { const sp = (sc.props || []).find((p) => p.id === B.selectedProp); if (sp) drawPropFrame(ctx, propNow(sp)); }
     if (gm) drawAnimGuides(ctx, S().currentScene(), sc);
     if (gm && B.scan) drawScan(ctx, sc);
@@ -613,6 +655,50 @@
   B.minZ = (sc) => Object.values(sc.tokens).concat(sc.props || []).reduce((m, o) => Math.min(m, o.z || 0), 0);
   // Estado da imagem agora (com o arraste em andamento aplicado)
   const propNow = (p) => (B.propDrag && B.propDrag.id === p.id ? Object.assign({}, p, B.propDrag.cur) : p);
+  let propIndexes = new WeakMap();
+  function cameraBounds(pad) {
+    const { x, y, z } = B.cam;
+    return bounds(x - pad / z, y - pad / z, x + (B.w + pad) / z, y + (B.h + pad) / z);
+  }
+  function propBounds(p) {
+    const angle = (p.rot || 0) * Math.PI / 180;
+    const sin = Math.abs(Math.sin(angle)), cos = Math.abs(Math.cos(angle));
+    const x = p.x + p.w / 2, y = p.y + p.h / 2;
+    const w = (p.w * cos + p.h * sin) / 2, h = (p.w * sin + p.h * cos) / 2;
+    return bounds(x - w, y - h, x + w, y + h);
+  }
+  const overlaps = (a, b) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+  function propsIn(sc, box, preview) {
+    const props = sc.props;
+    if (!props?.length) return [];
+    // Posições animadas e arraste não alteram o índice persistente da cena.
+    if (props !== S().state.scenes[sc.id]?.props || (preview && B.propDrag)) {
+      return props.filter((p) => overlaps(propBounds(preview ? propNow(p) : p), box));
+    }
+    let index = propIndexes.get(props);
+    if (!index) {
+      index = new SpatialIndex(props.map((prop, order) => ({ prop, order })), ({ prop }) => propBounds(prop));
+      propIndexes.set(props, index);
+    }
+    return index.search(box).sort((a, b) => a.order - b.order).map(({ prop }) => prop);
+  }
+  function tokenIn(sc, t, box) {
+    const { x, y } = posOf(t);
+    const size = (t.size || 1) * sc.grid;
+    return overlaps(bounds(x - size * 1.5, y - size, x + size * 1.5, y + size * 1.5), box);
+  }
+  const wallViews = new WeakMap();
+  function visibleWalls(sc) {
+    const walls = sc.walls;
+    if (!walls?.length) return [];
+    let record = wallViews.get(walls);
+    if (!record || record.version !== sc.wallsV) {
+      record = { version: sc.wallsV, index: new SpatialIndex(walls.map((wall, order) => ({ wall, order })),
+        ({ wall }) => bounds(wall.x1, wall.y1, wall.x2, wall.y2)) };
+      wallViews.set(walls, record);
+    }
+    return record.index.search(cameraBounds(64)).sort((a, b) => a.order - b.order).map(({ wall }) => wall);
+  }
   const pCenter = (q) => ({ x: q.x + q.w / 2, y: q.y + q.h / 2 });
   function pLocal(q, p) {
     const c = pCenter(q), a = -((q.rot || 0) * Math.PI) / 180, dx = p.x - c.x, dy = p.y - c.y;
@@ -802,7 +888,7 @@
   // Imagem do topo no ponto (só o mestre mexe em imagens)
   function propAt(sc, p) {
     if (!S().gmView() || !B.layers.props) return null;
-    const list = (sc.props || []).slice().sort((a, b) => (b.z || 0) - (a.z || 0));
+    const list = propsIn(sc, bounds(p.x, p.y, p.x, p.y), false).sort((a, b) => (b.z || 0) - (a.z || 0));
     for (const q of list) { const l = pLocal(q, p); if (Math.abs(l.x) <= q.w / 2 && Math.abs(l.y) <= q.h / 2) return q; }
     return null;
   }
@@ -1851,13 +1937,11 @@
     ctx.restore();
   }
   // Mestre (modo edição) vê as paredes; portas aparecem para todos que as enxergam
-  function drawWalls(ctx, sc, showWalls, viewers) {
-    const walls = sc.walls || [];
+  function drawWalls(ctx, sc, showWalls, viewers, walls) {
     if (!walls.length) return;
     if (showWalls) for (const w of walls) drawWall(ctx, w);
     for (const w of walls) {
       if (!w.door) continue;
-      const m = { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 };
       if (!showWalls && viewers && !doorVisible(sc, w, viewers)) continue;
       drawDoorMark(ctx, w);
     }
@@ -1866,8 +1950,7 @@
    * Contorno das paredes para o jogador no escuro: uma linha clara nas paredes que os tokens dele enxergam
    * (linha de visão, mesmo sem luz), para ele saber o limite da sala. Portas em dourado; nada aparece debaixo da névoa.
    */
-  function drawWallHints(ctx, sc, viewers) {
-    const walls = sc.walls || [];
+  function drawWallHints(ctx, sc, viewers, walls) {
     if (!walls.length || !viewers || !viewers.length) return;
     const { dpr, cam } = B, cw = B.canvas.width, ch = B.canvas.height, z = cam.z;
     const c = B.hintCanvas || (B.hintCanvas = document.createElement('canvas'));
@@ -1877,21 +1960,22 @@
     x.setTransform(dpr * z, 0, 0, dpr * z, -cam.x * z * dpr, -cam.y * z * dpr);
     const diag = Math.hypot(sc.cols * sc.grid, sc.rows * sc.grid) * 1.5;
     x.save();
-    x.beginPath();
+    const paths = new Path2D();
     for (const v of viewers) {
       const p = lightPos(v), poly = LT().visibility(sc, p.x, p.y, diag, LT().eyeOf(v));
-      x.moveTo(poly[0], poly[1]);
-      for (let i = 2; i < poly.length; i += 2) x.lineTo(poly[i], poly[i + 1]);
-      x.closePath();
+      paths.addPath(LT().path(poly));
     }
-    x.clip(); // só o que algum token vê (a linha fica na borda da visão: metade dela aparece)
+    x.clip(paths); // só o que algum token vê (a linha fica na borda da visão: metade dela aparece)
     // Bem sutil: o foco é o desenho do mapa, a linha só sugere o limite
     x.lineCap = 'round'; x.lineWidth = 2.4 / z;
+    const solid = new Path2D(), doors = new Path2D(), openings = new Path2D();
     for (const w of walls) {
-      x.strokeStyle = w.door ? 'rgba(226,186,110,.38)' : 'rgba(225,223,235,.2)';
-      x.setLineDash(w.door && w.open ? [6 / z, 6 / z] : []);
-      x.beginPath(); x.moveTo(w.x1, w.y1); x.lineTo(w.x2, w.y2); x.stroke();
+      const path = w.door ? (w.open ? openings : doors) : solid;
+      path.moveTo(w.x1, w.y1); path.lineTo(w.x2, w.y2);
     }
+    x.strokeStyle = 'rgba(225,223,235,.2)'; x.stroke(solid);
+    x.strokeStyle = 'rgba(226,186,110,.38)'; x.stroke(doors);
+    x.setLineDash([6 / z, 6 / z]); x.stroke(openings);
     x.restore();
     // Memória de exploração: as paredes das áreas já vistas também ficam com o contorno (Plano 19)
     if (App.Explore && App.Explore.on(sc)) {
@@ -1986,6 +2070,7 @@
     for (let x = ox; x < B.w; x += d) for (let y = oy; y < B.h; y += d) ctx.fillRect(x, y, 1.4, 1.4);
   }
 
+  let gridPath = null, gridPathKey = '';
   function drawGrid(ctx, sc, W, H) {
     const g = sc.grid, z = B.cam.z;
     const x0 = Math.max(0, Math.floor(B.cam.x / g) * g), x1 = Math.min(W, B.cam.x + B.w / z);
@@ -1993,10 +2078,14 @@
     ctx.save();
     ctx.strokeStyle = U.hexA(sc.gridColor || '#ffffff', (sc.gridAlpha ?? 0.15) * 0.7);
     ctx.lineWidth = 1 / z;
-    ctx.beginPath();
-    for (let x = x0; x <= x1; x += g) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-    for (let y = y0; y <= y1; y += g) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-    ctx.stroke();
+    const key = [g, x0, x1, y0, y1].join(':');
+    if (gridPathKey !== key) {
+      gridPath = new Path2D();
+      for (let x = x0; x <= x1; x += g) { gridPath.moveTo(x, y0); gridPath.lineTo(x, y1); }
+      for (let y = y0; y <= y1; y += g) { gridPath.moveTo(x0, y); gridPath.lineTo(x1, y); }
+      gridPathKey = key;
+    }
+    ctx.stroke(gridPath);
     ctx.restore();
   }
 
@@ -2441,18 +2530,8 @@
     return B.pings.length || B.remote.size || B.warps.length || B.fx.length || B.flashes.length || B.targeting || (sc && (movesActive(sc) || (App.Anim && App.Anim.active(sc)) || (LT().flickering(sc) && (!S().gmView() || B.layers.light))));
   }
   function ensureAnim() {
-    if (B.animating) return;
     B.animating = true;
-    const step = () => {
-      const now = performance.now();
-      B.pings = B.pings.filter((q) => now - q.t < 1800);
-      B.fx = B.fx.filter((f) => now - f.t < f.dur);
-      pruneRemote();
-      B.warps = B.warps.filter((w) => now - w.t < WARP_MS);
-      B.render();
-      if (animActive()) requestAnimationFrame(step); else { B.animating = false; B.render(); }
-    };
-    requestAnimationFrame(step);
+    B.requestRender();
   }
   // Toda ação nova vira efeito no mapa, em todas as telas
   function scanFx(kind) {
@@ -2882,6 +2961,7 @@
     if (m.done && trailMsNow() <= 0) { B.remote.delete(key); B.requestRender(); return; }
     B.remote.set(key, { kind: m.kind, sceneId: m.sceneId, tokenId: m.tokenId ? String(m.tokenId) : null, pts,
       color: U.safeColor(m.color, C.gold), name: String(m.name || '').slice(0, 30), done: !!m.done, t: performance.now() });
+    if (m.kind === 'drag' && !m.done) prefetchView(sc, m.tokenId);
     ensureAnim();
     B.requestRender();
   };
@@ -3204,6 +3284,7 @@
     if (B.drag) {
       B.drag.x = p.x - B.drag.ox; B.drag.y = p.y - B.drag.oy;
       if (Math.abs(B.drag.x - B.drag.sx) + Math.abs(B.drag.y - B.drag.sy) > 3) B.drag.moved = true;
+      if (B.drag.moved && S().state.rules.liveRuler) prefetchView(sc, B.drag.id);
     }
     if (B.ruler) B.ruler.b = snap ? snapPt(sc, p) : p;
     if (B.ruler || (B.drag && B.drag.moved)) shareLive();

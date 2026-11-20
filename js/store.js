@@ -1,4 +1,5 @@
 'use strict';
+import { binaryAssets } from '../src/services/image-assets.ts';
 /*
  * Estado da mesa + reducer.
  * Toda mudança passa por dispatch(ação). O mestre (host) aplica a ação, valida as dos
@@ -621,7 +622,7 @@
   // ---------------- Store ----------------
   const S = {
     state: null,
-    assets: {},          // id -> dataURL (webp)
+    assets: Object.create(null), // id -> imagem binária
     role: 'offline',     // 'offline' | 'gm' | 'player'
     me: null,            // {id, name, color}
     online: [],
@@ -634,12 +635,15 @@
     // A autoridade continua do mestre (isGM); só a visão muda (gmView).
     viewAs: null,
     gmView() { return this.isGM() && !this.viewAs; },
-    on(fn) { this.listeners.add(fn); },
-    emit(kind) { for (const fn of this.listeners) { try { fn(kind); } catch (e) { console.error(e); } } },
+    on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+    emit(kind, action) { for (const fn of this.listeners) { try { fn(kind, action); } catch (e) { console.error(e); } } },
 
-    setState(st, assets) {
+    setState(st, assets, replaceAssets = false) {
       this.state = st;
-      if (assets) Object.assign(this.assets, assets);
+      if (replaceAssets) {
+        this.assets = assets ? binaryAssets(assets) : Object.create(null);
+        App.Images?.retain(new Set(Object.keys(this.assets)));
+      } else if (assets) Object.assign(this.assets, binaryAssets(assets));
       this.emit('reset');
     },
 
@@ -651,7 +655,7 @@
       if (this.isGM()) return this.commit(a);
       if (!this.state) return false;
       // Movimento é aplicado localmente na hora (o mestre corrige se recusar)
-      if (a.type === 'token.move') { try { reduce(this.state, a); this.emit(a.type); } catch { /* ignora */ } }
+      if (a.type === 'token.move') { try { reduce(this.state, a); this.emit(a.type, a); } catch { /* ignora */ } }
       if (!App.Net.send({ t: 'action', a })) U.toast('Sem conexão com o mestre', 'error');
       return true;
     },
@@ -673,7 +677,7 @@
       if (hist) { try { App.History.after(this.state, a, hist); } catch (e) { console.warn(e); } }
       if (App.Explore) App.Explore.touch(this.state, a); // memória de exploração: recalcula o que os jogadores veem
       App.Net.broadcast({ t: 'action', a });
-      this.emit(a.type);
+      this.emit(a.type, a);
       App.Storage.autosave();
       if (fires) App.Triggers.afterMove(fires);
       return true;
@@ -695,7 +699,7 @@
     // Jogador recebendo ação já validada pelo mestre
     applyRemote(a) {
       try { reduce(this.state, a); } catch (e) { console.warn(e); }
-      this.emit(a.type);
+      this.emit(a.type, a);
     },
 
     // ---------- consultas ----------

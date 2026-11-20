@@ -14,7 +14,25 @@ window.addEventListener('load', () => setTimeout(async () => {
   const items = () => $$('.cd-item');
   const clear = async () => { $('#cd-clear').click(); await W(60); };
   const cat = async (c) => { $(`.cd-cat[data-cat="${c}"]`).click(); await W(60); };
-  const open = async (name, src) => { const it = items().find((i) => i.querySelector('b').textContent === name && (!src || i.querySelector('.cd-src').textContent === src)); if (!it) throw new Error('não achei na lista: ' + name + ' ' + (src || '')); it.click(); await W(60); };
+  const open = async (name, src) => {
+    const list = $('#cd-list');
+    const find = () => items().find((row) => row.querySelector('b').textContent === name && (!src || row.querySelector('.cd-src').textContent === src));
+    let row = find();
+    if (!row) {
+      list.scrollTop = 0;
+      await W(50);
+      row = find();
+    }
+    while (!row) {
+      const last = list.scrollTop;
+      list.scrollTop += Math.max(51, list.clientHeight - 51);
+      if (list.scrollTop === last) throw new Error('não achei na lista: ' + name + ' ' + (src || ''));
+      await W(50);
+      row = find();
+    }
+    row.click();
+    await W(60);
+  };
   const chips = () => $$('#cd-preview .cd-chip').map((c) => c.textContent).join(' | ');
   const tab = async (k) => { $(`[data-tab="${k}"]`).click(); await W(80); };
   let confirmAns = true; window.confirm = () => confirmAns;

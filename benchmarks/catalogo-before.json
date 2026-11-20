@@ -1,0 +1,59 @@
+{
+  "browser": "157.0.8103.79",
+  "rows": [
+    {
+      "run": 1,
+      "cache": "frio",
+      "readyMs": 9437,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 172.30000000074506,
+      "updatedRows": 300
+    },
+    {
+      "run": 1,
+      "cache": "quente",
+      "readyMs": 197.7000000011176,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 161.7999999988824,
+      "updatedRows": 300
+    },
+    {
+      "run": 2,
+      "cache": "frio",
+      "readyMs": 9417,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 165.89999999850988,
+      "updatedRows": 300
+    },
+    {
+      "run": 2,
+      "cache": "quente",
+      "readyMs": 180.90000000037253,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 169.5,
+      "updatedRows": 300
+    },
+    {
+      "run": 3,
+      "cache": "frio",
+      "readyMs": 9396.5,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 173.19999999925494,
+      "updatedRows": 300
+    },
+    {
+      "run": 3,
+      "cache": "quente",
+      "readyMs": 183.7999999988824,
+      "allRows": 300,
+      "query": "+1",
+      "filterToDomMs": 167,
+      "updatedRows": 300
+    }
+  ]
+}

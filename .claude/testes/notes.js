@@ -75,7 +75,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.viewAs = '*'; App.UI.setMode('play'); await W(200);
     log.push(`ver como jogador: alfinete clicável = ${!!B.noteAt(sc(), { x: sc().notes[1].x, y: sc().notes[1].y })}`);
     S.viewAs = null; App.UI.setMode('edit');
-    log.push('exportar a cena leva as notas: ' + (App.Storage.sceneBundle(sid).scene.notes || []).length);
+    log.push('exportar a cena leva as notas: ' + ((await App.Storage.sceneBundle(sid)).scene.notes || []).length);
     if (location.hash === '#shot') {
       B.setTool('select'); App.UI.openNote(sid, sc().notes[0].id); B.hoverNote = sc().notes[1].id; App.UI.refresh(); B.requestRender();
       const w = App.UI.windows.get('note:' + sc().notes[0].id); w.el.style.left = '900px'; w.el.style.top = '420px';
