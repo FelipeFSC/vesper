@@ -27,7 +27,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const btn = $('#toolbar [data-tool="portal"]');
     log.push('botão Portal na barra: ' + !!btn + ' · título: ' + (btn && btn.title.split('\n')[0]));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true })); await W(50);
-    log.push('tecla K: ferramenta ' + B.tool + ' · opções: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
+    log.push('tecla K: ferramenta ' + B.tool + ' · opções: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
     B.trigShape = 'rect';
     click(9.5 * g, 2.5 * g); await W(50);
     const p1 = trs().find((t) => t.portal);
@@ -36,8 +36,11 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('painel: ' + [...document.querySelectorAll('#token-hud .eyebrow')].map((e) => e.textContent).join(' | ') + ' · sem destino: ' + /Escolha o ponto/.test($('#token-hud').textContent));
 
     // 2) mesmo mapa (trem): escolher o ponto no mapa e passar
-    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Desenhar a chegada/.test(b.textContent)).click(); await W(50);
+    const p1b = B.addTrigger(sc(), { shape: 'circle', x: 2.5 * g, y: 6.5 * g, r: 0.5, portal: true, name: 'Fim do trem' });
+    B.selectObj('trigger', trs().find((t) => t.id === p1.id)); UI.refresh(); B.render(); await W(50);
+    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Ligar a um portal/.test(b.textContent)).click(); await W(50);
     click(2.5 * g, 6.5 * g); await W(80);
+    TG.setTwoWay(sid, p1.id, false);
     const d1 = TG.portalDest(sc(), trs().find((t) => t.id === p1.id));
     log.push(`destino escolhido: (${d1.x / g - 0.5}, ${d1.y / g - 0.5}) · mesmo mapa: ${d1.scene.id === sid}`);
     place(hero.id, 7, 2);
@@ -93,15 +96,14 @@ window.addEventListener('load', () => setTimeout(async () => {
     B.selectObj('trigger', p2); UI.refresh(); B.render(); await W(100);
     const opts = [...document.querySelectorAll('#token-hud select')][0];
     log.push('destinos no painel: ' + [...opts.options].map((o) => o.textContent).join(' | ') + ' · portalTargets: ' + JSON.stringify(UI.portalTargets(sc())) + ' · hud: ' + document.querySelector('#token-hud').textContent.slice(0, 80) + ' · ordem: ' + S.state.sceneOrder.length + ' · sel=' + B.selectedTrigger + ' p1=' + p1.id + ' p2=' + (p2 && p2.id) + ' · foco: ' + (document.activeElement && document.activeElement.className) + ' · cena: ' + sc().id + ' sid ' + sid);
-    opts.value = subId; opts.dispatchEvent(new Event('change')); B.render(); await W(80);
-    const back = (S.state.scenes[subId].triggers || []).find((t) => t.portal);
-    log.push(`destino na sub-cena: ida e volta criada = ${!!back} (${back && back.name}) · volta aponta para cá: ${back && TG.portalAct(back).portalId === p2.id}`);
-    B.selectObj('trigger', trs().find((t) => t.id === p2.id)); UI.refresh(); B.render(); await W(100);
-    [...document.querySelectorAll('#token-hud .btn')].find((b) => /Desenhar a chegada/.test(b.textContent)).click(); await W(150);
-    B.render(); log.push('escolher no mapa: tela foi para a sub-cena = ' + (sc().id === subId) + ' · escolhendo = ' + !!B.picking);
+    const bk0 = App.Triggers.newPortal(S.state.scenes[subId], { shape: 'circle', x: 5.5 * g, y: 5.5 * g, r: 0.5, name: 'Escada de baixo' });
+    S.dispatch({ type: 'trigger.add', sceneId: subId, trigger: bk0 });
+    const back = bk0;
+    opts.value = subId; opts.dispatchEvent(new Event('change')); await W(150);
+    B.render(); log.push('ligar a um portal: tela foi para a sub-cena = ' + (sc().id === subId) + ' · escolhendo = ' + !!B.picking);
     click(5.5 * g, 5.5 * g); await W(100); B.render(); await W(100);
     const back2 = (S.state.scenes[subId].triggers || []).find((t) => t.id === back.id), bc = TG.center(back2);
-    log.push(`depois do clique: voltou = ${sc().id === sid} · portal selecionado = ${B.selectedTrigger === p2.id} · volta movida para (${bc.x / g - 0.5}, ${bc.y / g - 0.5})`);
+    log.push(`depois do clique: voltou = ${sc().id === sid} · portal selecionado = ${B.selectedTrigger === p2.id} · ligado a "${(TG.portalPartner(sc(), trs().find((t) => t.id === p2.id)) || { tr: {} }).tr.name}" em (${bc.x / g - 0.5}, ${bc.y / g - 0.5}) · ida e volta = ${TG.portalTwoWay(sc(), trs().find((t) => t.id === p2.id))}`);
 
     // 7) passar pela escada: vai para a sub-cena, quem controla vai junto, o mestre recebe o aviso com "Ir para lá"
     place(hero.id, 10, 4);
@@ -117,9 +119,10 @@ window.addEventListener('load', () => setTimeout(async () => {
     walk(there.id, [[6, 5], [5, 5]], subId); await W(50);
     const home = Object.values(S.state.scenes[sid].tokens).find((t) => /lyra/i.test(t.name));
     log.push(`pisou de novo: voltou para a principal em ${cellOf(home)} (ao lado da escada (12, 4)) · jogador em: ${S.state.scenes[S.sceneIdOf(pid)].name}`);
-    // tirar a volta (armadilha): o portal de volta some e este continua levando ao mesmo ponto
-    TG.unlinkPortal(sid, p2.id);
-    log.push(`tirou a volta: portais na sub-cena = ${(S.state.scenes[subId].triggers || []).filter((t) => t.portal).length} · ainda leva para (${(TG.portalDest(sc(), trs().find((t) => t.id === p2.id)).x / g - 0.5)}, ${(TG.portalDest(sc(), trs().find((t) => t.id === p2.id)).y / g - 0.5)})`);
+    // só ida: o portal de baixo fica, mas não leva de volta
+    TG.setTwoWay(sid, p2.id, false);
+    const bk3 = (S.state.scenes[subId].triggers || []).find((t) => t.id === back.id);
+    log.push(`só ida: portais na sub-cena = ${(S.state.scenes[subId].triggers || []).filter((t) => t.portal).length} · o de baixo leva a algum lugar = ${!!TG.portalPartner(S.state.scenes[subId], bk3)} · o de cima continua ligado = ${!!TG.portalPartner(sc(), trs().find((t) => t.id === p2.id))}`);
 
     // 8) menu do botão direito
     const hits = B.hitAll(sc(), TG.center(trs().find((t) => t.id === p2.id))).filter((x) => x.kind === 'trigger');
@@ -140,7 +143,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push(`campanha antiga: gatilho de teletransporte virou portal = ${!!m.scenes[sid].triggers.find((t) => t.id === 'velho').portal} · sub-cena sem pai virou principal = ${!m.scenes[subId].parent}`);
 
     // 10) exportar a principal leva a sub-cena; importar recria as duas, com o portal apontando para a cópia
-    TG.linkPortal(sid, p2.id);
+    TG.setTwoWay(sid, p2.id, true);
     const bundle = App.Storage.sceneBundle(sid);
     log.push('exportar a principal: sub-cenas no arquivo = ' + (bundle.subs || []).length);
     const before = new Set(S.state.sceneOrder);

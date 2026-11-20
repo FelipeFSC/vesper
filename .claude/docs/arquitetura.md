@@ -113,3 +113,12 @@ cena
 - A chave antiga `campaign` vira a primeira história em `listStories()` (na primeira vez).
 - Tela de cartões: `App.Stories` em `js/main.js` (`showStories(online)` → `openStory(id)` → `startGM`). "Voltar ao menu" do mestre: `?historias=online|offline`.
 - `App.Storage.mem` (Map): guarda na memória em vez do IndexedDB (testes).
+
+## Menu das ferramentas (Plano 38)
+- `renderToolOpts` (`js/ui.js`) monta `#tool-opts` com `toRow(icon, label, {on, sub, right, title, cls, onclick})` e `toSep()`. A assinatura `box._sig` evita redesenhar à toa.
+- Sub-menu: `openToolSub(row, key, build)` cria `#tool-sub` (`.to-sub`) dentro de `#board-wrap`, ao lado do menu e alinhado à linha. Fecha por `closeToolSub` (`UI.closeToolSub`): clique fora (pointerdown em captura), Esc (keydown em captura no document, para a tecla não chegar ao mapa), troca de ferramenta ou redesenho do menu.
+
+## Unidade de medida (Plano 40)
+- Guardado sempre no sistema métrico (`sc.cellDist` em metros, `sc.unit` fixo em 'm', alturas e voo em metros). `rules.units` = unidade da mesa; `App.Units.mine()` = a da pessoa (`localStorage` `vesper-unidades-minhas`).
+- Para mostrar: `App.Units.dist/weight/speed/liquid`. Para campos: `distIn` (metros → número na unidade de quem edita) e `distOut` (volta para metros), com `distUnit()` no rótulo.
+- `sceneToMeters` (`js/store.js`) converte a unidade antiga da cena no `migrate` e no `scene.add` (importar cena).

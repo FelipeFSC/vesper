@@ -61,3 +61,20 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 35 | [Portal: área de chegada desenhada e marcador para os jogadores](35-portal-area-de-chegada-e-icones.md) | Implementado (testes do usuário) |
 | 36 | [Acompanhar os jogadores](36-acompanhar-jogadores.md) | Implementado (testes do usuário) |
 | 37 | [Remover jogador e jogador sem ficha não vê o mapa](37-remover-jogador-e-sem-ficha.md) | Implementado (testes do usuário) |
+| 38 | [Menu das ferramentas no estilo Photoshop](38-barra-de-opcoes-das-ferramentas.md) | Implementado (testes do usuário) |
+| 39 | [A luz e a visão só mudam quando o token é solto](39-luz-so-ao-soltar-o-token.md) | Implementado (testes do usuário) |
+| 40 | [Unidade de medida da mesa (e a de cada jogador)](40-unidades-da-mesa.md) | Implementado (testes do usuário) |
+| 41 | [Portal: ligar dois portais (sai o "Ida e volta")](41-ligar-dois-portais.md) | Implementado (testes do usuário) |
+| 42 | [Tela de cadastros (começando pelos ataques)](42-cadastros-ataques.md) | Implementado (testes do usuário) |
+| 43 | [Cadastro de itens (e as armas como itens)](43-cadastro-de-itens.md) | Implementado (testes do usuário) |
+| 44 | [Cadastro de talentos](44-cadastro-de-talentos.md) | Implementado (testes do usuário) |
+| 45 | [Cadastro de magias](45-cadastro-de-magias.md) | Implementado (testes do usuário) |
+| 46 | [Cadastro de antecedentes](46-cadastro-de-antecedentes.md) | Implementado (testes do usuário) |
+| 47 | [Cadastro de espécies (raças)](47-cadastro-de-especies.md) | Implementado (testes do usuário) |
+| 48 | [Cadastro de opções de classe](48-cadastro-de-opcoes-de-classe.md) | Implementado (testes do usuário) |
+| 49 | [Cadastro de classes (classes base)](49-cadastro-de-classes.md) | Implementado (testes do usuário) |
+| 50 | [Cadastro de subclasses](50-cadastro-de-subclasses.md) | Implementado (testes do usuário) |
+| 51 | [Ficha de D&D 5e e criação pelos cadastros](51-criar-personagem-pelos-cadastros.md) | Implementado: partes A e B (testes do usuário) |
+| 52 | [Multiclasse na ficha 5e e no assistente](52-multiclasse.md) | Implementado (testes do usuário) |
+| 53 | [Ficha de criatura 5e (bestiário fiel ao livro)](53-ficha-de-criatura-5e.md) | Implementado (testes do usuário) |
+| 54 | [Etapa de atributos do assistente no modelo do Roll20](54-etapa-de-atributos-modelo-roll20.md) | Implementado (testes do usuário) |

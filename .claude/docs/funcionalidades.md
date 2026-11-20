@@ -53,6 +53,56 @@ O manual para o usuário final está em `wiki/index.html`. Aqui fica o resumo t�
 - Redesenho: cada mudança redesenha depois que o foco já foi ao próximo campo, e devolve o foco pelo `data-f`.
 - Celular (até 760 px): uma coluna, e a lista "Minhas fichas" fecha quando há ficha aberta.
 
+## Ficha de D&D 5e (Plano 51; ainda sem tutorial/wiki)
+- **Arquivos:** `js/regras5e.js` (contas), `js/ficha5e.js` (desenho, o mesmo na página e na janela da mesa), `js/dados5e.js` (lê os cadastros sob demanda), `css/ficha5e.css`.
+- **Criação:** "Nova ficha" (página e mesa) pergunta Genérica ou D&D 5e. A ficha 5e tem `sistema: '5e'` e os dados completos em `a.dnd5e`; as fichas antigas e o bestiário continuam genéricos.
+- **Abas:** Principal · Ações · Magias · Inventário · Características · Biografia · Configurar, no modelo da ficha do Roll20. O topo mostra CA, iniciativa, deslocamento, proficiência, PV com PV temporário, dados de vida e inspiração.
+- **Contas:**
+  - modificador, proficiência pela tabela da classe, salvaguardas, perícias (com especialização e Pau para toda obra) e passivos;
+  - **PV:** dado cheio no 1º nível, a média arredondada para cima nos outros, + Con, + PV extra por nível;
+  - **CA:** armadura vestida, com o limite de Des, + escudo; sem armadura, 10 + Des, Barbarian (+Con), Monk (+Sab) ou 13 + Des;
+  - **ataques:** Finesse usa a maior entre For e Des; os truques aumentam nos níveis 5, 11 e 17;
+  - CD e ataque mágico, espaços (também os de pacto e os da subclasse), carga (Força × 7,5 kg).
+- **Ajuste manual:** `a.dnd5e.aj[chave] = { set, add }` troca o valor ou soma um bônus, com "Voltar ao calculado".
+- **Cadastros:** escolher classe, subclasse, espécie, antecedente, item, magia, talento ou ataque guarda uma cópia na ficha (com `ref` = id do cadastro).
+  - Só o que é fixo é aplicado: perícias, proficiências, sentidos, resistências.
+  - Arma no inventário cria o ataque; magia com ataque, salvaguarda ou cura também.
+- **Mesa:** `Regras5e.apply` recalcula os campos genéricos a cada mudança:
+  - **atributos:** os seis com o modificador, Defesa = CA, Proficiência, Iniciativa, Percepção passiva;
+  - **barras:** PV e Espaços 1º…9º ou de pacto;
+  - **ações:** os ataques; as magias gastam um espaço do nível delas.
+  - PV e espaços atuais ficam nas barras. Quando o máximo sobe, o atual ganha a diferença.
+  - Na salvaguarda, o alvo 5e usa a dele (`Store.useAction` → `Regras5e.saveFor`).
+- **Assistente** (parte B, `js/assistente5e.js`):
+  - **Onde abre:** "D&D 5e passo a passo" em Nova ficha; "Subir de nível" ou "Criar pelo assistente" no topo da ficha 5e.
+  - **Etapas:** Regras, Classe, Espécie, Antecedente, Atributos, Escolhas, Magias, Equipamento e Resumo.
+  - **Escolhas:** saem dos cadastros:
+    - perícias, proficiências, idiomas e especialização;
+    - ASI ou talento;
+    - talentos da classe e de origem;
+    - opções por nível;
+    - magias de talentos e espécie;
+    - truques e preparadas da classe;
+    - os pacotes de equipamento, com os itens à escolha.
+  - **Validação:** só avisa.
+  - **Subir de nível:** só pede o que os níveis novos trazem e aplica por cima da ficha.
+  - **PV rolado:** fica em `d.hp.rolls[nível]`.
+- **Multiclasse** (Plano 52):
+  - **Na ficha:** uma linha por classe (a primeira é a inicial: salvaguardas e PV cheio); "+ Classe" dá as proficiências de multiclasse.
+  - **Contas:**
+    - proficiência pelo nível total;
+    - dados de vida por tipo (`hp.hdUsedBy`);
+    - espaços pela tabela de multiclasse (`Regras5e.MULTI`, `casterShare`) quando há duas ou mais classes que conjuram;
+    - pacto separado.
+  - **Conjuração por classe:** `c.casters`; a magia guarda `cls`, e o ataque dela usa a CD daquela classe.
+  - **Assistente:** "Em qual classe?" ao subir de nível; requisito só avisa; tudo pelo nível da classe.
+- **Criatura** (Plano 53):
+  - **Bloco:** `a.dnd5e.npc` (modelo NPC do Roll20), com as abas Bloco, Descrição e Configurar; tem os modos ver e editar.
+  - **Bestiário:** `B.toNpc` monta o bloco a partir do 5etools (em metros); fichas antigas viram criatura sozinhas (`B.upgrade`).
+  - **Mesa:** ataques e salvaguardas com dano viram ação; a salvaguarda do alvo vem do bloco.
+- **Dano com tipo:** ações com `parts: [{ f, type }]`; `Regras5e.defensesOf` lê as defesas sem condição, e a mesa aplica imune (0), resistência (÷2) e vulnerável (×2).
+- **Descansos:** o curto recupera os recursos de descanso curto e os espaços de pacto. O longo recupera PV, espaços, recursos e dados de vida (metade em 2014, todos em 2024), zera os testes contra a morte e tira 1 de exaustão.
+
 ## Dados (`js/dice.js`)
 `2d6+3`, `kh/kl/dh/dl`, `!` (explode), `dF`, `d%`, `[comentário]`, `(@nivel)d6`, várias rolagens com `|`. No crítico, `doubleDice` dobra a quantidade de dados (inclusive `(expr)dN`).
 
@@ -218,3 +268,23 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 ## Remover jogador e sem token (Plano 37)
 - "Remover da mesa" (coluna de jogadores e Mover jogadores): `player.remove` + `App.Net.kick`; fichas e tokens dele ficam com o mestre; pode entrar de novo com o código.
 - Jogador sem token visível que controla na cena dele (escondido não conta) não vê nada do mapa (tela escura com aviso), com ou sem iluminação.
+
+## Menu das ferramentas (Plano 38)
+- No modo Editar, a ferramenta ativa abre um menu colado no botão dela, no estilo do Photoshop: uma linha por opção (ícone + nome), a escolhida destacada, separadores entre os grupos. Sem textos de ajuda: o título de cada linha explica (passar o mouse).
+- O que tem muitas escolhas abre um **sub-menu ao lado** (seta no fim da linha): cor, espessura e preenchimento do desenho; "Notas desta cena" (busca e lista); "Imagens da campanha" (grade, clicar ou arrastar para o mapa). Fecha ao escolher, ao clicar fora, com Esc, ao clicar de novo na linha ou ao trocar de ferramenta; só um aberto.
+- Parede: Reta/Lápis, os quatro tipos (com a altura à direita), Procurar paredes. Porta: Destrancada/Trancada, Procurar portas. Luz: Luz/Escuridão, Círculo/Cone/Área e "Ligar iluminação" se estiver desligada. Gatilho e Portal: Retângulo/Círculo/Polígono. Nota: as quatro cores e a lista. Imagem: Enviar imagem e a biblioteca. Régua (mestre): Mostrar aos jogadores.
+
+## Luz e visão durante o arraste (Plano 39)
+- Segue a regra Mesa → Regras, "Régua e movimento dos outros". **Desempenho:** enquanto o token é arrastado, a luz dele e a visão ficam onde ele estava; só mudam ao soltar (não dá para "passear" com o token para espiar o mapa). **Em tempo real:** a luz e a visão acompanham o arraste e todos veem o próprio token se movendo (não só a linha do caminho), com a luz dele junto.
+
+## Unidade de medida (Plano 40)
+- O mestre escolhe a unidade da **mesa inteira** em Mesa → Unidade de medida (também pelo menu ⋯): Distância (Metros / Quilômetros ou Pés / Milhas), Peso (Quilogramas ou Libras), Velocidade (km/h ou mph), Líquidos (Litros / Mililitros ou Galões / Onças). Mesa nova: métrico.
+- Cada pessoa pode desmarcar "Na minha tela, usar as da mesa" e escolher as suas; vale só na tela dela (guardado no navegador).
+- Tudo fica guardado em metros, quilos, km/h e litros; cada tela converte ao mostrar, pela tabela prática de D&D (1 pé = 0,3 m, 1 milha = 1,5 km, 1 libra = 0,5 kg, 1 galão = 4 L…).
+- Usam a unidade: régua, rastro, nome da cena, "Cada quadrado vale" em Configurar cena (a cena não tem mais unidade própria), alturas dos muros, altura na ficha e voo. Os textos das fichas ficam para depois. O bestiário mantém o seletor próprio.
+
+## Ligar dois portais (Plano 41)
+- O mestre desenha os dois portais (cada um com a sua forma) e liga: no painel de um, **Cena do outro portal** (pode ser a mesma) e **Ligar a um portal**; clica no outro portal (em outra cena, a tela vai até lá e volta; Esc cancela).
+- Ligados, quem pisa num chega num quadrado livre dentro do outro. **Ida e volta** (padrão) faz o outro trazer de volta; desmarcada, é só ida (o outro só recebe quem chega).
+- Ligar a um portal que já tinha ligação pergunta se desfaz a anterior. Portal sem ligação não leva a lugar nenhum; apagar um portal deixa o outro sem ligação.
+- Saíram o "Ida e volta" automático (que criava a volta sozinho) e o "Desenhar a chegada". Portais antigos continuam funcionando.

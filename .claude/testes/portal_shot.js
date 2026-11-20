@@ -10,9 +10,11 @@ window.addEventListener('load', () => setTimeout(async () => {
   UI.leftTab = 'scenes';
   B.setTool('portal');
   const a = B.addTrigger(sc(), { shape: 'rect', pts: [[12 * g, 3 * g], [13 * g, 3 * g], [13 * g, 5 * g], [12 * g, 5 * g]], portal: true, name: 'Escada' });
-  TG.setPortalDest(sid, a.id, { sceneId: sub.id });
+  const dn = TG.newPortal(S.state.scenes[sub.id], { shape: 'circle', x: 5.5 * g, y: 5.5 * g, r: 0.5, name: 'Escada de baixo' }); S.dispatch({ type: 'trigger.add', sceneId: sub.id, trigger: dn });
+  TG.connectPortals(sid, a.id, sub.id, dn.id, true);
   const b = B.addTrigger(sc(), { shape: 'rect', pts: [[1 * g, 1 * g], [2 * g, 1 * g], [2 * g, 2 * g], [1 * g, 2 * g]], portal: true, name: 'Vagão' });
-  TG.setPortalDest(sid, b.id, { x: 6.5 * g, y: 7.5 * g });
+  const c = B.addTrigger(sc(), { shape: 'circle', x: 6.5 * g, y: 7.5 * g, r: 0.5, portal: true, name: 'Vagão 2' });
+  TG.connectPortals(sid, b.id, sid, c.id, true);
   B.selectObj('trigger', sc().triggers.find((x) => x.id === b.id));
   UI.refresh(); B.render(); await W(300); B.render();
 }, 1200));

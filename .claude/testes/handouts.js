@@ -20,7 +20,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // painel do mestre
     UI.showTab('handouts'); await W(150);
     log.push('painel Mostrar: ' + document.querySelectorAll('#p-handouts .ho-item').length + ' entregas · botão no dock: ' + !!$('#dock [data-dock="handouts"]'));
-    log.push('biblioteca de imagens inclui a carta: ' + (() => { App.Board.setTool('prop'); UI.refresh(); return [...document.querySelectorAll('#tool-opts .img-lib img')].length >= 1; })());
+    log.push('biblioteca de imagens inclui a carta: ' + (() => { App.Board.setTool('prop'); UI.refresh(); [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Imagens da campanha/.test(b.textContent)).click(); return [...document.querySelectorAll('#tool-sub .img-lib img')].length >= 1; })());
     App.Board.setTool('select');
 
     // mostrar para todos pelo diálogo: o mestre (que mostrou) vê a prévia

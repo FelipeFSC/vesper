@@ -1,4 +1,5 @@
-// Plano 35 · Portal: área de chegada desenhada (sorteio dentro dela), outra cena, marcador para os jogadores (visão), linha, ícones.
+// Plano 35 · Portal: marcador para os jogadores (visão), linha, ícones; chegada antiga (área e ponto) continua funcionando.
+// (A área de chegada desenhada e a ida e volta automática saíram no Plano 41: ver portal3.js)
 // #shot: deixa a tela pronta para a foto do marcador (visão do jogador)
 window.addEventListener('error', (e) => { (window.__err = window.__err || []).push(String(e.message)); });
 window.addEventListener('load', () => setTimeout(async () => {
@@ -24,18 +25,12 @@ window.addEventListener('load', () => setTimeout(async () => {
     const hudBtn = (re) => [...document.querySelectorAll('#token-hud .btn')].find((b) => re.test(b.textContent));
     const tr = (id, scId) => ((S.state.scenes[scId || sid].triggers) || []).find((t) => t.id === id);
 
-    // 1) entrada (1 quadrado) e chegada desenhada como retângulo 3×2 no mesmo mapa
+    // 1) chegada antiga desenhada (área 3×2 guardada no portal): sorteio dentro dela
     const A = B.addTrigger(sc(), { shape: 'rect', pts: [[9 * g, 2 * g], [10 * g, 2 * g], [10 * g, 3 * g], [9 * g, 3 * g]], portal: true, name: 'Vagão' });
-    B.selectObj('trigger', A); UI.refresh(); B.render(); await W(80);
-    log.push('painel: botão "Desenhar a chegada" = ' + !!hudBtn(/Desenhar a chegada/) + ' · "Escolher no mapa" saiu = ' + !hudBtn(/Escolher no mapa/));
-    hudBtn(/Desenhar a chegada/).click(); await W(50);
-    log.push('desenhando: ferramenta ' + B.tool + ' · esperando a área = ' + !!B.areaPick);
-    B.trigShape = 'rect';
-    drag(2 * g, 5 * g, 5 * g, 7 * g); await W(50);
-    const aA = TG.portalAct(tr(A.id));
-    log.push(`chegada desenhada: área ${aA.area && aA.area.shape} com ${TG.areaCells(sc(), aA.area)} quadrados · portais na cena = ${sc().triggers.filter((t) => t.portal).length} (não criou outro) · selecionado de novo = ${B.selectedTrigger === A.id}`);
-    B.render(); log.push('painel: ' + ($('#token-hud .row .hint') || {}).textContent);
-    // 10 passagens: sorteadas dentro da área
+    const acts = JSON.parse(JSON.stringify(tr(A.id).actions)); acts[0].area = { shape: 'rect', pts: [[2 * g, 5 * g], [5 * g, 5 * g], [5 * g, 7 * g], [2 * g, 7 * g]] }; acts[0].x = 3.5 * g; acts[0].y = 6 * g;
+    S.dispatch({ type: 'trigger.update', sceneId: sid, id: A.id, patch: { actions: acts } });
+    B.selectObj('trigger', tr(A.id)); UI.refresh(); B.render(); await W(80);
+    log.push('painel: "Desenhar a chegada" saiu = ' + !hudBtn(/Desenhar a chegada/) + ' · aviso: ' + ($('#token-hud .hud-section .hint') || {}).textContent);
     const cells = new Set();
     let inside = 0;
     for (let i = 0; i < 10; i++) {
@@ -44,39 +39,13 @@ window.addEventListener('load', () => setTimeout(async () => {
       if (cx >= 2 && cx < 5 && cy >= 5 && cy < 7) inside++;
       cells.add(cx + ',' + cy);
     }
-    log.push(`10 passagens: ${inside} dentro da área · ${cells.size} quadrados diferentes (sorteio)`);
-    // três juntos não repetem
-    const extra = [];
-    for (let i = 0; i < 2; i++) { const t = Object.assign({}, sc().tokens[hero.id], { id: 'tk_q' + i, name: 'Guarda ' + i }); S.dispatch({ type: 'token.add', sceneId: sid, token: t }); extra.push(t.id); }
-    [hero.id].concat(extra).forEach((id) => place(id, 9, 2));
-    TG.fire(sid, A.id, null, { manual: true });
-    const three = [hero.id].concat(extra).map((id) => { const t = sc().tokens[id]; return t.x / g + ',' + t.y / g; });
-    log.push(`três juntos: ${three.join(' ')} · diferentes = ${new Set(three).size === 3}`);
-    extra.forEach((id) => S.dispatch({ type: 'token.delete', sceneId: sid, id }));
-
-    // 2) ida e volta: a volta nasce com a forma desenhada (retângulo), e voltar cai dentro da entrada
-    TG.linkPortal(sid, A.id);
-    const back = TG.portalPartner(sc(), tr(A.id));
-    log.push(`ida e volta: volta "${back.tr.name}" com forma ${back.tr.shape} (${back.tr.pts.length} cantos) · a área solta saiu do portal = ${!TG.portalAct(tr(A.id)).area}`);
-    place(hero.id, 1, 6); walk(hero.id, [[1, 6], [3, 6]]);
-    const hb = sc().tokens[hero.id];
-    log.push(`voltou pela volta: token em (${hb.x / g}, ${hb.y / g}) (esperado (9, 2), a entrada)`);
-
-    // 3) outra cena: Desenhar a chegada lá (a tela vai e volta)
+    log.push(`chegada antiga, 10 passagens: ${inside} dentro da área · ${cells.size} quadrados diferentes (sorteio)`);
+    // portal na sub-cena, ligado (ida e volta)
     const sub = S.newScene('Andar de baixo'); sub.parent = sid; S.dispatch({ type: 'scene.add', scene: sub });
     const Bp = B.addTrigger(sc(), { shape: 'circle', x: 12.5 * g, y: 4.5 * g, r: 0.5, portal: true, name: 'Escada' });
-    TG.setPortalDest(sid, Bp.id, { sceneId: sub.id });
-    B.selectObj('trigger', tr(Bp.id)); UI.refresh(); B.render(); await W(80);
-    hudBtn(/Desenhar a chegada/).click(); await W(80); B.render(); await W(50);
-    log.push('outra cena: tela foi para "' + sc().name + '" · esperando a área = ' + !!B.areaPick);
-    B.trigShape = 'circle';
-    drag(5.5 * g, 5.5 * g, 7 * g, 5.5 * g); await W(80); B.render(); await W(80);
-    const bk = TG.portalPartner(S.state.scenes[sid], tr(Bp.id));
-    log.push(`depois de desenhar: voltou para "${sc().name}" · volta na sub-cena com forma ${bk.tr.shape} raio ${bk.tr.r} · portal selecionado = ${B.selectedTrigger === Bp.id}`);
-    // Esc cancela
-    hudBtn(/Desenhar a chegada/).click(); await W(80); B.render();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await W(80); B.render(); await W(50);
-    log.push('Esc cancela: voltou = ' + (sc().id === sid) + ' · esperando = ' + !!B.areaPick);
+    const down = TG.newPortal(S.state.scenes[sub.id], { shape: 'circle', x: 5.5 * g, y: 5.5 * g, r: 0.5, name: 'Escada de baixo' });
+    S.dispatch({ type: 'trigger.add', sceneId: sub.id, trigger: down });
+    TG.connectPortals(sid, Bp.id, sub.id, down.id, true);
 
     // 4) marcador para os jogadores: escada subindo; a volta ganha a escada descendo
     B.selectObj('trigger', tr(Bp.id)); UI.refresh(); B.render(); await W(80);
@@ -85,7 +54,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.dispatch({ type: 'trigger.update', sceneId: sid, id: Bp.id, patch: { mark: TG.newMark({ icon: 'up' }) } }); B.render(); await W(50);
     [...document.querySelectorAll('#token-hud label.check')].find((l) => /Mostrar aos jogadores/.test(l.textContent)).querySelector('input').click(); await W(50); B.render(); await W(80);
     const bk2 = TG.portalPartner(S.state.scenes[sid], tr(Bp.id));
-    log.push(`ligou: portal mostra = ${tr(Bp.id).mark.show} · volta mostra = ${bk2.tr.mark && bk2.tr.mark.show} com ícone "${bk2.tr.mark && bk2.tr.mark.icon}" (esperado down)`);
+    log.push(`ligou: portal mostra = ${tr(Bp.id).mark.show} · o outro portal tem o marcador dele (não copia) = ${!(bk2.tr.mark && bk2.tr.mark.show)}`);
     log.push('ícones no painel: ' + [...document.querySelectorAll('#token-hud .mk-icon')].map((b) => b.title).join(', '));
     // nome
     const nameIn = [...document.querySelectorAll('#token-hud input.hud-input')][0];

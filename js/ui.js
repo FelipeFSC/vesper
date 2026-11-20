@@ -294,6 +294,7 @@
     const item = (icon, label, fn) => h('button', { onclick: () => { close(); fn(); } }, ic(icon), label);
     m.innerHTML = '';
     m.append(item('settings-2', 'Configurações da mesa', () => UI.showTab('table')));
+    m.append(item('ruler', 'Unidade de medida', () => { UI.showTab('table'); setTimeout(() => { const el = $('#units-sec'); if (el) el.scrollIntoView({ block: 'start' }); }, 0); }));
     if (App.Net.isOnline() && S().role === 'gm') m.append(item('link', 'Copiar convite', () => U.copy(App.Net.inviteLink())));
     m.append(h('hr'));
     if (gm) {
@@ -358,7 +359,7 @@
     for (const ho of st.handouts || []) if (ho.img && App.Images.src(ho.img)) seen.add(ho.img);
     return [...seen];
   }
-  const fmtM = (n) => String(Math.round(Number(n) * 100) / 100).replace('.', ',') + ' m';
+  const fmtM = (n) => App.Units.dist(n); // Plano 40: na unidade de quem vê
   // Mantém o quadro de opções inteiro dentro do mapa: sobe se precisar; se ainda não couber, rola por dentro
   function fitToolOpts(box) {
     const area = box.parentElement;
@@ -371,11 +372,48 @@
   UI.fitToolOpts = () => { const b = $('#tool-opts'); if (b && !b.hidden) fitToolOpts(b); };
   window.addEventListener('resize', () => UI.fitToolOpts());
 
+  // Plano 38: menu da ferramenta no estilo Photoshop. Uma linha por opção (ícone + nome), a escolhida destacada;
+  // o que tem muitas escolhas abre um sub-menu ao lado. Sem textos de ajuda: o título de cada linha explica.
+  let toolSub = null;
+  function closeToolSub() { if (toolSub) { toolSub.el.remove(); toolSub = null; } }
+  UI.closeToolSub = closeToolSub;
+  function openToolSub(row, key, build) {
+    if (toolSub && toolSub.key === key) { closeToolSub(); return; }
+    closeToolSub();
+    const box = $('#tool-opts'), area = box.parentElement;
+    const el = h('div', { id: 'tool-sub', class: 'to-sub' });
+    build(el);
+    area.append(el);
+    const ar = area.getBoundingClientRect(), br = box.getBoundingClientRect(), rr = row.getBoundingClientRect();
+    el.style.left = (br.right - ar.left + 6) + 'px';
+    el.style.maxHeight = Math.max(160, ar.height - 28) + 'px';
+    el.style.top = Math.max(14, Math.min(rr.top - ar.top - 5, ar.height - el.offsetHeight - 14)) + 'px';
+    toolSub = { el, key, tool: App.Board.tool, row };
+    row.classList.add('open');
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (toolSub && !toolSub.el.contains(e.target) && !toolSub.row.contains(e.target)) closeToolSub();
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (toolSub && e.key === 'Escape') { closeToolSub(); e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  // linha do menu: ícone (nome do ícone ou um nó), nome, valor à direita, seta se abre sub-menu
+  function toRow(icon, label, o = {}) {
+    return h('button', { class: 'to-row' + (o.on ? ' on' : '') + (o.sub ? ' has-sub' : '') + (o.cls ? ' ' + o.cls : ''), title: o.title || '', onclick: o.onclick },
+      h('span', { class: 'to-ic' }, typeof icon === 'string' ? ic(icon) : icon),
+      h('span', { class: 'to-label' }, label),
+      o.right != null && o.right !== '' ? h('span', { class: 'to-val' }, o.right) : '',
+      o.sub ? h('span', { class: 'to-arrow' }, ic('chevron-right')) : '');
+  }
+  const toSep = () => h('div', { class: 'to-sep' });
+  const dot = (c) => h('i', { class: 'to-dot', style: { background: c } });
+
   function renderToolOpts() {
     const box = $('#tool-opts'), B = App.Board;
     const t = TOOLS.find((x) => x.id === B.tool);
     const gmRuler = t && t.id === 'ruler' && S().gmView();
-    if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'portal' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; return; }
+    if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'portal' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; closeToolSub(); return; }
+    if (toolSub && toolSub.tool !== t.id) closeToolSub();
     const btn = $('#toolbar [data-tool="' + t.id + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
@@ -383,142 +421,131 @@
     const rsc = S().currentScene();
     const sig = B.style.color + B.style.width + B.style.fill + t.id + B.wallType + B.wallMode + campaignImages().join(',')
       + B.rulerShare + B.lightKind + B.lightShape + !!(rsc && rsc.light.enabled) + B.doorLocked + B.trigShape
-      + B.noteColor + JSON.stringify(((rsc && rsc.notes) || []).map((n) => [n.id, n.title, n.color])) + B.selectedNote;
+      + B.noteColor + ((rsc && rsc.notes) || []).length + App.Units.dist(1);
     box.hidden = false;
     if (box._sig === sig) return;
     box._sig = sig;
+    closeToolSub();
     box.innerHTML = '';
     const redo = () => { box._sig = null; renderToolOpts(); };
+    const pickClose = (fn) => () => { fn(); closeToolSub(); redo(); };
     requestAnimationFrame(() => fitToolOpts(box));
+    const shapes = (hints) => [['rect', 'square', 'Retângulo'], ['circle', 'circle', 'Círculo'], ['poly', 'pentagon', 'Polígono']].map(([k, icon, l]) =>
+      toRow(icon, l, { on: B.trigShape === k, title: hints[k], onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }));
+    const polyHint = 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.';
+
     if (t.id === 'prop') {
       const lib = campaignImages();
-      box.append(h('span', { class: 'eyebrow' }, 'Imagens no mapa'),
-        btnI('upload', 'Enviar imagem…', { class: 'btn primary block', onclick: async () => {
-          const file = await U.pickFile('image/*');
-          if (file) await B.addPropFromFile(file, B.viewCenter());
-        } }),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Ou arraste arquivos do computador para o mapa. Clique numa imagem para mover; os cantos redimensionam e a bolinha de cima gira (Shift: de 15 em 15°).'),
-        h('span', { class: 'eyebrow' }, 'Imagens da campanha'),
-        lib.length ? h('div', { class: 'img-lib' }, lib.map((id) => {
-          const im = h('img', { src: App.Images.src(id) || '', alt: '', draggable: 'true', title: 'Arraste para o mapa ou clique para colocar no centro',
-            onclick: () => B.placeImage(id, B.viewCenter()) });
-          im.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-image', id); e.dataTransfer.effectAllowed = 'copy'; });
-          return im;
-        })) : h('p', { class: 'hint', style: { margin: 0 } }, 'As imagens que você colocar aparecem aqui para usar de novo em qualquer cena.'));
-      return;
-    }
-    if (t.id === 'note') {
+      const libRow = toRow('image', 'Imagens da campanha', { sub: true, right: String(lib.length), title: 'As imagens já usadas, para pôr de novo em qualquer cena: clique para pôr no centro ou arraste para o mapa',
+        onclick: () => openToolSub(libRow, 'lib', (el) => {
+          el.classList.add('wide');
+          el.append(lib.length ? h('div', { class: 'img-lib' }, lib.map((id) => {
+            const im = h('img', { src: App.Images.src(id) || '', alt: '', draggable: 'true', title: 'Arraste para o mapa ou clique para colocar no centro',
+              onclick: () => B.placeImage(id, B.viewCenter()) });
+            im.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-image', id); e.dataTransfer.effectAllowed = 'copy'; });
+            return im;
+          })) : h('p', { class: 'to-empty' }, 'Nenhuma imagem ainda.'));
+        }) });
+      box.append(
+        toRow('upload', 'Enviar imagem…', { title: 'Ou arraste arquivos do computador para o mapa. Clique numa imagem para mover; os cantos redimensionam e a bolinha de cima gira (Shift: de 15 em 15°)',
+          onclick: async () => { const file = await U.pickFile('image/*'); if (file) await B.addPropFromFile(file, B.viewCenter()); } }),
+        libRow);
+    } else if (t.id === 'note') {
       const notes = (rsc && rsc.notes) || [];
-      const listBox = h('div', { class: 'note-list' });
-      const fill = (q) => {
-        listBox.innerHTML = '';
-        const k = U.slug(q || '');
-        const shown = notes.filter((n) => !k || U.slug(n.title + ' ' + n.text).includes(k));
-        if (!shown.length) { listBox.append(h('p', { class: 'hint', style: { margin: 0 } }, notes.length ? 'Nada encontrado.' : 'Nenhuma nota ainda.')); return; }
-        for (const n of shown) listBox.append(h('button', { class: 'note-item' + (B.selectedNote === n.id ? ' on' : ''), title: 'Centraliza no mapa e abre', onclick: () => { B.centerOn(n.x, n.y); UI.openNote(rsc.id, n.id); } },
-          h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[n.color] || B.NOTE_COLORS.gold } }), h('span', { class: 'grow' }, h('b', {}, n.title || 'Nota'), n.text ? h('small', {}, String(n.text).split('\n')[0].slice(0, 60)) : '')));
-      };
-      const search = h('input', { type: 'search', placeholder: 'Buscar nas notas…', oninput: (e) => fill(e.target.value) });
-      fill('');
-      box.append(h('span', { class: 'eyebrow' }, 'Cor das novas notas'),
-        h('div', { class: 'seg note-colors' }, [['gold', 'Sala'], ['red', 'Perigo'], ['green', 'Tesouro'], ['blue', 'NPC']].map(([k, l]) =>
-          h('button', { class: B.noteColor === k ? 'on' : '', onclick: () => { B.noteColor = k; redo(); } }, h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[k] } }), l))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique no mapa para espetar uma nota. Só você vê; os jogadores nem recebem o texto.'),
-        h('span', { class: 'eyebrow' }, 'Notas desta cena'), search, listBox);
-      return;
-    }
-    if (t.id === 'ruler') {
-      box.append(h('span', { class: 'eyebrow' }, 'Régua'),
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: B.rulerShare !== false, onchange: (e) => { B.rulerShare = e.target.checked; redo(); } }), 'Mostrar aos jogadores'),
-        h('p', { class: 'hint', style: { margin: 0 } }, B.rulerShare !== false
-          ? 'Os jogadores veem a sua régua com o seu nome. Botão direito enquanto mede marca um ponto de passagem.'
-          : 'Só você vê a régua (para medir escondido).'));
-      return;
-    }
-    if (t.id === 'portal') {
-      const hint = { rect: 'Clique num quadrado (a escada) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
-        poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
-      box.append(h('span', { class: 'eyebrow' }, 'Área do portal'),
-        h('div', { class: 'seg' }, [['rect', 'Retângulo'], ['circle', 'Círculo'], ['poly', 'Polígono']].map(([k, l]) =>
-          h('button', { class: B.trigShape === k ? 'on' : '', onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }, l))),
-        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Depois escolha para onde ele leva. Os jogadores nunca veem a área.'));
-      return;
-    }
-    if (t.id === 'trigger') {
-      const hint = { rect: 'Clique num quadrado (placa de pressão) ou arraste um retângulo.', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio.',
-        poly: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter.' };
-      box.append(h('span', { class: 'eyebrow' }, 'Área do gatilho'),
-        h('div', { class: 'seg' }, [['rect', 'Retângulo'], ['circle', 'Círculo'], ['poly', 'Polígono']].map(([k, l]) =>
-          h('button', { class: B.trigShape === k ? 'on' : '', onclick: () => { B.trigShape = k; B.trigPoly = null; redo(); } }, l))),
-        h('p', { class: 'hint', style: { margin: 0 } }, hint[B.trigShape] + ' Clicar no marcador abre a configuração. Os jogadores nunca veem a área.'));
-      return;
-    }
-    if (t.id === 'door') {
-      box.append(h('span', { class: 'eyebrow' }, 'Novas portas'),
-        h('div', { class: 'seg vis-seg' },
-          h('button', { class: B.doorLocked ? '' : 'on', onclick: () => { B.doorLocked = false; redo(); } }, ic('lock-open'), 'Destrancada'),
-          h('button', { class: B.doorLocked ? 'on' : '', onclick: () => { B.doorLocked = true; redo(); } }, ic('lock'), 'Trancada')),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Arraste de um canto do grid a outro. Clique no marcador para abrir ou fechar; Shift + clique tranca ou destranca. Porta destrancada deixa passar mesmo fechada; a trancada, ninguém abre nem passa (só você). O cadeado só você vê.'),
-        h('span', { class: 'eyebrow' }, 'Ajuda'),
-        btnI('scan', 'Procurar portas no mapa', { class: 'btn primary block', title: 'Mostre uma porta da imagem e o sistema acha as parecidas; nas paredes que já existem, abre a passagem', onclick: () => UI.openScan('doors') }));
-      return;
-    }
-    if (t.id === 'light') {
-      const pick =(k, v) => { B[k] = v; if (k !== 'lightKind') B.lightPoly = null; redo(); App.Board.requestRender(); };
-      const shapeHint = { circle: 'Clique para pôr uma luz, ou arraste para escolher o alcance.', cone: 'Clique na origem e arraste para a direção e o alcance.',
-        area: 'Clique em cada canto da área. Feche clicando no primeiro ponto, com dois cliques ou Enter. Backspace desfaz o último ponto e Esc cancela.' };
-      box.append(h('span', { class: 'eyebrow' }, 'Tipo'),
-        h('div', { class: 'seg vis-seg' },
-          h('button', { class: B.lightKind === 'light' ? 'on' : '', onclick: () => pick('lightKind', 'light') }, ic('lightbulb'), 'Luz'),
-          h('button', { class: B.lightKind === 'dark' ? 'on' : '', onclick: () => pick('lightKind', 'dark') }, ic('moon'), 'Escuridão')),
-        h('span', { class: 'eyebrow' }, 'Forma'),
-        h('div', { class: 'seg vis-seg' }, [['circle', 'circle', 'Círculo'], ['cone', 'cone', 'Cone'], ['area', 'square', 'Área']].map(([k, icon, l]) =>
-          h('button', { class: B.lightShape === k ? 'on' : '', onclick: () => pick('lightShape', k) }, ic(icon), l))),
-        h('p', { class: 'hint', style: { margin: 0 } }, shapeHint[B.lightShape]),
-        h('p', { class: 'hint', style: { margin: 0 } }, B.lightKind === 'dark'
-          ? 'A escuridão apaga qualquer luz onde está, até de dia. Quem tem visão no escuro vê lá dentro como meia luz.'
-          : 'Clique num marcador para editar (cor, alcance, tremular); as alças mudam o alcance e a direção. Dois cliques acendem ou apagam.'),
-        rsc && !rsc.light.enabled ? h('div', { class: 'warn-box' }, h('span', {}, 'A iluminação está desligada nesta cena: as luzes não fazem efeito.'),
-          btnI('lightbulb', 'Ligar iluminação', { class: 'btn small primary', onclick: () => S().dispatch({ type: 'scene.update', id: rsc.id, patch: { light: Object.assign({}, rsc.light, { enabled: true, global: false }) } }) })) : '');
-      return;
-    }
-    if (t.id === 'wall') {
+      const NC = [['gold', 'Sala'], ['red', 'Perigo'], ['green', 'Tesouro'], ['blue', 'NPC']];
+      const listRow = toRow('search', 'Notas desta cena', { sub: true, right: String(notes.length), title: 'Buscar e abrir as notas desta cena',
+        onclick: () => openToolSub(listRow, 'notes', (el) => {
+          el.classList.add('wide');
+          const listBox = h('div', { class: 'note-list' });
+          const fill = (q) => {
+            listBox.innerHTML = '';
+            const k = U.slug(q || ''), cur = ((S().currentScene() || {}).notes) || [];
+            const shown = cur.filter((n) => !k || U.slug(n.title + ' ' + n.text).includes(k));
+            if (!shown.length) { listBox.append(h('p', { class: 'to-empty' }, cur.length ? 'Nada encontrado.' : 'Nenhuma nota ainda.')); return; }
+            for (const n of shown) listBox.append(h('button', { class: 'note-item' + (B.selectedNote === n.id ? ' on' : ''), title: 'Centraliza no mapa e abre', onclick: () => { closeToolSub(); B.centerOn(n.x, n.y); UI.openNote(rsc.id, n.id); } },
+              h('i', { class: 'note-dot', style: { background: B.NOTE_COLORS[n.color] || B.NOTE_COLORS.gold } }), h('span', { class: 'grow' }, h('b', {}, n.title || 'Nota'), n.text ? h('small', {}, String(n.text).split('\n')[0].slice(0, 60)) : '')));
+          };
+          const search = h('input', { type: 'search', placeholder: 'Buscar nas notas…', oninput: (e) => fill(e.target.value) });
+          fill('');
+          el.append(search, listBox);
+          setTimeout(() => search.focus(), 0);
+        }) });
+      box.append(...NC.map(([k, l]) => toRow(dot(B.NOTE_COLORS[k]), l, { on: B.noteColor === k, title: 'Cor das novas notas: ' + l + '. Clique no mapa para espetar uma nota; só você vê', onclick: () => { B.noteColor = k; redo(); } })),
+        toSep(), listRow);
+    } else if (t.id === 'ruler') {
+      const on = B.rulerShare !== false;
+      box.append(toRow(on ? 'eye' : 'eye-off', 'Mostrar aos jogadores', { on, cls: 'to-check', right: on ? ic('check') : '',
+        title: on ? 'Os jogadores veem a sua régua com o seu nome. Botão direito enquanto mede marca um ponto de passagem' : 'Só você vê a régua (para medir escondido)',
+        onclick: () => { B.rulerShare = !on; redo(); } }));
+    } else if (t.id === 'portal') {
+      box.append(...shapes({ rect: 'Clique num quadrado (a escada) ou arraste um retângulo', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio', poly: polyHint }));
+    } else if (t.id === 'trigger') {
+      box.append(...shapes({ rect: 'Clique num quadrado (placa de pressão) ou arraste um retângulo', circle: 'Clique para um círculo de 1 quadrado, ou arraste para o raio', poly: polyHint }));
+    } else if (t.id === 'door') {
+      box.append(
+        toRow('lock-open', 'Destrancada', { on: !B.doorLocked, title: 'Novas portas destrancadas: deixam passar mesmo fechadas. Clique no marcador para abrir ou fechar; Shift + clique tranca', onclick: () => { B.doorLocked = false; redo(); } }),
+        toRow('lock', 'Trancada', { on: !!B.doorLocked, title: 'Novas portas trancadas: ninguém abre nem passa (só você). O cadeado só você vê', onclick: () => { B.doorLocked = true; redo(); } }),
+        toSep(),
+        toRow('scan', 'Procurar portas no mapa', { title: 'Mostre uma porta da imagem e o sistema acha as parecidas; nas paredes que já existem, abre a passagem', onclick: () => UI.openScan('doors') }));
+    } else if (t.id === 'light') {
+      const pick = (k, v) => { B[k] = v; if (k !== 'lightKind') B.lightPoly = null; redo(); App.Board.requestRender(); };
+      box.append(
+        toRow('lightbulb', 'Luz', { on: B.lightKind === 'light', title: 'Clique num marcador para editar (cor, alcance, tremular). Dois cliques acendem ou apagam', onclick: () => pick('lightKind', 'light') }),
+        toRow('moon', 'Escuridão', { on: B.lightKind === 'dark', title: 'Apaga qualquer luz onde está, até de dia. Quem tem visão no escuro vê lá dentro como meia luz', onclick: () => pick('lightKind', 'dark') }),
+        toSep(),
+        toRow('circle', 'Círculo', { on: B.lightShape === 'circle', title: 'Clique para pôr uma luz, ou arraste para escolher o alcance', onclick: () => pick('lightShape', 'circle') }),
+        toRow('cone', 'Cone', { on: B.lightShape === 'cone', title: 'Clique na origem e arraste para a direção e o alcance', onclick: () => pick('lightShape', 'cone') }),
+        toRow('square', 'Área', { on: B.lightShape === 'area', title: 'Clique em cada canto. Feche clicando no primeiro ponto, com dois cliques ou Enter. Backspace desfaz o último ponto e Esc cancela', onclick: () => pick('lightShape', 'area') }),
+        rsc && !rsc.light.enabled ? toSep() : '',
+        rsc && !rsc.light.enabled ? toRow('triangle-alert', 'Ligar iluminação', { cls: 'to-warn', title: 'A iluminação está desligada nesta cena: as luzes não fazem efeito',
+          onclick: () => S().dispatch({ type: 'scene.update', id: rsc.id, patch: { light: Object.assign({}, rsc.light, { enabled: true, global: false }) } }) }) : '');
+    } else if (t.id === 'wall') {
       // Tipo de parede: vale para as próximas; clicar numa parede pronta aplica o tipo nela
-      const sc = S().currentScene(), cfg = App.Combat.coverCfg(sc);
-      const info = { full: 'casa com telhado · nunca deixa ver', high: `${fmtM(cfg.heights.high)} · tapa a luz e quem é mais baixo`, three: `${fmtM(cfg.heights.three)} · altura do ombro`, half: `${fmtM(cfg.heights.half)} · altura da cintura` };
-      box.append(h('span', { class: 'eyebrow' }, 'Desenhar'),
-        h('div', { class: 'seg vis-seg' },
-          h('button', { class: B.wallMode === 'pencil' ? '' : 'on', title: 'Arraste de um canto do grid a outro', onclick: () => { B.wallMode = 'line'; redo(); } }, ic('slash'), 'Reta'),
-          h('button', { class: B.wallMode === 'pencil' ? 'on' : '', title: 'Desenhe à mão livre: muros curvos, cavernas, rochas', onclick: () => { B.wallMode = 'pencil'; redo(); } }, ic('pencil'), 'Lápis')),
-        B.wallMode === 'pencil' ? h('p', { class: 'hint', style: { margin: 0 } }, 'Segure e desenhe a parede à mão livre. Terminando perto de onde começou, o contorno se fecha. A borracha apaga o traço inteiro.') : '',
-        h('span', { class: 'eyebrow' }, 'Tipo de parede'),
-        h('div', { class: 'wall-types' }, App.Combat.COVER_TYPES.map(([k, label]) => h('button', { class: 'wall-type' + (B.wallType === k ? ' on' : ''), onclick: () => { B.wallType = k; redo(); } },
-          h('i', { class: 'wt-line wt-' + k }), h('span', {}, h('b', {}, label), h('small', {}, info[k]))))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura.'),
-        h('span', { class: 'eyebrow' }, 'Ajuda'),
-        btnI('scan', 'Procurar paredes no mapa', { class: 'btn primary block', title: 'O sistema lê a imagem do mapa e sugere paredes e portas; você confere e cria', onclick: () => UI.openScan() }));
-      return;
-    }
-    box.append(h('span', { class: 'eyebrow' }, 'Cor'),
-      h('div', { class: 'swatches' }, DRAW_COLORS.map((c) => h('button', { class: 'swatch' + (B.style.color === c ? ' on' : ''), title: c, style: { background: c },
-        onclick: () => { B.style.color = c; redo(); } }))),
-      h('div', { class: 'row' }, h('span', { class: 'muted small-text grow' }, 'Outra cor'),
-        h('input', { type: 'color', value: B.style.color, oninput: (e) => { B.style.color = e.target.value; } })),
-      h('span', { class: 'eyebrow' }, 'Espessura'),
-      h('div', { class: 'seg' }, [2, 4, 8, 14].map((n) => h('button', { class: B.style.width === n ? 'on' : '', onclick: () => { B.style.width = n; redo(); } }, String(n)))));
-    if (t.id === 'rect' || t.id === 'ellipse') {
-      box.append(h('span', { class: 'eyebrow' }, 'Preenchimento'),
-        h('div', { class: 'seg' }, [[0, 'Vazio'], [0.35, 'Transl.'], [1, 'Sólido']].map(([v, l]) => h('button', { class: B.style.fill === v ? 'on' : '', onclick: () => { B.style.fill = v; redo(); } }, l))));
+      const cfg = App.Combat.coverCfg(rsc);
+      const info = { full: 'Casa com telhado: nunca deixa ver', high: `${fmtM(cfg.heights.high)}: tapa a luz e quem é mais baixo`, three: `${fmtM(cfg.heights.three)}: altura do ombro`, half: `${fmtM(cfg.heights.half)}: altura da cintura` };
+      const hgt = { full: 'teto', high: fmtM(cfg.heights.high), three: fmtM(cfg.heights.three), half: fmtM(cfg.heights.half) };
+      box.append(
+        toRow('slash', 'Reta', { on: B.wallMode !== 'pencil', title: 'Arraste de um canto do grid a outro', onclick: () => { B.wallMode = 'line'; redo(); } }),
+        toRow('pencil', 'Lápis', { on: B.wallMode === 'pencil', title: 'Desenhe à mão livre: muros curvos, cavernas, rochas. Terminando perto de onde começou, o contorno se fecha', onclick: () => { B.wallMode = 'pencil'; redo(); } }),
+        toSep(),
+        ...App.Combat.COVER_TYPES.map(([k, label]) => toRow(h('i', { class: 'wt-line wt-' + k }), label, { on: B.wallType === k, cls: 'wall-type', right: hgt[k],
+          title: info[k] + '. Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura', onclick: () => { B.wallType = k; redo(); } })),
+        toSep(),
+        toRow('scan', 'Procurar paredes no mapa', { title: 'O sistema lê a imagem do mapa e sugere paredes e portas; você confere e cria', onclick: () => UI.openScan() }));
+    } else {
+      // Desenho: cor, espessura e (retângulo e círculo) preenchimento, cada um num sub-menu
+      const colorRow = toRow(dot(B.style.color), 'Cor', { sub: true, title: 'Cor do desenho',
+        onclick: () => openToolSub(colorRow, 'color', (el) => {
+          el.append(h('div', { class: 'swatches' }, DRAW_COLORS.map((c) => h('button', { class: 'swatch' + (B.style.color === c ? ' on' : ''), title: c, style: { background: c },
+            onclick: pickClose(() => { B.style.color = c; }) }))),
+          h('label', { class: 'to-row to-color' }, h('span', { class: 'to-ic' }, ic('plus')), h('span', { class: 'to-label' }, 'Outra cor'),
+            h('input', { type: 'color', value: B.style.color, oninput: (e) => { B.style.color = e.target.value; }, onchange: () => { closeToolSub(); redo(); } })));
+        }) });
+      const widthRow = toRow(h('i', { class: 'to-width', style: { height: Math.min(B.style.width, 10) + 'px' } }), 'Espessura', { sub: true, right: B.style.width + ' px', title: 'Espessura do traço',
+        onclick: () => openToolSub(widthRow, 'width', (el) => {
+          el.append(...[2, 4, 8, 14].map((n) => toRow(h('i', { class: 'to-width', style: { height: Math.min(n, 10) + 'px' } }), n + ' px', { on: B.style.width === n, onclick: pickClose(() => { B.style.width = n; }) })));
+        }) });
+      box.append(colorRow, widthRow);
+      if (t.id === 'rect' || t.id === 'ellipse') {
+        const FILL = [[0, 'Vazio'], [0.35, 'Translúcido'], [1, 'Sólido']];
+        const fillIc = (v) => h('i', { class: 'to-fill', style: { background: v ? B.style.color : 'transparent', opacity: v && v < 1 ? .5 : 1, borderColor: B.style.color } });
+        const cur = FILL.find(([v]) => v === B.style.fill) || FILL[0];
+        const fillRow = toRow(fillIc(cur[0]), 'Preenchimento', { sub: true, right: cur[1], title: 'Preenchimento da forma',
+          onclick: () => openToolSub(fillRow, 'fill', (el) => {
+            el.append(...FILL.map(([v, l]) => toRow(fillIc(v), l, { on: B.style.fill === v, onclick: pickClose(() => { B.style.fill = v; }) })));
+          }) });
+        box.append(fillRow);
+      }
     }
   }
 
   function renderSceneLabel() {
     const el = $('#scene-label'), sc = S().currentScene();
-    const sig = sc ? [sc.name, sc.cols, sc.rows, sc.cellDist, sc.unit].join('|') : '';
+    const sig = sc ? [sc.name, sc.cols, sc.rows, sc.cellDist, App.Units.dist(1)].join('|') : '';
     if (el._sig === sig) return;
     el._sig = sig;
     el.innerHTML = '';
-    if (sc) el.append(h('b', {}, sc.name), h('span', {}, `${sc.cols}×${sc.rows} · 1 quadrado = ${String(sc.cellDist).replace('.', ',')} ${sc.unit}`));
+    if (sc) el.append(h('b', {}, sc.name), h('span', {}, `${sc.cols}×${sc.rows} · 1 quadrado = ${App.Units.dist(sc.cellDist)}`));
   }
 
   // =============== Acompanhar os jogadores (Plano 36) ===============
@@ -774,7 +801,8 @@
   }
 
   UI.newActor = newActor;
-  function newActor(kind) {
+  function newActor(kind, sistema, res) {
+    if (!sistema && App.Regras5e) { askSystem(kind); return; }
     const gm = S().gmView();
     const a = {
       id: U.uid('ac_'), kind, img: null, color: U.randColor(), size: 1,
@@ -784,8 +812,24 @@
       stats: campAttrs().map((n) => ({ name: n, value: U.slug(n) === 'defesa' ? 10 : 0 })), actions: [],
       testFormula: '1d20+@valor', initFormula: '1d20', notes: '',
     };
+    if (sistema === '5e') { a.dnd5e = res ? res.d : App.Regras5e.blank(); if (!res && kind !== 'pc') a.dnd5e.npc = App.Regras5e.blankNpc(); if (res && res.name) a.name = res.name; App.Regras5e.apply(a); }
     S().dispatch({ type: 'actor.add', actor: a });
     UI.openActor(a.id);
+  }
+  UI.newActor = newActor;
+  // Plano 51: ficha genérica (qualquer sistema) ou de D&D 5e
+  function askSystem(kind) {
+    const back = h('div', { class: 'modal-back' });
+    const close = () => back.remove();
+    const pickIt = (s2) => { close(); newActor(kind, s2); };
+    back.append(h('div', { class: 'modal', style: { width: 'min(520px, calc(100vw - 32px))' } },
+      h('div', { class: 'win-head' }, ic('scroll-text'), h('span', { class: 'win-title' }, 'Nova ficha: ' + KIND[kind]), iconBtn('x', 'Fechar', close)),
+      h('div', { class: 'win-body' }, h('div', { class: 'f5-kind' },
+        h('button', { 'data-sys': 'generic', onclick: () => pickIt('generic') }, ic('list-ordered'), h('b', {}, 'Genérica'), h('small', {}, 'Atributos, barras e ações livres. Serve para qualquer sistema.')),
+        h('button', { 'data-sys': '5e', onclick: () => pickIt('5e') }, ic('shield'), h('b', {}, 'D&D 5e'), h('small', {}, 'Ficha completa: atributos, perícias, ataques, magias, inventário, ligada aos cadastros. Você preenche.')),
+        h('button', { 'data-sys': '5e-assist', onclick: () => { close(); App.Assist5e.open({ onDone: (res) => newActor(kind, '5e', res) }); } }, ic('wand'), h('b', {}, 'D&D 5e passo a passo'), h('small', {}, 'O assistente pergunta classe, espécie, antecedente, atributos e escolhas, e monta a ficha.'))))));
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+    document.body.append(back);
   }
 
   function renderScenes() {
@@ -1683,14 +1727,14 @@
 
   // =============== Ficha ===============
   UI.openActor = function (id, tab) {
-    if (tab) { UI.sheetTab = UI.sheetTab || {}; UI.sheetTab[id] = tab; const open = UI.windows.get('actor:' + id); if (open) renderWindow(open); }
+    if (tab) { UI.sheetTab = UI.sheetTab || {}; UI.sheetTab[id] = tab; if (App.Ficha5e) App.Ficha5e.tab[id] = tab === 'acoes' ? 'acoes' : tab === 'config' ? 'config' : App.Ficha5e.tab[id]; const open = UI.windows.get('actor:' + id); if (open) renderWindow(open); }
     UI.openWindow('actor:' + id, 'Ficha', (w) => {
       const a = S().state && S().state.actors[id];
       if (!a) return w.loaded ? false : h('p', { class: 'muted' }, 'Carregando…');
       w.loaded = true;
       w.titleEl.textContent = a.name;
       return buildSheet(a);
-    }, { w: 480, icon: 'scroll-text' });
+    }, { w: S().state && S().state.actors[id] && S().state.actors[id].sistema === '5e' ? 720 : 480, icon: 'scroll-text' });
   };
 
   // Listas da campanha (o mestre edita no painel Mesa)
@@ -1739,7 +1783,44 @@
     { id: 'config', icon: 'settings-2', label: 'Configurar' },
   ];
 
-  function buildSheet(a) {
+  // Plano 51: ficha de D&D 5e (o desenho é o mesmo da página Criar ficha, js/ficha5e.js)
+  const SHEET5E_KEYS = ['name', 'img', 'dnd5e', 'stats', 'bars', 'actions', 'initFormula', 'testFormula', 'darkvision', 'sistema'];
+  function buildSheet5e(a) {
+    const can = S().ownsActor(a);
+    return App.Ficha5e.render(a, {
+      ro: !can,
+      edit: (fn) => {
+        const x = U.clone(a);
+        fn(x);
+        const patch = {};
+        for (const k of SHEET5E_KEYS) if (JSON.stringify(x[k]) !== JSON.stringify(a[k])) patch[k] = x[k];
+        if (Object.keys(patch).length) S().dispatch({ type: 'actor.update', id: a.id, patch });
+      },
+      rerender: () => { const w = UI.windows.get('actor:' + a.id); if (w) renderWindow(w); },
+      roll: (label, f) => S().rollPost(f, { from: a.name, label, actor: a, token: selectedTokenOf(a), secret: UI.secret }),
+      use: can ? (i) => UI.useAction(a, i) : null,
+      avatar: (size) => {
+        const av = avatar(a, size);
+        av.title = can ? 'Clique para trocar a imagem' : '';
+        if (can) av.onclick = async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) S().dispatch({ type: 'actor.update', id: a.id, patch: { img: r.id } }); };
+        return av;
+      },
+      // Configurar: o mesmo da ficha genérica, sem as barras (na 5e elas saem das contas)
+      config: () => {
+        const prev = UI.sheetTab[a.id];
+        UI.sheetTab[a.id] = 'config';
+        const el = buildSheet(a, true);
+        UI.sheetTab[a.id] = prev;
+        const pane = el.querySelector('.sheet-pane');
+        const h4 = [...pane.querySelectorAll('h4')].find((x) => x.textContent === 'Barras');
+        if (h4) { let n = h4; while (n && !(n.classList && n.classList.contains('sheet-footer'))) { const nx = n.nextSibling; n.remove(); n = nx; } }
+        return pane;
+      },
+    });
+  }
+
+  function buildSheet(a, generic) {
+    if (!generic && a.sistema === '5e' && App.Ficha5e) return buildSheet5e(a);
     const gm = S().gmView(), can = S().ownsActor(a), ro = !can;
     const upd = (patch) => S().dispatch({ type: 'actor.update', id: a.id, patch });
     const listUpd = (key, fn) => { const arr = U.clone(a[key] || []); fn(arr); upd({ [key]: arr }); };
@@ -1832,9 +1913,9 @@
           h('select', { disabled: ro, value: a.imgStyle === 'token' ? 'token' : 'portrait', onchange: (e) => upd({ imgStyle: e.target.value === 'token' ? 'token' : null }) },
             h('option', { value: 'portrait' }, 'Retrato (círculo)'), h('option', { value: 'token' }, 'Token pronto (imagem inteira)'))),
         // Cobertura: o mestre decide a altura e como a ficha aparece atrás de muros baixos
-        h('label', { title: 'Usada na cobertura: muro mais alto que a criatura = cobertura total' }, 'Altura (m)',
-          h('input', { type: 'number', step: 0.1, min: 0, disabled: !gm, value: a.height || '', placeholder: String(App.Combat.defaultHeight(a.size)).replace('.', ',') + ' (pelo tamanho)',
-            onchange: (e) => { const v = Number(String(e.target.value).replace(',', '.')); upd({ height: v > 0 ? v : null }); } })),
+        h('label', { title: 'Usada na cobertura: muro mais alto que a criatura = cobertura total' }, 'Altura (' + App.Units.distUnit() + ')',
+          h('input', { type: 'number', step: 0.1, min: 0, disabled: !gm, value: a.height ? App.Units.distIn(a.height) : '', placeholder: String(App.Units.distIn(App.Combat.defaultHeight(a.size))).replace('.', ',') + ' (pelo tamanho)',
+            onchange: (e) => { const v = App.Units.distOut(e.target.value); upd({ height: v > 0 ? v : null }); } })),
         h('label', {}, 'Atrás de muro baixo', h('select', { disabled: !gm, value: a.coverShow || '', onchange: (e) => upd({ coverShow: e.target.value || null }) },
           h('option', { value: '' }, 'Regra da cena'), h('option', { value: 'show' }, 'Sempre visível'), h('option', { value: 'silhouette' }, 'Vulto'), h('option', { value: 'hide' }, 'Escondido')))));
       if (can) pane.append(h('div', { class: 'row wrap', style: { marginTop: '10px' } },
@@ -2063,6 +2144,7 @@
         amt = `<div class="amt ${zero ? 'zero' : heal ? 'heal' : 'dmg'}">${heal ? '+' : '−'}${U.esc(r.amount)}<small>${U.esc(r.bar)}${see ? ` ${U.esc(r.after)}${r.max ? '/' + U.esc(r.max) : ''}` : ''}</small></div>`;
       } else if (m.mode === 'attack' && !r.hit) amt = '<div class="amt zero">—<small>sem dano</small></div>';
       if (r.noBar) sub += ` · alvo sem a barra "${U.esc(r.noBar)}"`;
+      if (r.dmgNote) sub += ` · <b>${U.esc(r.dmgNote)}</b>`;
       html += `<div class="act-target"><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}</div>`;
     }
     if (m.undone) html += '<div class="act-foot"><span class="undone-note">Desfeito pelo mestre</span></div>';
@@ -2734,10 +2816,33 @@
     for (const id of rest) out.push([id, 'Cena: ' + st.scenes[id].name]);
     return out;
   };
+  // Plano 41: ligar este portal a outro (clicando nele, nesta cena ou em outra). Pergunta antes de desfazer uma ligação antiga
+  UI.portalScene = {}; // cena escolhida em "Cena do outro portal", por portal
+  UI.portalLink = function (sc, tr, destId) {
+    const st = S().state, TG = App.Triggers, dest = st.scenes[destId];
+    if (!dest) return;
+    if (!(dest.triggers || []).some((x) => x.portal && x.id !== tr.id)) { U.toast('Não há outro portal em "' + dest.name + '". Desenhe o outro portal lá primeiro.', 'error'); return; }
+    App.Board.pickPortal(destId, tr.id, (o) => UI.linkPortals(sc.id, tr.id, destId, o.id), { trigger: tr.id });
+  };
+  UI.linkPortals = function (sceneA, idA, sceneB, idB) {
+    const st = S().state, TG = App.Triggers, scA = st.scenes[sceneA], scB = st.scenes[sceneB];
+    const A = scA && (scA.triggers || []).find((x) => x.id === idA), Bp = scB && (scB.triggers || []).find((x) => x.id === idB);
+    if (!A || !Bp) return false;
+    const name = (t) => '"' + (t.name || 'Portal') + '"';
+    const pa = TG.portalPartner(scA, A);
+    if (pa && !(pa.scene.id === sceneB && pa.tr.id === idB) && !confirm(name(A) + ' já está ligado a ' + name(pa.tr) + '. Desfazer a ligação anterior?')) return false;
+    const pb = TG.portalPartner(scB, Bp);
+    if (pb && !(pb.scene.id === sceneA && pb.tr.id === idA) && !confirm(name(Bp) + ' já está ligado a ' + name(pb.tr) + '. Desfazer a ligação anterior?')) return false;
+    if (pa) TG.disconnectPortal(sceneA, idA);
+    if (pb && !(pb.scene.id === sceneA && pb.tr.id === idA)) TG.disconnectPortal(sceneB, idB);
+    TG.connectPortals(sceneA, idA, sceneB, idB, true);
+    U.toast(name(A) + ' ligado a ' + name(Bp) + (sceneA !== sceneB ? ' (' + scB.name + ')' : '') + ', ida e volta.');
+    return true;
+  };
   function portalHud(hud, empty, sc, tr) {
     if (empty) empty.hidden = true;
     const TG = App.Triggers, st = S().state, act = TG.portalAct(tr) || {}, d = TG.portalDest(sc, tr), partner = TG.portalPartner(sc, tr);
-    const sig = JSON.stringify(['portal', UI.mode, tr, partner && partner.tr, d && d.area, st.sceneOrder.map((id) => [id, st.scenes[id].name, st.scenes[id].parent]), tr.mark && tr.mark.img && !!App.Images.src(tr.mark.img)]);
+    const sig = JSON.stringify(['portal', UI.mode, tr, partner && partner.tr, TG.portalTwoWay(sc, tr), UI.portalScene[tr.id], d && d.area, st.sceneOrder.map((id) => [id, st.scenes[id].name, st.scenes[id].parent]), tr.mark && tr.mark.img && !!App.Images.src(tr.mark.img)]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -2747,15 +2852,11 @@
       const cellTxt = (x, y) => { const g = d.scene.grid; return '(' + (Math.floor(x / g) + 1) + ', ' + (Math.floor(y / g) + 1) + ')'; };
       // Plano 35: a chegada é uma área desenhada; cada um cai num quadrado livre sorteado dentro dela
       const nCells = d && d.area ? TG.areaCells(d.scene, d.area) : 0;
-      const where = !d ? 'A cena de destino não existe mais' : d.center ? (far ? 'Chega no meio do mapa: desenhe a área de chegada' : 'Desenhe a área de chegada') : d.area ? 'Chega num lugar sorteado dentro da área' + (partner ? ' do portal de volta' : '') + ' (' + nCells + (nCells === 1 ? ' quadrado)' : ' quadrados)') : 'Chega em ' + cellTxt(d.x, d.y);
-      const pick = () => { if (d) B.drawArea(d.scene.id, (geo) => TG.setPortalArea(sc.id, tr.id, geo), { trigger: tr.id }); };
+      void nCells; void cellTxt;
       // marcador para os jogadores
       const mk = TG.newMark(tr.mark || {});
-      const setMark = (patch, both) => {
-        upd({ mark: Object.assign({}, mk, patch) });
-        // ligar ou desligar vale para a volta também (com o ícone par)
-        if (both && partner) { const pm = TG.newMark(partner.tr.mark || {}); S().dispatch({ type: 'trigger.update', sceneId: partner.scene.id, id: partner.tr.id, patch: { mark: Object.assign(pm, { show: patch.show }, partner.tr.mark ? {} : { icon: TG.MARK_PAIR[mk.icon] || mk.icon, color: mk.color }) } }); }
-      };
+      // Plano 41: cada portal tem o seu marcador
+      const setMark = (patch) => upd({ mark: Object.assign({}, mk, patch) });
       const iconBtns = TG.MARK_ICONS.map(([k, icn, l]) => h('button', { class: 'mk-icon' + (mk.icon === k ? ' on' : ''), title: l, onclick: () => setMark({ icon: k }) }, ic(icn)))
         .concat([h('button', { class: 'mk-icon' + (mk.icon === 'img' ? ' on' : ''), title: 'Enviar uma imagem do computador', onclick: async () => {
           const file = await U.pickFile('image/*');
@@ -2765,7 +2866,7 @@
         } }, mk.icon === 'img' && mk.img && App.Images.src(mk.img) ? h('img', { src: App.Images.src(mk.img), alt: '' }) : ic('upload'))]);
       const markBox = h('div', { class: 'hud-section' },
         h('span', { class: 'eyebrow' }, 'Para os jogadores'),
-        h('label', { class: 'check', title: 'Pontilhado brilhante e um ícone no mapa. Cada jogador só vê o que o token dele enxerga' }, h('input', { type: 'checkbox', checked: !!mk.show, onchange: (e) => setMark({ show: e.target.checked }, true) }), 'Mostrar aos jogadores' + (partner ? ' (vale para a volta também)' : '')),
+        h('label', { class: 'check', title: 'Pontilhado brilhante e um ícone no mapa. Cada jogador só vê o que o token dele enxerga' }, h('input', { type: 'checkbox', checked: !!mk.show, onchange: (e) => setMark({ show: e.target.checked }, true) }), 'Mostrar aos jogadores'),
         mk.show ? h('div', { class: 'seg' }, [['area', 'Área'], ['line', 'Linha']].map(([k, l]) => h('button', { class: mk.style === k ? 'on' : '', title: k === 'area' ? 'O pontilhado preenche a borda da área inteira' : 'Você desenha onde fica a linha (ex.: na soleira da porta)', onclick: () => { if (k === 'line' && !mk.line) B.drawMarkLine((line) => setMark({ style: 'line', line })); else setMark({ style: k }); } }, l))) : '',
         mk.show && mk.style === 'line' ? h('div', { class: 'row' }, h('span', { class: 'grow hint', style: { margin: 0 } }, mk.line ? 'Linha desenhada.' : 'Desenhe a linha.'), btnI('pen-line', mk.line ? 'Desenhar de novo' : 'Desenhar a linha', { class: 'btn small', onclick: () => B.drawMarkLine((line) => setMark({ style: 'line', line })) })) : '',
         mk.show ? h('div', { class: 'mk-icons' }, iconBtns) : '',
@@ -2776,24 +2877,15 @@
         h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble portal' + (on ? ' on' : '') }, ic('sparkles')),
           h('div', { class: 'grow' }, h('input', { class: 'hud-name', value: tr.name || '', placeholder: 'Nome', onchange: (e) => upd({ name: e.target.value.trim() || 'Portal' }) }),
             h('div', { class: 'hud-sub' }, 'Portal · ' + (on ? (far ? 'leva para outra cena' : 'leva para este mapa') : 'desligado')))),
+        portalLinkBox(sc, tr, partner),
         h('div', { class: 'hud-section' },
-          h('span', { class: 'eyebrow' }, 'Leva para'),
-          h('select', { value: act.sceneId && act.sceneId !== sc.id ? act.sceneId : '', onchange: (e) => TG.setPortalDest(sc.id, tr.id, { sceneId: e.target.value || null }) },
-            UI.portalTargets(sc).map(([v, l]) => h('option', { value: v }, l))),
-          h('div', { class: 'row' }, h('span', { class: 'grow hint', style: { margin: 0 } }, where),
-            btnI('pencil', 'Desenhar a chegada', { class: 'btn small', title: (far ? 'Sua tela vai para a outra cena; desenhe a área e ela volta. ' : '') + 'Forma nas opções da ferramenta: Retângulo, Círculo ou Polígono', onclick: pick }))),
-        h('div', { class: 'hud-section' },
-          h('label', { class: 'check', title: 'Cria um portal no ponto de chegada que traz de volta para cá' },
-            h('input', { type: 'checkbox', checked: !!partner, disabled: !d, onchange: (e) => { if (e.target.checked) TG.linkPortal(sc.id, tr.id); else TG.unlinkPortal(sc.id, tr.id); } }), 'Ida e volta'),
-          h('p', { class: 'hint', style: { margin: 0 } }, partner ? 'Do outro lado há o portal "' + (partner.tr.name || 'Portal') + '", que traz de volta. Quem chega não volta sozinho: precisa sair e pisar de novo.' : 'Só ida (ex.: uma armadilha, ou o trem que só anda para frente).'),
           h('span', { class: 'eyebrow' }, 'Quem passa'),
           h('select', { value: tr.who || 'any', onchange: (e) => upd({ who: e.target.value }) }, TG.WHO.filter(([k]) => k !== 'pick').map(([k, l]) => h('option', { value: k }, l))),
           h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, onchange: (e) => upd({ enabled: e.target.checked }) }), 'Ligado (desligue para bloquear a passagem)'),
-          h('label', { class: 'check', title: 'Brilho azul na saída e na chegada, para todos que veem' }, h('input', { type: 'checkbox', checked: tr.fx !== false, onchange: (e) => { upd({ fx: e.target.checked }); if (partner) S().dispatch({ type: 'trigger.update', sceneId: partner.scene.id, id: partner.tr.id, patch: { fx: e.target.checked } }); } }), 'Efeito de brilho ao passar' + (partner ? ' (vale para a volta também)' : ''))),
+          h('label', { class: 'check', title: 'Brilho azul na saída e na chegada, para todos que veem' }, h('input', { type: 'checkbox', checked: tr.fx !== false, onchange: (e) => upd({ fx: e.target.checked }) }), 'Efeito de brilho ao passar')),
         markBox,
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem pisa na área vai para o destino. Em outra cena, quem controla o token vai junto; o resto do grupo fica onde está.'),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Quem pisa na área chega dentro do portal ligado. Em outra cena, quem controla o token vai junto; o resto do grupo fica onde está.'),
         h('div', { class: 'hud-btns' },
-          far ? btnI('map', 'Ir para o destino', { title: 'Abre a outra cena na sua tela (os jogadores não mudam)', onclick: () => { S().viewSceneId = d.scene.id; S().emit('local'); } }) : '',
           h('span', { class: 'grow' }),
           btnI('trash-2', 'Apagar', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); B.selectedTrigger = null; B.requestRender(); } })));
     }
@@ -2802,6 +2894,33 @@
     const c = App.Triggers.center(tr), p = App.Board.toScreen(c.x, c.y), W = hud.parentElement.clientWidth, H = hud.parentElement.clientHeight;
     const x = U.clamp(p.x + 30 + hud.offsetWidth > W - 14 ? p.x - hud.offsetWidth - 30 : p.x + 30, 14, Math.max(14, W - hud.offsetWidth - 14));
     hud.style.transform = `translate(${x}px, ${U.clamp(p.y - 40, 66, Math.max(66, H - hud.offsetHeight - 70))}px)`;
+  }
+
+  // Plano 41: com quem o portal está ligado; escolher a cena do outro portal e clicar nele
+  function portalLinkBox(sc, tr, partner) {
+    const TG = App.Triggers, st = S().state, B = App.Board;
+    const act = TG.portalAct(tr) || {}, legacy = !partner && (act.area || act.x != null);
+    const cur = UI.portalScene[tr.id] || (partner ? partner.scene.id : act.sceneId && st.scenes[act.sceneId] ? act.sceneId : sc.id);
+    const opts = UI.portalTargets(sc).map(([v, l]) => [v || sc.id, l]);
+    const box = h('div', { class: 'hud-section' }, h('span', { class: 'eyebrow' }, 'Ligado a'));
+    if (partner) {
+      const two = TG.portalTwoWay(sc, tr), far = partner.scene.id !== sc.id;
+      box.append(
+        h('div', { class: 'row portal-link' }, ic('link'), h('span', { class: 'grow' }, h('b', {}, partner.tr.name || 'Portal'), far ? h('small', {}, ' · ' + partner.scene.name) : ''),
+          iconBtn('map-pin', 'Ir até o outro portal' + (far ? ' (abre a outra cena só na sua tela)' : ''), () => { if (far) { S().viewSceneId = partner.scene.id === st.activeSceneId ? null : partner.scene.id; S().emit('local'); } setTimeout(() => { const c = TG.center(partner.tr); B.centerOn(c.x, c.y); B.selectObj('trigger', partner.tr); }, 0); }),
+          iconBtn('x', 'Desfazer a ligação', () => { if (confirm('Desfazer a ligação com "' + (partner.tr.name || 'Portal') + '"?')) TG.disconnectPortal(sc.id, tr.id); })),
+        h('label', { class: 'check', title: 'Marcado: o outro portal traz de volta para cá. Desmarcado: só ida (o outro só recebe quem chega, ex.: armadilha ou trem)' },
+          h('input', { type: 'checkbox', checked: two, onchange: (e) => {
+            const pb = TG.portalPartner(partner.scene, partner.tr);
+            if (e.target.checked && pb && !(pb.scene.id === sc.id && pb.tr.id === tr.id) && !confirm('"' + (partner.tr.name || 'Portal') + '" já está ligado a "' + (pb.tr.name || 'Portal') + '". Desfazer a ligação anterior?')) { e.target.checked = false; return; }
+            TG.setTwoWay(sc.id, tr.id, e.target.checked);
+          } }), 'Ida e volta'));
+    } else box.append(h('p', { class: 'hint', style: { margin: 0 } }, legacy ? 'Chegada antiga (área ou ponto). Ligue a um portal para trocar.' : 'Ainda não leva a lugar nenhum: escolha a cena do outro portal e clique nele.'));
+    box.append(
+      h('label', { class: 'portal-scene' }, h('span', { class: 'hint', style: { margin: 0 } }, 'Cena do outro portal'),
+        h('select', { value: cur, onchange: (e) => { UI.portalScene[tr.id] = e.target.value; UI.portalLink(sc, tr, e.target.value); } }, opts.map(([v, l]) => h('option', { value: v }, l)))),
+      btnI('link', partner ? 'Ligar a outro portal' : 'Ligar a um portal', { class: 'btn small' + (partner ? '' : ' primary'), title: 'Clique no portal que vai ser ligado' + (cur !== sc.id ? ' (sua tela vai para a outra cena e volta)' : '') + '. Esc cancela', onclick: () => UI.portalLink(sc, tr, cur) }));
+    return box;
   }
 
   // Janela "Configurar gatilho": SE (condições) | ENTÃO (ações em cartões)
@@ -3250,10 +3369,10 @@
       h('span', { class: 'eyebrow' }, 'Voo'),
       h('div', { class: 'fly-row' },
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: fly > 0, onchange: (e) => tokUpd({ fly: e.target.checked ? (t.lastFly || 6) : 0, lastFly: fly || t.lastFly || 6 }) }), 'Voando'),
-        h('input', { type: 'number', class: 'num', min: 0, step: 0.5, value: fly || '', placeholder: '0', disabled: !(fly > 0), title: 'Metros acima do chão',
-          onchange: (e) => { const v = Math.max(0, Number(String(e.target.value).replace(',', '.')) || 0); tokUpd({ fly: v, lastFly: v || t.lastFly }); } }),
-        h('span', { class: 'muted small-text' }, 'm acima do chão')),
-      fly > 0 ? h('p', { class: 'hint', style: { margin: 0 } }, `Vê e é visto por cima de muros com até ${String(Math.round((App.Combat.topOf(t) - 0.01) * 10) / 10).replace('.', ',')} m. A parede absoluta continua bloqueando.`) : '',
+        h('input', { type: 'number', class: 'num', min: 0, step: 0.5, value: fly ? App.Units.distIn(fly) : '', placeholder: '0', disabled: !(fly > 0), title: 'Altura acima do chão',
+          onchange: (e) => { const v = Math.max(0, App.Units.distOut(e.target.value)); tokUpd({ fly: v, lastFly: v || t.lastFly }); } }),
+        h('span', { class: 'muted small-text' }, App.Units.distUnit() + ' acima do chão')),
+      fly > 0 ? h('p', { class: 'hint', style: { margin: 0 } }, `Vê e é visto por cima de muros com até ${App.Units.dist(Math.round((App.Combat.topOf(t) - 0.01) * 10) / 10)}. A parede absoluta continua bloqueando.`) : '',
       h('span', { class: 'eyebrow' }, 'Para os jogadores'),
       visSeg(visOf(t), (k) => tokUpd({ hidden: k === 'hidden', masked: k === 'masked' })),
       h('div', { class: 'row' }, h('span', { class: 'eyebrow grow' }, 'Grupo'),
@@ -3495,19 +3614,21 @@
   // Configuração da cobertura da cena (edita o objeto c no lugar; salva junto com a cena)
   function coverSection(c) {
     const n = (obj, k, attrs) => h('input', Object.assign({ type: 'number', value: obj[k], oninput: (e) => { obj[k] = Math.max(0, Number(e.target.value) || 0); } }, attrs));
+    // Plano 40: as alturas aparecem e são digitadas na unidade de quem edita (guardadas em metros)
+    const nm = (obj, k, attrs) => h('input', Object.assign({ type: 'number', value: App.Units.distIn(obj[k]), oninput: (e) => { obj[k] = Math.max(0, App.Units.distOut(e.target.value)); } }, attrs));
     const na = (t) => h('span', { class: 'na' }, t);
     return h('div', { class: 'full col', style: { gap: '10px' } },
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: c.enabled, onchange: (e) => { c.enabled = e.target.checked; } }), 'Muros dão cobertura pela altura nesta cena (desligado: a total bloqueia tudo e ¾ e meia não fazem nada)'),
       h('div', { class: 'cover-grid' },
-        h('span', { class: 'ch' }, 'Tipo'), h('span', { class: 'ch' }, 'Altura (m)'), h('span', { class: 'ch' }, 'Sombra (quad.)'), h('span', { class: 'ch' }, 'Cobre a partir de'), h('span', { class: 'ch' }, 'Bônus'),
+        h('span', { class: 'ch' }, 'Tipo'), h('span', { class: 'ch' }, 'Altura (' + App.Units.distUnit() + ')'), h('span', { class: 'ch' }, 'Sombra (quad.)'), h('span', { class: 'ch' }, 'Cobre a partir de'), h('span', { class: 'ch' }, 'Bônus'),
         h('span', {}, h('i', { class: 'wt-line wt-full', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Absoluta'),
         na('telhado'), na('toda'), na('sempre'), na('não é alvo'),
         h('span', {}, h('i', { class: 'wt-line wt-high', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Total'),
-        n(c.heights, 'high', { step: 0.1, min: 0 }), n(c.shadow, 'high', { min: 0, max: 20 }), na('pela altura'), na('pela altura'),
+        nm(c.heights, 'high', { step: 0.1, min: 0 }), n(c.shadow, 'high', { min: 0, max: 20 }), na('pela altura'), na('pela altura'),
         h('span', {}, h('i', { class: 'wt-line wt-three', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Três quartos'),
-        n(c.heights, 'three', { step: 0.1, min: 0 }), n(c.shadow, 'three', { min: 0, max: 20 }), n(c.levels, 'three', { min: 1, max: 99 }), n(c.bonus, 'three', { min: 0, max: 20 }),
+        nm(c.heights, 'three', { step: 0.1, min: 0 }), n(c.shadow, 'three', { min: 0, max: 20 }), n(c.levels, 'three', { min: 1, max: 99 }), n(c.bonus, 'three', { min: 0, max: 20 }),
         h('span', {}, h('i', { class: 'wt-line wt-half', style: { display: 'inline-block', marginRight: '6px', verticalAlign: 'middle' } }), 'Meia'),
-        n(c.heights, 'half', { step: 0.1, min: 0 }), n(c.shadow, 'half', { min: 0, max: 20 }), n(c.levels, 'half', { min: 1, max: 99 }), n(c.bonus, 'half', { min: 0, max: 20 })),
+        nm(c.heights, 'half', { step: 0.1, min: 0 }), n(c.shadow, 'half', { min: 0, max: 20 }), n(c.levels, 'half', { min: 1, max: 99 }), n(c.bonus, 'half', { min: 0, max: 20 })),
       h('p', { class: 'cover-note', style: { margin: 0 } }, 'Parede absoluta é uma casa com telhado: nunca deixa ver nem atacar o outro lado, seja qual for a altura. Nas outras paredes, a proteção é a altura do muro dividida pela altura do alvo (campo Altura na ficha; sem ele, 1,8 m por quadrado de tamanho). Cobrindo 100% ou mais, o alvo não pode ser atacado. O bônus soma na Defesa e nos testes de resistência. Quem não é mais alto que o muro não enxerga nem ataca por cima dele. Ex.: muro de 1,4 m cobre 78% de um humano (1,8 m) e dá o bônus de três quartos; para um gigante de 3,6 m cobre só 39%, nada.'),
       h('label', {}, 'Quem está na sombra de um muro baixo aparece para os jogadores como', h('select', { value: c.show, onchange: (e) => { c.show = e.target.value; } },
         h('option', { value: 'show' }, 'Normal (sempre visível)'), h('option', { value: 'silhouette' }, 'Vulto (sem nome nem vida)'), h('option', { value: 'hide' }, 'Escondido'))),
@@ -3555,8 +3676,8 @@
       h('label', {}, 'Tamanho do quadrado (px)', num('grid', { min: 20, max: 300 })),
       h('label', {}, 'Medida da diagonal', h('select', { value: f.measure, onchange: (e) => { f.measure = e.target.value; } },
         h('option', { value: 'cheb' }, 'Diagonal = 1 (D&D 5e)'), h('option', { value: 'alt' }, 'Alternada 1-2-1 (Pathfinder)'), h('option', { value: 'euclid' }, 'Real (euclidiana)'))),
-      h('label', {}, 'Cada quadrado vale', num('cellDist', { step: 0.5, min: 0 })),
-      h('label', {}, 'Unidade', h('input', { value: f.unit, oninput: (e) => { f.unit = e.target.value; } })),
+      h('label', { title: 'A unidade é a da mesa (Mesa → Unidade de medida); cada um pode ver na sua' }, 'Cada quadrado vale (' + App.Units.distUnit() + ')',
+        h('input', { type: 'number', step: App.Units.distUnit() === 'pés' ? 5 : 0.5, min: 0, value: App.Units.distIn(f.cellDist), oninput: (e) => { f.cellDist = App.Units.distOut(e.target.value); } })),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.showGrid, onchange: (e) => { f.showGrid = e.target.checked; } }), 'Mostrar grid'),
       h('label', {}, 'Cor e opacidade do grid', h('div', { class: 'row' },
         h('input', { type: 'color', value: U.safeColor(f.gridColor, '#ffffff'), oninput: (e) => { f.gridColor = e.target.value; } }),
@@ -3586,7 +3707,7 @@
         if (!cur) return;
         const patch = {
           name: f.name.trim() || cur.name, cols: U.clamp(Math.round(f.cols) || 1, 1, 300), rows: U.clamp(Math.round(f.rows) || 1, 1, 300),
-          grid: U.clamp(Math.round(f.grid) || 70, 20, 300), measure: f.measure, cellDist: Number(f.cellDist) || 0, unit: f.unit,
+          grid: U.clamp(Math.round(f.grid) || 70, 20, 300), measure: f.measure, cellDist: Math.round((Number(f.cellDist) || 0) * 1000) / 1000, unit: 'm',
           showGrid: f.showGrid, gridColor: f.gridColor, gridAlpha: f.gridAlpha, bgColor: f.bgColor, bg: f.bg,
           fog: Object.assign({}, cur.fog, { enabled: f.fog.enabled, v: cur.fog.v + 1 }),
           light: { enabled: !!f.light.enabled, global: !!f.light.global },
@@ -3598,6 +3719,24 @@
   }
 
   // =============== Mesa (conexão, salvar, importar) ===============
+  // =============== Unidade de medida (Plano 40) ===============
+  // O mestre escolhe a da mesa inteira; cada pessoa pode trocar a sua (só na tela dela, guardada no navegador)
+  function unitsSection(gm) {
+    const Un = App.Units, T = Un.table(), mine = Un.mine();
+    const after = () => { UI.refresh(); App.Board.requestRender(); renderTable(); };
+    const grid = (cur, onPick, prefix) => h('div', { class: 'unit-grid' }, Un.CATS.map(([k, label, opts]) =>
+      h('label', { class: 'unit-card' }, h('b', {}, label),
+        h('select', { 'data-unit': prefix + k, value: cur[k], onchange: (e) => onPick(k, e.target.value) }, opts.map(([v, l]) => h('option', { value: v }, l))))));
+    const box = h('div', { class: 'units-sec', id: 'units-sec' }, h('h4', {}, 'Unidade de medida'));
+    if (gm) box.append(h('p', { class: 'hint', style: { marginTop: 0 } }, 'Vale para a mesa inteira: régua, rastro, escala das cenas e alturas. Cada jogador pode trocar a dele.'),
+      grid(T, (k, v) => S().dispatch({ type: 'campaign.update', patch: { rules: { units: Object.assign({}, T, { [k]: v }) } } }), 'mesa-'));
+    else box.append(h('p', { class: 'hint', style: { marginTop: 0 } }, 'Da mesa: ' + Un.CATS.map(([k, , opts]) => opts.find(([v]) => v === T[k])[1]).join(', ') + '.'));
+    box.append(h('label', { class: 'check', title: 'Só a sua tela muda; os outros continuam vendo na unidade deles' },
+      h('input', { type: 'checkbox', 'data-unit': 'same', checked: !mine, onchange: (e) => { Un.setMine(e.target.checked ? null : T); after(); } }), 'Na minha tela, usar as da mesa'));
+    if (mine) box.append(h('span', { class: 'eyebrow', style: { display: 'block', marginTop: '10px' } }, 'Só na minha tela'), grid(Object.assign({}, T, mine), (k, v) => { Un.setMine(Object.assign({}, Un.mine(), { [k]: v })); after(); }, 'minha-'));
+    return box;
+  }
+
   function renderTable() {
     const p = $('#p-table');
     safeRender(p, () => {
@@ -3627,6 +3766,8 @@
           h('span', { style: { color: U.safeColor(pl.color) } }, pl.name), pid === S().me.id ? h('span', { class: 'badge blue' }, 'você') : null));
       }
       if (!players.length) p.append(h('p', { class: 'empty' }, 'Nenhum jogador entrou ainda.'));
+
+      p.append(unitsSection(gm));
 
       if (!gm) {
         p.append(h('p', { class: 'hint' }, 'Tudo é salvo pelo mestre. Para guardar sua ficha, abra-a e use Configurar → Exportar.'));
@@ -3658,7 +3799,7 @@
         h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Depois de mover, o caminho fica no mapa para todos verem por onde o token passou' },
           h('span', { class: 'grow' }, 'Rastro do movimento (segundos, 0 = não mostra)'),
           h('input', { type: 'number', class: 'num', min: 0, max: 30, step: 1, value: R.trailSecs ?? 3, onchange: (e) => setR('trailSecs', U.clamp(Math.round(Number(e.target.value) || 0), 0, 30)) })),
-        h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Em tempo real: todos veem a régua e o caminho do token enquanto a pessoa mede ou arrasta.\nDesempenho: só quando ela solta (manda menos coisa pela rede).' },
+        h('label', { class: 'row', style: { gap: '8px', fontSize: '12.5px' }, title: 'Em tempo real: todos veem a régua e o caminho do token enquanto a pessoa mede ou arrasta; a luz e a visão do token acompanham o arraste.\nDesempenho: só quando ela solta (manda menos coisa pela rede); durante o arraste a luz e a visão ficam onde o token estava.' },
           h('span', { class: 'grow' }, 'Régua e movimento dos outros'),
           h('select', { value: R.liveRuler ? 'live' : 'perf', onchange: (e) => setR('liveRuler', e.target.value === 'live') },
             h('option', { value: 'perf' }, 'Desempenho (ao soltar)'), h('option', { value: 'live' }, 'Em tempo real'))),
@@ -3790,7 +3931,7 @@
     } else if (obj.format === 'mesarpg-scene') {
       if (!gm) throw new Error('Só o mestre pode importar cenas.');
       addAssets(obj.assets);
-      for (const a of Object.values(obj.actors || {})) if (!S_.state.actors[a.id]) S_.dispatch({ type: 'actor.add', actor: a });
+      for (const a of Object.values(obj.actors || {})) if (!S_.state.actors[a.id]) { if (!a.sistema && a.dados5e && App.Bestiary && App.Bestiary.upgrade) App.Bestiary.upgrade(a); S_.dispatch({ type: 'actor.add', actor: a }); }
       // Plano 31: a principal vem com as sub-cenas; ids novos e os portais entre elas apontam para as cópias
       const list = [obj.scene].concat(Array.isArray(obj.subs) ? obj.subs : []), map = {};
       for (const x of list) map[x.id] = U.uid('s_');
@@ -3809,6 +3950,7 @@
       const a = U.clone(obj.actor);
       a.id = U.uid('ac_');
       a.owner = gm ? (a.kind === 'pc' ? 'all' : '') : S_.me.id;
+      if (!a.sistema && a.dados5e && App.Bestiary && App.Bestiary.upgrade) App.Bestiary.upgrade(a); // Plano 53
       S_.dispatch({ type: 'actor.add', actor: a });
       UI.openActor(a.id);
       U.toast('Ficha importada!');

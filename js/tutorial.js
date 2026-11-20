@@ -385,7 +385,7 @@
         <li>No painel: <b>Visível</b> ou <b>Invisível</b> para os jogadores, opacidade, travar, espelhar e duplicar.</li>
         <li><b>Nível:</b> imagens e tokens dividem a mesma ordem. Use os botões de nível para pôr a copa da árvore por cima do goblin ou o tapete por baixo de todos.</li></ul>`,
       task: 'Escolha a ferramenta Imagem e coloque uma imagem no mapa.',
-      spot: () => el('#tool-opts .btn', 'Enviar imagem')() || el('#toolbar [data-tool="prop"]')(),
+      spot: () => el('#tool-opts .to-row', 'Enviar imagem')() || el('#toolbar [data-tool="prop"]')(),
       enter: () => { App.UI.setViewAs(null); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); T.base.props = (scene().props || []).length; },
       done: () => (scene().props || []).length > (T.base.props || 0) },
     { ch: 'Cenas', title: 'Mostrar aos jogadores',

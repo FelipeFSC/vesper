@@ -1,0 +1,2933 @@
+{
+ "from": "5etools",
+ "generatedAt": "2026-11-20",
+ "sources": {
+  "DMG": "Dungeon Master's Guide (2014)",
+  "EEPC": "EEPC",
+  "EFA": "Eberron: Forge of the Artificer",
+  "FTD": "Fizban's Treasury of Dragons",
+  "GGR": "Guildmasters' Guide to Ravnica",
+  "MOT": "Mythic Odysseys of Theros",
+  "MPMM": "Mordenkainen Presents: Monsters of the Multiverse",
+  "PHB": "Player's Handbook (2014)",
+  "PSA": "PSA",
+  "RHW": "Ravenloft: The Horrors Within",
+  "TTP": "The Tortle Package",
+  "VGM": "Volo's Guide to Monsters",
+  "VRGR": "Van Richten's Guide to Ravenloft",
+  "WoW": "World of Warcraft",
+  "XPHB": "Player's Handbook (2024)"
+ },
+ "attacks": [
+  {
+   "id": "unarmed-strike-phb",
+   "name": "Unarmed Strike",
+   "source": "PHB",
+   "page": 195,
+   "edition": "2014",
+   "origin": "basic",
+   "originName": "",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Instead of using a weapon to make a melee weapon attack, you can use an unarmed strike: a punch, kick, head-butt, or similar forceful blow (none of which count as weapons). On a hit, an unarmed strike deals bludgeoning damage equal to 1 + your Strength modifier. You are proficient with your unarmed strikes."
+  },
+  {
+   "id": "unarmed-strike-xphb",
+   "name": "Unarmed Strike",
+   "source": "XPHB",
+   "page": 377,
+   "edition": "2024",
+   "origin": "basic",
+   "originName": "",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Instead of using a weapon to make a melee attack, you can use a punch, kick, head-butt, or similar forceful blow. In game terms, this is an Unarmed Strike—a melee attack that involves you using your body to damage, grapple, or shove a target within 5 feet of you.\n\nWhenever you use your Unarmed Strike, choose one of the following options for its effect.\n\nDamage. You make an attack roll against the target. Your bonus to the roll equals your Strength modifier plus your Proficiency Bonus. On a hit, the target takes Bludgeoning damage equal to 1 plus your Strength modifier.\n\nGrapple. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or it has the Grappled condition. The DC for the saving throw and any escape attempts equals 8 plus your Strength modifier and Proficiency Bonus. This grapple is possible only if the target is no more than one size larger than you and if you have a hand free to grab it.\n\nShove. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or you either push it 5 feet away or cause it to have the Prone condition. The DC for the saving throw equals 8 plus your Strength modifier and Proficiency Bonus. This shove is possible only if the target is no more than one size larger than you."
+  },
+  {
+   "id": "unarmed-strike-grapple-xphb",
+   "name": "Unarmed Strike (Grapple)",
+   "source": "XPHB",
+   "page": 377,
+   "edition": "2024",
+   "origin": "basic",
+   "originName": "",
+   "type": "attack-save",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "str-dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "str",
+    "dcBonus": 0,
+    "onSuccess": "none",
+    "effect": "The target has the Grappled condition."
+   },
+   "saveOnHit": false,
+   "damage": [],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Instead of using a weapon to make a melee attack, you can use a punch, kick, head-butt, or similar forceful blow. In game terms, this is an Unarmed Strike—a melee attack that involves you using your body to damage, grapple, or shove a target within 5 feet of you.\n\nWhenever you use your Unarmed Strike, choose one of the following options for its effect.\n\nDamage. You make an attack roll against the target. Your bonus to the roll equals your Strength modifier plus your Proficiency Bonus. On a hit, the target takes Bludgeoning damage equal to 1 plus your Strength modifier.\n\nGrapple. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or it has the Grappled condition. The DC for the saving throw and any escape attempts equals 8 plus your Strength modifier and Proficiency Bonus. This grapple is possible only if the target is no more than one size larger than you and if you have a hand free to grab it.\n\nShove. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or you either push it 5 feet away or cause it to have the Prone condition. The DC for the saving throw equals 8 plus your Strength modifier and Proficiency Bonus. This shove is possible only if the target is no more than one size larger than you."
+  },
+  {
+   "id": "unarmed-strike-shove-xphb",
+   "name": "Unarmed Strike (Shove)",
+   "source": "XPHB",
+   "page": 377,
+   "edition": "2024",
+   "origin": "basic",
+   "originName": "",
+   "type": "attack-save",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "str-dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "str",
+    "dcBonus": 0,
+    "onSuccess": "none",
+    "effect": "You either push the target 5 feet away or cause it to have the Prone condition."
+   },
+   "saveOnHit": false,
+   "damage": [],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Instead of using a weapon to make a melee attack, you can use a punch, kick, head-butt, or similar forceful blow. In game terms, this is an Unarmed Strike—a melee attack that involves you using your body to damage, grapple, or shove a target within 5 feet of you.\n\nWhenever you use your Unarmed Strike, choose one of the following options for its effect.\n\nDamage. You make an attack roll against the target. Your bonus to the roll equals your Strength modifier plus your Proficiency Bonus. On a hit, the target takes Bludgeoning damage equal to 1 plus your Strength modifier.\n\nGrapple. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or it has the Grappled condition. The DC for the saving throw and any escape attempts equals 8 plus your Strength modifier and Proficiency Bonus. This grapple is possible only if the target is no more than one size larger than you and if you have a hand free to grab it.\n\nShove. The target must succeed on a Strength or Dexterity saving throw (it chooses which), or you either push it 5 feet away or cause it to have the Prone condition. The DC for the saving throw equals 8 plus your Strength modifier and Proficiency Bonus. This shove is possible only if the target is no more than one size larger than you."
+  },
+  {
+   "id": "improvised-weapon-phb",
+   "name": "Improvised Weapon",
+   "source": "PHB",
+   "page": 147,
+   "edition": "2014",
+   "origin": "basic",
+   "originName": "",
+   "type": "melee",
+   "reach": 1.5,
+   "range": {
+    "normal": 6,
+    "long": 18
+   },
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": ""
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Sometimes characters don't have their weapons and have to attack with whatever is at hand. An improvised weapon includes any object you can wield in one or two hands, such as broken glass, a table leg, a frying pan, a wagon wheel, or a dead goblin. Often, an improvised weapon is similar to an actual weapon and can be treated as such. An object that bears no resemblance to a weapon deals 1d4 damage (the DM assigns a damage type appropriate to the object). If a character uses a ranged weapon to make a melee attack, or throws a melee weapon that does not have the thrown property, it also deals 1d4 damage. An improvised thrown weapon has a normal range of 20 feet and a long range of 60 feet."
+  },
+  {
+   "id": "improvised-weapon-xphb",
+   "name": "Improvised Weapon",
+   "source": "XPHB",
+   "page": 369,
+   "edition": "2024",
+   "origin": "basic",
+   "originName": "",
+   "type": "melee",
+   "reach": 1.5,
+   "range": {
+    "normal": 6,
+    "long": 18
+   },
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": ""
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "An improvised weapon is an object wielded as a makeshift weapon, such as broken glass, a table leg, or a frying pan. A Simple or Martial weapon also counts as an improvised weapon if it's wielded in a way contrary to its design; if you use a Ranged weapon to make a melee attack or throw a Melee weapon that lacks the Thrown property, the weapon counts as an improvised weapon. An improvised weapon follows the rules below.\n\nProficiency. Don't add your Proficiency Bonus to attack rolls with an improvised weapon.\n\nDamage. On a hit, the weapon deals 1d4 damage of a type the DM thinks is appropriate for the object.\n\nRange. If you throw the weapon, it has a normal range of 20 feet and a long range of 60 feet.\n\nWeapon Equivalents. If an improvised weapon resembles a Simple or Martial weapon, the DM may say it functions as that weapon and uses that weapon's rules. For example, the DM could treat a table leg as a Club."
+  },
+  {
+   "id": "r-aarakocra-talons-dmg",
+   "name": "Talons (Aarakocra)",
+   "source": "DMG",
+   "page": 282,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Aarakocra",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You are proficient with your unarmed strikes, which deal 1d4 slashing damage on a hit."
+  },
+  {
+   "id": "r-aarakocra-talons-eepc",
+   "name": "Talons (Aarakocra)",
+   "source": "EEPC",
+   "page": 5,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Aarakocra",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your talons are natural weapons, which you can use to make unarmed strikes. If you hit with them, you deal slashing damage equal to 1d4 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-aarakocra-talons-mpmm",
+   "name": "Talons (Aarakocra)",
+   "source": "MPMM",
+   "page": 5,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Aarakocra",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You have talons that you can use to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier slashing damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-centaur-hooves-ggr",
+   "name": "Hooves (Centaur)",
+   "source": "GGR",
+   "page": 15,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Centaur",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your hooves are natural melee weapons, which you can use to make unarmed strikes. If you hit with them, you deal bludgeoning damage equal to 1d4 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-centaur-hooves-mpmm",
+   "name": "Hooves (Centaur)",
+   "source": "MPMM",
+   "page": 9,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Centaur",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You have hooves that you can use to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier bludgeoning damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-dhampir-vampiric-bite-vrgr",
+   "name": "Vampiric Bite (Dhampir)",
+   "source": "VRGR",
+   "page": 16,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dhampir",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "con",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "con",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your fanged bite is a natural weapon, which counts as a simple melee weapon with which you are proficient. You add your Constitution modifier, instead of your Strength modifier, to the attack and damage rolls when you attack with this bite. It deals 1d4 piercing damage on a hit. While you are missing half or more of your hit points, you have advantage on attack rolls you make with this bite.\n\nWhen you attack with this bite and hit a creature that isn't a Construct or an Undead, you can empower yourself in one of the following ways of your choice:\n\n• You regain hit points equal to the piercing damage dealt by the bite.\n• You gain a bonus to the next ability check or attack roll you make; the bonus equals the piercing damage dealt by the bite\n\nYou can empower yourself with this bite a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dhampir-vampiric-bite-rhw",
+   "name": "Vampiric Bite (Dhampir)",
+   "source": "RHW",
+   "page": 28,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dhampir",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "con",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "con",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "When you use your Unarmed Strike and deal damage, you can choose to bite with your fangs. You deal Piercing damage equal to 1d4 plus your Constitution modifier instead of the normal damage of an Unarmed Strike.\n\nIn addition, when you deal this damage to a creature that isn't a Construct or an Undead, you can empower yourself in one of the following ways:\n\n• Drain You regain Hit Points equal to the Piercing damage dealt.\n• Strengthen You gain a bonus to the next ability check or attack roll you make within the next minute; the bonus is equal to the Piercing damage dealt.\n\nYou can empower yourself with this trait a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-gnoll-bite-dmg",
+   "name": "Bite (Gnoll)",
+   "source": "DMG",
+   "page": 282,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Gnoll",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your fanged maw is a natural weapon, which you can use to make unarmed strikes. If you hit with it, you deal piercing damage equal to 1d4 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-leonin-claws-mot",
+   "name": "Claws (Leonin)",
+   "source": "MOT",
+   "page": 20,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Leonin",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your claws are natural weapons, which you can use to make unarmed strikes. If you hit with them, you can deal slashing damage equal to 1d4 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-lizardfolk-bite-vgm",
+   "name": "Bite (Lizardfolk)",
+   "source": "VGM",
+   "page": 111,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Lizardfolk",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your fanged maw is a natural weapon, which you can use to make unarmed strikes. If you hit with it, you deal piercing damage equal to 1d6 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-lizardfolk-bite-mpmm",
+   "name": "Bite (Lizardfolk)",
+   "source": "MPMM",
+   "page": 26,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Lizardfolk",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You have a fanged maw that you can use to make unarmed strikes. When you hit with it, the strike deals 1d6 + your Strength modifier slashing damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-minotaur-horns-ggr",
+   "name": "Horns (Minotaur)",
+   "source": "GGR",
+   "page": 18,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Minotaur",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your horns are natural melee weapons, which you can use to make unarmed strikes. If you hit with them, you deal piercing damage equal to 1d6 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-minotaur-horns-mpmm",
+   "name": "Horns (Minotaur)",
+   "source": "MPMM",
+   "page": 27,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Minotaur",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You have horns that you can use to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier piercing damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-minotaur-amonkhet-horns-psa",
+   "name": "Horns (Minotaur)",
+   "source": "PSA",
+   "page": 19,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Minotaur (Amonkhet)",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You can use your horns as a natural weapon to make unarmed strikes. If you hit with your horns, you deal bludgeoning damage equal to 1d6 + your Strength modifier."
+  },
+  {
+   "id": "r-satyr-ram-mot",
+   "name": "Ram (Satyr)",
+   "source": "MOT",
+   "page": 24,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Satyr",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You can use your head and horns to make unarmed strikes. If you hit with them, you deal bludgeoning damage equal to 1d4 + your Strength modifier."
+  },
+  {
+   "id": "r-satyr-ram-mpmm",
+   "name": "Ram (Satyr)",
+   "source": "MPMM",
+   "page": 29,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Satyr",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "bludgeoning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You can use your head and horns to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier bludgeoning damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-shifter-longtooth-mpmm",
+   "name": "Longtooth (Shifter)",
+   "source": "MPMM",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Shifter",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Bonus Action",
+   "weapon": "",
+   "description": "When you shift and as a bonus action on your other turns while shifted, you can use your elongated fangs to make an unarmed strike. If you hit with your fangs, you can deal piercing damage equal to 1d6 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-shifter-longtooth-efa",
+   "name": "Longtooth (Shifter)",
+   "source": "EFA",
+   "page": 37,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Shifter",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Bonus Action",
+   "weapon": "",
+   "description": "When you shift and as a Bonus Action on your other turns while shifted, you can use your elongated fangs to make an Unarmed Strike. If you hit with this Unarmed Strike and deal damage, you can deal Piercing damage equal to 1d6 plus your Strength modifier, instead of the normal damage of an Unarmed Strike."
+  },
+  {
+   "id": "r-tabaxi-cat-s-claws-vgm",
+   "name": "Cat's Claws (Tabaxi)",
+   "source": "VGM",
+   "page": 113,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Tabaxi",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Because of your claws, you have a climbing speed of 20 feet. In addition, your claws are natural weapons, which you can use to make unarmed strikes. If you hit with them, you deal slashing damage equal to 1d4 + your Strength modifier, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-tabaxi-cat-s-claws-mpmm",
+   "name": "Cat's Claws (Tabaxi)",
+   "source": "MPMM",
+   "page": 33,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Tabaxi",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You can use your claws to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier slashing damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-tortle-claws-ttp",
+   "name": "Claws (Tortle)",
+   "source": "TTP",
+   "page": 3,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Tortle",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your claws are natural weapons, which you can use to make unarmed strikes. If you hit with them, you deal slashing damage equal to 1d4 + your Strength modifier, instead of bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-tortle-claws-mpmm",
+   "name": "Claws (Tortle)",
+   "source": "MPMM",
+   "page": 34,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Tortle",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "You have claws that you can use to make unarmed strikes. When you hit with them, the strike deals 1d6 + your Strength modifier slashing damage, instead of the bludgeoning damage normal for an unarmed strike."
+  },
+  {
+   "id": "r-lupin-feral-pounce-rhw",
+   "name": "Feral Pounce (Lupin)",
+   "source": "RHW",
+   "page": 30,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Lupin",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1",
+     "ability": "str",
+     "type": "slashing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your Unarmed Strikes deal Slashing damage instead of Bludgeoning damage. In addition, when you hit a creature with an Unarmed Strike as part of the Attack action on your turn, you can use both the Damage and the Shove options. You can use this benefit only once per turn."
+  },
+  {
+   "id": "r-tauren-horns-wow",
+   "name": "Horns (Tauren)",
+   "source": "WoW",
+   "page": 88,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Tauren",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d6",
+     "ability": "str",
+     "type": "piercing"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your horns are powerful natural weapons. When you hit with your Unarmed Strike and deal damage, you can deal Piercing damage equal to 1d6 plus your Strength modifier instead of the normal damage of an Unarmed Strike."
+  },
+  {
+   "id": "r-naga-bite-psa",
+   "name": "Bite (Naga)",
+   "source": "PSA",
+   "page": 21,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Naga",
+   "type": "melee",
+   "reach": 1.5,
+   "range": null,
+   "area": null,
+   "attack": {
+    "ability": "str",
+    "bonus": 0,
+    "prof": "prof"
+   },
+   "save": {
+    "ability": "con",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "none",
+    "effect": "On a failed save, the target takes the poison damage (Damage 2)."
+   },
+   "saveOnHit": true,
+   "damage": [
+    {
+     "dice": "1d4",
+     "ability": "str",
+     "type": "piercing"
+    },
+    {
+     "dice": "1d4",
+     "ability": "none",
+     "type": "poison"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "",
+   "weapon": "",
+   "description": "Your fanged maw and constricting serpentine body are natural weapons, which you can use to make unarmed strikes.\n\nIf you hit with your bite, you deal piercing damage equal to 1d4 + your Strength modifier, and your target must make a Constitution saving throw (DC 8 + your proficiency bonus + your Constitution modifier). On a failed save, the target takes 1d4 poison damage.\n\nIf you hit with your constrict attack, you deal bludgeoning damage equal to 1d6 + your Strength modifier, and the target is grappled (escape DC 8 + your proficiency bonus + your Strength modifier). Until this grapple ends, the target is restrained, and you can't constrict another target."
+  },
+  {
+   "id": "r-simic-hybrid-acid-spit-ggr",
+   "name": "Acid Spit (Simic Hybrid)",
+   "source": "GGR",
+   "page": 20,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Simic Hybrid",
+   "type": "attack-save",
+   "reach": null,
+   "range": {
+    "normal": 9,
+    "long": 9
+   },
+   "area": null,
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "none",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d10",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Constitution modifier / Long Rest",
+   "weapon": "",
+   "description": "As an action, you can spray acid from glands in your mouth, targeting one creature or object you can see within 30 feet of you. The target takes 2d10 acid damage unless it succeeds on a Dexterity saving throw against a DC equal to 8 + your Constitution modifier + your proficiency bonus. This damage increases by 1d10 when you reach 11th level (3d10) and 17th level (4d10). You can use this trait a number of times equal to your Constitution modifier (minimum of once), and you regain all expended uses of it when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-breath-black-phb",
+   "name": "Breath Weapon (Black)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-blue-phb",
+   "name": "Breath Weapon (Blue)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-brass-phb",
+   "name": "Breath Weapon (Brass)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-bronze-phb",
+   "name": "Breath Weapon (Bronze)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-copper-phb",
+   "name": "Breath Weapon (Copper)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-gold-phb",
+   "name": "Breath Weapon (Gold)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-green-phb",
+   "name": "Breath Weapon (Green)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "con",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "poison"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-red-phb",
+   "name": "Breath Weapon (Red)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-silver-phb",
+   "name": "Breath Weapon (Silver)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "con",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-white-phb",
+   "name": "Breath Weapon (White)",
+   "source": "PHB",
+   "page": 32,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "con",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "2d6",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Short or Long Rest",
+   "weapon": "",
+   "description": "Breath Weapon. You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.\n\nWhen you use your breath weapon, each creature in the area of the exhalation must make a saving throw, the type of which is determined by your draconic ancestry. The DC for this saving throw equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level.\n\nAfter you use your breath weapon, you can't use it again until you complete a short or long rest.\n\nDraconic Ancestry. You have draconic ancestry. Choose one type of dragon from the Draconic Ancestry table. Your breath weapon and damage resistance are determined by the dragon type, as shown in the table.\n\nDraconic Ancestry:\n| Dragon | Damage Type | Breath Weapon |\n| Black | Acid | 5 by 30 ft. line (Dex. save) |\n| Blue | Lightning | 5 by 30 ft. line (Dex. save) |\n| Brass | Fire | 5 by 30 ft. line (Dex. save) |\n| Bronze | Lightning | 5 by 30 ft. line (Dex. save) |\n| Copper | Acid | 5 by 30 ft. line (Dex. save) |\n| Gold | Fire | 15 ft. cone (Dex. save) |\n| Green | Poison | 15 ft. cone (Con. save) |\n| Red | Fire | 15 ft. cone (Dex. save) |\n| Silver | Cold | 15 ft. cone (Con. save) |\n| White | Cold | 15 ft. cone (Con. save) |\n\nDamage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level."
+  },
+  {
+   "id": "r-dragonborn-breath-acid-cone-xphb",
+   "name": "Breath Weapon (Acid, Cone)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-acid-line-xphb",
+   "name": "Breath Weapon (Acid, Line)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-cold-cone-xphb",
+   "name": "Breath Weapon (Cold, Cone)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-cold-line-xphb",
+   "name": "Breath Weapon (Cold, Line)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-fire-cone-xphb",
+   "name": "Breath Weapon (Fire, Cone)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-fire-line-xphb",
+   "name": "Breath Weapon (Fire, Line)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-lightning-cone-xphb",
+   "name": "Breath Weapon (Lightning, Cone)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-lightning-line-xphb",
+   "name": "Breath Weapon (Lightning, Line)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-poison-cone-xphb",
+   "name": "Breath Weapon (Poison, Cone)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "poison"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-breath-poison-line-xphb",
+   "name": "Breath Weapon (Poison, Line)",
+   "source": "XPHB",
+   "page": 187,
+   "edition": "2024",
+   "origin": "species",
+   "originName": "Dragonborn",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "poison"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (choose the shape each time). Each creature in that area must make a Dexterity saving throw (DC 8 plus your Constitution modifier and Proficiency Bonus). On a failed save, a creature takes 1d10 damage of the type determined by your Draconic Ancestry trait. On a successful save, a creature takes half as much damage. This damage increases by 1d10 when you reach character levels 5 (2d10), 11 (3d10), and 17 (4d10).\n\nYou can use this Breath Weapon a number of times equal to your Proficiency Bonus, and you regain all expended uses when you finish a Long Rest."
+  },
+  {
+   "id": "r-dragonborn-chromatic-breath-acid-ftd",
+   "name": "Breath Weapon (Chromatic, Acid)",
+   "source": "FTD",
+   "page": 10,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Chromatic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 30-foot line that is 5 feet wide. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Chromatic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-chromatic-breath-cold-ftd",
+   "name": "Breath Weapon (Chromatic, Cold)",
+   "source": "FTD",
+   "page": 10,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Chromatic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 30-foot line that is 5 feet wide. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Chromatic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-chromatic-breath-fire-ftd",
+   "name": "Breath Weapon (Chromatic, Fire)",
+   "source": "FTD",
+   "page": 10,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Chromatic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 30-foot line that is 5 feet wide. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Chromatic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-chromatic-breath-lightning-ftd",
+   "name": "Breath Weapon (Chromatic, Lightning)",
+   "source": "FTD",
+   "page": 10,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Chromatic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 30-foot line that is 5 feet wide. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Chromatic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-chromatic-breath-poison-ftd",
+   "name": "Breath Weapon (Chromatic, Poison)",
+   "source": "FTD",
+   "page": 10,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Chromatic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "line",
+    "size": 9,
+    "width": 1.5
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "poison"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 30-foot line that is 5 feet wide. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Chromatic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-gem-breath-force-ftd",
+   "name": "Breath Weapon (Gem, Force)",
+   "source": "FTD",
+   "page": 11,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Gem)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "force"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Gem Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-gem-breath-necrotic-ftd",
+   "name": "Breath Weapon (Gem, Necrotic)",
+   "source": "FTD",
+   "page": 11,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Gem)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "necrotic"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Gem Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-gem-breath-psychic-ftd",
+   "name": "Breath Weapon (Gem, Psychic)",
+   "source": "FTD",
+   "page": 11,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Gem)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "psychic"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Gem Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-gem-breath-radiant-ftd",
+   "name": "Breath Weapon (Gem, Radiant)",
+   "source": "FTD",
+   "page": 11,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Gem)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "radiant"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Gem Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-gem-breath-thunder-ftd",
+   "name": "Breath Weapon (Gem, Thunder)",
+   "source": "FTD",
+   "page": 11,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Gem)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "thunder"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Gem Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-metallic-breath-acid-ftd",
+   "name": "Breath Weapon (Metallic, Acid)",
+   "source": "FTD",
+   "page": 12,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Metallic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "acid"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Metallic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-metallic-breath-cold-ftd",
+   "name": "Breath Weapon (Metallic, Cold)",
+   "source": "FTD",
+   "page": 12,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Metallic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "cold"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Metallic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-metallic-breath-fire-ftd",
+   "name": "Breath Weapon (Metallic, Fire)",
+   "source": "FTD",
+   "page": 12,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Metallic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "fire"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Metallic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  },
+  {
+   "id": "r-dragonborn-metallic-breath-lightning-ftd",
+   "name": "Breath Weapon (Metallic, Lightning)",
+   "source": "FTD",
+   "page": 12,
+   "edition": "2014",
+   "origin": "species",
+   "originName": "Dragonborn (Metallic)",
+   "type": "attack-save",
+   "reach": null,
+   "range": null,
+   "area": {
+    "shape": "cone",
+    "size": 4.5,
+    "width": null
+   },
+   "attack": {
+    "ability": "none",
+    "bonus": 0,
+    "prof": "none"
+   },
+   "save": {
+    "ability": "dex",
+    "dc": "calc",
+    "dcFixed": 10,
+    "dcAbility": "con",
+    "dcBonus": 0,
+    "onSuccess": "half",
+    "effect": ""
+   },
+   "saveOnHit": false,
+   "damage": [
+    {
+     "dice": "1d10",
+     "ability": "none",
+     "type": "lightning"
+    }
+   ],
+   "versatile": "",
+   "crit": 20,
+   "critExtra": "",
+   "ammo": "",
+   "uses": "Proficiency Bonus / Long Rest",
+   "weapon": "",
+   "description": "When you take the Attack action on your turn, you can replace one of your attacks with an exhalation of magical energy in a 15-foot cone. Each creature in that area must make a Dexterity saving throw (DC = 8 + your Constitution modifier + your proficiency bonus). On a failed save, the creature takes 1d10 damage of the type associated with your Metallic Ancestry. On a successful save, it takes half as much damage. This damage increases by 1d10 when you reach 5th level (2d10), 11th level (3d10), and 17th level (4d10).\n\nYou can use your Breath Weapon a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest."
+  }
+ ]
+}

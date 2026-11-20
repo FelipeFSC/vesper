@@ -27,7 +27,7 @@ window.addEventListener('load', () => setTimeout(async () => {
 
     // 1) ferramenta Porta: botão "Procurar portas no mapa"
     B.setTool('door'); UI.refresh(); await W(100);
-    const btn = [...document.querySelectorAll('#tool-opts .btn')].find((b) => /Procurar portas no mapa/.test(b.textContent));
+    const btn = [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Procurar portas no mapa/.test(b.textContent));
     log.push('ferramenta Porta tem "Procurar portas no mapa": ' + !!btn);
     btn.click(); await W(300);
     const win = [...document.querySelectorAll('.win')].find((w) => /Procurar portas/.test(w.textContent));
@@ -56,7 +56,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('sem exemplo nem palpite: pede = ' + !!r3.need);
     // 6) a ferramenta Parede continua abrindo a janela completa
     B.setTool('wall'); UI.refresh(); await W(100);
-    [...document.querySelectorAll('#tool-opts .btn')].find((b) => /Procurar paredes no mapa/.test(b.textContent)).click(); await W(300);
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Procurar paredes no mapa/.test(b.textContent)).click(); await W(300);
     const win2 = [...document.querySelectorAll('.win')].find((w) => /Procurar paredes/.test(w.textContent));
     log.push('ferramenta Parede: janela completa = ' + !!win2 + ' · etapas: ' + (win2 ? [...win2.querySelectorAll('.eyebrow')].map((e) => e.textContent).join(' | ') : '-') + ' · só portas: ' + UI.scanOpts.only);
     UI.closeWindow('scan');

@@ -151,7 +151,7 @@
     return [
       { icon: 'sliders-horizontal', label: 'Configurar', run: () => panel('trigger', tr) },
       far ? { icon: 'map', label: 'Ir para o destino', title: 'Abre a outra cena na sua tela (os jogadores não mudam)', run: () => { S().viewSceneId = d.scene.id; S().emit('local'); } } : null,
-      { icon: back ? 'check' : 'repeat', label: back ? 'Ida e volta (ligado)' : 'Ida e volta', run: () => (back ? TG.unlinkPortal(sc.id, tr.id) : TG.linkPortal(sc.id, tr.id)) },
+      { icon: 'link', label: back ? 'Ligar a outro portal' : 'Ligar a um portal', title: 'Clique no portal (desta cena ou de outra) que vai ser ligado', run: () => { panel('trigger', tr); UI().portalLink(sc, tr, back ? back.scene.id : sc.id); } },
       { icon: on ? 'pause' : 'play', label: on ? 'Desligar' : 'Ligar', run: () => D({ type: 'trigger.update', sceneId: sc.id, id: tr.id, patch: { enabled: !on } }) },
       '-',
       { icon: 'trash-2', label: 'Apagar', kbd: 'Del', danger: true, run: () => { D({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); if (B().selectedTrigger === tr.id) B().selectedTrigger = null; } },

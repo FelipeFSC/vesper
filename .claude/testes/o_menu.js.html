@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vésper · Mesa de RPG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ficha5e.css">
+</head>
+<body data-log="[&quot;itens: Jogar / Preparar tabuleiro / Criar ficha / test / Tutorial / Wiki&quot;,&quot;selecionado: Jogar | desc: Abra uma mesa para os seus jogadores ou entre na mesa de alguém.&quot;,&quot;2x baixo: Criar ficha&quot;,&quot;3x cima (volta ao fim): Wiki&quot;,&quot;submenu: Abrir mesa online / Entrar na mesa online / Voltar | raiz visível: false&quot;,&quot;campo código visível: true foco: lb-code&quot;,&quot;esc fecha código: true&quot;,&quot;esc volta: raiz visível true, sel Jogar&quot;,&quot;abrir sem nome pede nome: true, lobby visível true&quot;,&quot;criar ficha leva à página: true | desc: Uma página só para montar fichas, com espaço.&quot;,&quot;erros: []&quot;]">
+  <!-- Símbolo da marca (reaproveitado com <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="brand-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M16 3 27 7v8.5c0 6.6-4.6 11.4-11 13.5C9.6 26.9 5 22.1 5 15.5V7z"></path>
+      <path d="m11 11 5 11 5-11"></path>
+      <path d="M13.5 11h5" opacity=".6"></path>
+    </symbol>
+  </svg>
+
+  <!-- Tela inicial -->
+  <div id="lobby">
+    <!-- Fundo: imagem padrão com camadas vivas (estrelas, janelas, névoa) ou a imagem escolhida em "Trocar fundo" -->
+    <div class="mn-bg" id="mn-bg" aria-hidden="true">
+      <div class="mn-stage" id="mn-stage">
+        <img class="mn-photo" src="imagens/imgHomeHD.jpg" alt="" width="2752" height="1536" decoding="async">
+        <div class="mn-stars" id="mn-stars"><i style="left: 95.55%; top: 31.67%; --s: 2.4px; --o: 0.99; --t: 4.5s; --d: -7.1s;"></i><i style="left: 59.9%; top: 45.1%; --s: 1.5px; --o: 0.71; --t: 4.9s; --d: -4.0s;"></i><i style="left: 33.22%; top: 39.08%; --s: 1.4px; --o: 0.73; --t: 4.7s; --d: -2.6s;"></i><i style="left: 26.68%; top: 16.56%; --s: 1.4px; --o: 0.47; --t: 3.7s; --d: -7.6s;"></i><i style="left: 39.58%; top: 25.77%; --s: 1.1px; --o: 0.62; --t: 5.4s; --d: -2.3s;"></i><i style="left: 9.44%; top: 25.17%; --s: 1.3px; --o: 0.65; --t: 6.6s; --d: -0.2s;"></i><i style="left: 6.18%; top: 9.24%; --s: 1.4px; --o: 0.70; --t: 7.0s; --d: -2.2s;"></i><i style="left: 55.66%; top: 20.63%; --s: 2.3px; --o: 0.96; --t: 4.9s; --d: -2.9s;"></i><i style="left: 85.81%; top: 44.83%; --s: 1.8px; --o: 0.78; --t: 7.6s; --d: -7.1s;"></i><i style="left: 47.71%; top: 7.94%; --s: 1.7px; --o: 0.66; --t: 6.9s; --d: -5.9s;"></i><i style="left: 38.73%; top: 8.3%; --s: 1.1px; --o: 0.56; --t: 5.2s; --d: -4.7s;"></i><i style="left: 19.68%; top: 19.1%; --s: 1.1px; --o: 0.78; --t: 3.1s; --d: -2.2s;"></i><i style="left: 43.88%; top: 3.62%; --s: 1.7px; --o: 0.53; --t: 3.6s; --d: -3.7s;"></i><i style="left: 19.39%; top: 15.54%; --s: 1.1px; --o: 0.73; --t: 4.9s; --d: -7.0s;"></i><i style="left: 45.11%; top: 19.68%; --s: 1.1px; --o: 0.58; --t: 4.0s; --d: -3.3s;"></i><i style="left: 62.52%; top: 7.56%; --s: 2.8px; --o: 0.82; --t: 4.1s; --d: -3.4s;"></i><i style="left: 1.3%; top: 6.59%; --s: 1.3px; --o: 0.70; --t: 6.5s; --d: -3.8s;"></i><i style="left: 83.68%; top: 6.7%; --s: 1.7px; --o: 0.63; --t: 5.1s; --d: -7.2s;"></i><i style="left: 78.19%; top: 16.5%; --s: 1.3px; --o: 0.55; --t: 7.1s; --d: -0.8s;"></i><i style="left: 23.18%; top: 6.91%; --s: 1.2px; --o: 0.59; --t: 7.6s; --d: -6.2s;"></i><i style="left: 3.08%; top: 30.42%; --s: 1.4px; --o: 0.65; --t: 4.9s; --d: -6.1s;"></i><i style="left: 21.31%; top: 4%; --s: 2.9px; --o: 0.87; --t: 3.1s; --d: -7.8s;"></i><i style="left: 35.58%; top: 3.34%; --s: 2.4px; --o: 0.99; --t: 7.2s; --d: -7.0s;"></i><i style="left: 78.99%; top: 9.71%; --s: 1.6px; --o: 0.64; --t: 3.6s; --d: -3.7s;"></i><i style="left: 97.68%; top: 15.61%; --s: 1.3px; --o: 0.80; --t: 5.4s; --d: -6.0s;"></i><i style="left: 19.31%; top: 6.3%; --s: 1.4px; --o: 0.41; --t: 4.9s; --d: -4.7s;"></i><i style="left: 49.07%; top: 2.3%; --s: 1.7px; --o: 0.72; --t: 4.4s; --d: -5.8s;"></i><i style="left: 86.94%; top: 6.27%; --s: 1.1px; --o: 0.72; --t: 4.7s; --d: -5.1s;"></i><i style="left: 23.36%; top: 39.18%; --s: 1.6px; --o: 0.41; --t: 6.1s; --d: -3.3s;"></i><i style="left: 43.13%; top: 39.92%; --s: 1.3px; --o: 0.50; --t: 6.9s; --d: -5.5s;"></i><i style="left: 18.42%; top: 19.22%; --s: 1.1px; --o: 0.62; --t: 8.0s; --d: -5.4s;"></i><i style="left: 65.82%; top: 43.06%; --s: 1.2px; --o: 0.71; --t: 4.0s; --d: -1.1s;"></i><i style="left: 15.34%; top: 39.48%; --s: 1.7px; --o: 0.48; --t: 6.7s; --d: -2.5s;"></i><i style="left: 34.99%; top: 31.2%; --s: 1.5px; --o: 0.52; --t: 5.1s; --d: -2.4s;"></i><i style="left: 83.38%; top: 3.29%; --s: 2.5px; --o: 0.86; --t: 6.3s; --d: -6.0s;"></i><i style="left: 94.18%; top: 17.06%; --s: 1.5px; --o: 0.59; --t: 6.3s; --d: -4.5s;"></i><i style="left: 92.69%; top: 13.29%; --s: 1.6px; --o: 0.46; --t: 7.8s; --d: -4.0s;"></i><i style="left: 85.26%; top: 19.31%; --s: 1.2px; --o: 0.73; --t: 5.6s; --d: -6.3s;"></i><i style="left: 67.63%; top: 35.95%; --s: 1.5px; --o: 0.71; --t: 4.9s; --d: -6.0s;"></i><i style="left: 13.83%; top: 34.79%; --s: 1.3px; --o: 0.74; --t: 7.8s; --d: -6.2s;"></i><i style="left: 95.17%; top: 3.51%; --s: 1.6px; --o: 0.68; --t: 5.5s; --d: -3.6s;"></i><i style="left: 96.88%; top: 32.35%; --s: 1.2px; --o: 0.65; --t: 3.9s; --d: -1.0s;"></i><i style="left: 29.23%; top: 20.03%; --s: 1.6px; --o: 0.72; --t: 5.8s; --d: -6.6s;"></i><i style="left: 6.37%; top: 7.71%; --s: 1.9px; --o: 0.61; --t: 7.7s; --d: -0.4s;"></i><i style="left: 80.65%; top: 35.07%; --s: 1.5px; --o: 0.77; --t: 6.4s; --d: -5.8s;"></i><i style="left: 3.96%; top: 16.99%; --s: 1.6px; --o: 0.52; --t: 6.1s; --d: -4.3s;"></i><i style="left: 81.49%; top: 28.68%; --s: 1.7px; --o: 0.71; --t: 4.4s; --d: -6.0s;"></i><i style="left: 50.28%; top: 39.46%; --s: 1.2px; --o: 0.75; --t: 4.3s; --d: -2.3s;"></i><i style="left: 85.39%; top: 8.55%; --s: 1.4px; --o: 0.55; --t: 6.1s; --d: -1.9s;"></i><i style="left: 45.16%; top: 13.51%; --s: 1.6px; --o: 0.64; --t: 7.3s; --d: -3.7s;"></i><i style="left: 76.74%; top: 13.34%; --s: 2.3px; --o: 0.84; --t: 7.9s; --d: -6.1s;"></i><i style="left: 92.74%; top: 7.57%; --s: 1.5px; --o: 0.63; --t: 3.9s; --d: -3.0s;"></i><i style="left: 23.85%; top: 17.03%; --s: 1.1px; --o: 0.71; --t: 7.8s; --d: -0.6s;"></i><i style="left: 7.71%; top: 34.5%; --s: 2.8px; --o: 0.92; --t: 7.6s; --d: -4.1s;"></i><i style="left: 92.78%; top: 15.02%; --s: 1.8px; --o: 0.47; --t: 3.9s; --d: -6.9s;"></i><i style="left: 38.12%; top: 36.73%; --s: 1.1px; --o: 0.51; --t: 7.6s; --d: -4.7s;"></i><i style="left: 4.48%; top: 23.9%; --s: 1.2px; --o: 0.44; --t: 3.7s; --d: -5.3s;"></i><i style="left: 12.48%; top: 34.38%; --s: 1.4px; --o: 0.59; --t: 7.0s; --d: -1.4s;"></i><i style="left: 20.32%; top: 11.39%; --s: 1.8px; --o: 0.47; --t: 4.4s; --d: -0.6s;"></i><i style="left: 56.95%; top: 22.04%; --s: 1.7px; --o: 0.79; --t: 6.8s; --d: -7.7s;"></i><i style="left: 72.69%; top: 31.26%; --s: 1.3px; --o: 0.78; --t: 7.2s; --d: -1.9s;"></i><i style="left: 1.23%; top: 20.52%; --s: 1.3px; --o: 0.47; --t: 7.6s; --d: -6.3s;"></i><i style="left: 23.81%; top: 29.99%; --s: 2.3px; --o: 0.98; --t: 7.6s; --d: -7.8s;"></i><i style="left: 76.13%; top: 10.95%; --s: 2.3px; --o: 0.86; --t: 6.5s; --d: -1.8s;"></i><i style="left: 82.22%; top: 2.87%; --s: 3.0px; --o: 0.89; --t: 4.1s; --d: -1.5s;"></i><i style="left: 13.79%; top: 45.77%; --s: 1.5px; --o: 0.58; --t: 3.9s; --d: -4.7s;"></i><i style="left: 37.17%; top: 22.34%; --s: 2.3px; --o: 0.81; --t: 7.1s; --d: -0.1s;"></i><i style="left: 27.12%; top: 43.96%; --s: 1.9px; --o: 0.45; --t: 5.3s; --d: -7.5s;"></i><i style="left: 27.16%; top: 4.97%; --s: 1.1px; --o: 0.42; --t: 7.0s; --d: -0.4s;"></i><i style="left: 35.79%; top: 7.35%; --s: 1.4px; --o: 0.41; --t: 6.0s; --d: -3.3s;"></i></div>
+        <div class="mn-moon"></div>
+        <div class="mn-windows" id="mn-windows"><i style="left: 79.39%; top: 46.68%; --w: 1.35%; --t: 2.7s; --d: -5.0s;"></i><i style="left: 80.27%; top: 48.95%; --w: 1.20%; --t: 2.7s; --d: -0.7s;"></i><i style="left: 79.59%; top: 51.05%; --w: 2.40%; --t: 4.2s; --d: -1.3s;"></i><i style="left: 79.59%; top: 55.07%; --w: 2.40%; --t: 2.9s; --d: -1.8s;"></i><i style="left: 72.07%; top: 53.67%; --w: 2.10%; --t: 4.5s; --d: -0.9s;"></i><i style="left: 71.88%; top: 56.99%; --w: 1.20%; --t: 2.6s; --d: -4.0s;"></i><i style="left: 74.02%; top: 57.17%; --w: 2.10%; --t: 4.2s; --d: -2.0s;"></i><i style="left: 75.59%; top: 57.17%; --w: 2.10%; --t: 3.7s; --d: -1.7s;"></i><i style="left: 77.25%; top: 57.17%; --w: 2.10%; --t: 3.1s; --d: -4.5s;"></i><i style="left: 82.03%; top: 54.02%; --w: 1.50%; --t: 3.3s; --d: -4.5s;"></i><i style="left: 82.03%; top: 58.22%; --w: 2.40%; --t: 4.7s; --d: -1.4s;"></i><i style="left: 83.01%; top: 56.99%; --w: 1.20%; --t: 4.8s; --d: -4.1s;"></i></div>
+        <div class="mn-fog f1"></div><div class="mn-fog f2"></div><div class="mn-fog f3"></div><div class="mn-fog f4"></div>
+      </div>
+      <div class="mn-img" id="mn-img"></div>
+      <canvas class="mn-sparks" id="mn-sparks" width="1464" height="856"></canvas>
+    </div>
+    <div class="mn-shade"></div>
+
+    <div class="mn-profile need">
+      <span class="mn-avatar" data-icon="user-round"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg></span>
+      <label>Jogando como<input id="lb-name" maxlength="40" placeholder="Seu nome" autocomplete="off" wfd-id="id0"></label>
+    </div>
+
+    <div class="mn-main">
+      <div class="mn-brand"><svg class="brand-mark"><use href="#brand-mark"></use></svg><span>VÉSPER</span></div>
+      <p class="mn-tag">Mesa virtual de RPG, livre para qualquer sistema</p>
+
+      <nav class="mn-list" id="mn-root" aria-label="Menu principal">
+        <button class="mn-item sel" data-sub="mn-play" data-desc="Abra uma mesa para os seus jogadores ou entre na mesa de alguém."><span data-icon="swords"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" x2="19" y1="19" y2="13"></line><line x1="16" x2="20" y1="16" y2="20"></line><line x1="19" x2="21" y1="21" y2="19"></line><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline><line x1="5" x2="9" y1="14" y2="18"></line><line x1="7" x2="4" y1="17" y2="20"></line><line x1="3" x2="5" y1="19" y2="21"></line></svg></span>Jogar</button>
+        <button class="mn-item" id="lb-offline" data-desc="Escolha uma história (ou crie uma) e monte cenas, mapas e fichas sem ninguém conectado. Nada vai para a internet."><span data-icon="map"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"></path><path d="M15 5.764v15"></path><path d="M9 3.236v15"></path></svg></span>Preparar tabuleiro</button>
+        <button class="mn-item" id="lb-sheet" data-desc="Uma página só para montar fichas, com espaço."><span data-icon="user-round"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg></span>Criar ficha</button>
+        <button class="mn-item" id="lb-cad" data-desc="Cadastros que a ficha vai usar: ataques e armas, já com os do 5etools. Pesquise, crie, edite e apague."><span data-icon="library"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 6 4 14"></path><path d="M12 6v14"></path><path d="M8 8v12"></path><path d="M4 4v16"></path></svg></span>test</button>
+        <a class="mn-item" href="?tutorial" data-desc="Uma cena de exemplo mostra onde clicar: ataques, magias e combate. Nada é salvo."><span data-icon="sparkles"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M4 17v2"></path><path d="M5 18H3"></path></svg></span>Tutorial</a>
+        <a class="mn-item" href="wiki/index.html" data-desc="O manual completo, separado por tópicos, com fotos e exemplos."><span data-icon="book-open"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></span>Wiki</a>
+      </nav>
+
+      <nav class="mn-list" id="mn-play" aria-label="Jogar" hidden="">
+        <p class="mn-crumb">Jogar</p>
+        <button class="mn-item" id="lb-host" data-desc="Você é o mestre. Escolha a história e a mesa gera um código para os jogadores."><span data-icon="crown"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"></path><path d="M5 21h14"></path></svg></span>Abrir mesa online</button>
+        <button class="mn-item" id="lb-join-open" data-desc="Digite o código de 6 letras que o mestre mandou."><span data-icon="users"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Entrar na mesa online</button>
+        <div class="mn-join" id="mn-join" hidden="">
+          <input id="lb-code" maxlength="12" placeholder="CÓDIGO" class="code-input" autocomplete="off" wfd-id="id1">
+          <button id="lb-join" class="btn primary">Entrar</button>
+        </div>
+        <button class="mn-item mn-back" data-back="" data-desc="Volta ao menu principal."><span data-icon="undo-2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg></span>Voltar</button>
+      </nav>
+
+      <p class="mn-desc" id="mn-desc" aria-live="polite">Abra uma mesa para os seus jogadores ou entre na mesa de alguém.</p>
+    </div>
+
+    <!-- Histórias (Plano 33): uma mesa preparada em cada cartão -->
+    <section class="st-screen" id="st-screen" hidden="" aria-label="Histórias">
+      <div class="st-head">
+        <button class="st-back" id="st-back" title="Voltar ao menu (Esc)"><span data-icon="undo-2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg></span>Voltar</button>
+        <div>
+          <p class="mn-crumb" id="st-crumb">Abrir mesa online</p>
+          <h2 class="st-title">Histórias</h2>
+        </div>
+      </div>
+      <div class="st-grid" id="st-grid"></div>
+    </section>
+
+    <div class="mn-foot">
+      <span class="mn-keys"><kbd>↑</kbd><kbd>↓</kbd> escolher <kbd>Enter</kbd> confirmar <kbd>Esc</kbd> voltar</span>
+      <button class="mn-bgbtn" id="mn-bg-pick" title="Use qualquer imagem do seu computador"><span data-icon="image"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>Trocar fundo</button>
+      <button class="mn-bgbtn" id="mn-bg-clear" hidden=""><span data-icon="x"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></span>Fundo padrão</button>
+    </div>
+  </div>
+
+  <!-- Aplicação -->
+  <div id="app" hidden="">
+    <header id="topbar">
+      <button class="brand" id="btn-home" title="Voltar ao menu inicial"><span class="home-ico" data-icon="house"></span><svg class="brand-mark"><use href="#brand-mark"></use></svg><span>VÉSPER</span><span class="home-label">Menu</span></button>
+      <div class="crumbs">
+        <button class="crumb" id="crumb-campaign" title="Configurações da mesa"><span class="crumb-label">Campanha</span><b id="campaign-name">—</b><span data-icon="chevron-right"></span></button>
+        <span class="crumb-sep"></span>
+        <button class="crumb" id="crumb-scene" title="Trocar de cena"><span class="crumb-label">Cena</span><b id="scene-title">—</b><span data-icon="chevron-right"></span></button>
+        <span id="scene-warn" class="scene-warn" hidden=""></span>
+      </div>
+      <div id="viewas-bar" hidden=""></div>
+      <div class="spacer"></div>
+      <div id="net-status" class="net">Offline</div>
+      <div id="avatars" class="avatars"></div>
+      <button id="btn-invite" class="btn ghost small" hidden=""><span data-icon="link"></span>Convidar</button>
+      <button id="btn-mode" class="btn primary"></button>
+      <div class="menu-wrap">
+        <button id="btn-menu" class="icon-btn lg" title="Mais opções"><span data-icon="ellipsis"></span></button>
+        <div id="main-menu" class="menu" hidden=""></div>
+      </div>
+    </header>
+
+    <aside id="left">
+      <div class="side-tabs" id="left-tabs"></div>
+      <div class="side-body" id="left-body"></div>
+      <div class="side-foot" id="left-foot"></div>
+    </aside>
+
+    <main id="board-wrap">
+      <canvas id="board"></canvas>
+      <nav id="toolbar"></nav>
+      <div id="tool-opts" hidden=""></div>
+      <div id="scene-label"></div>
+      <div id="init-strip" hidden=""></div>
+      <div id="token-hud" hidden=""></div>
+      <div id="party-col" hidden=""></div>
+      <div id="follow-bar" hidden=""></div>
+      <div id="target-bar" hidden=""></div>
+      <div id="roll-feed"></div>
+
+      <div id="dock-panel" hidden="">
+        <div class="dock-head"><span id="dock-title"></span><button class="icon-btn" id="dock-close" title="Fechar"><span data-icon="x"></span></button></div>
+        <section class="panel" id="p-chat"></section>
+        <section class="panel" id="p-dice" hidden=""></section>
+        <section class="panel" id="p-combat" hidden=""></section>
+        <section class="panel" id="p-table" hidden=""></section>
+        <section class="panel" id="p-audio" hidden=""></section>
+        <section class="panel" id="p-handouts" hidden=""></section>
+      </div>
+      <div id="dock"></div>
+      <div id="zoom" class="float-group">
+        <button class="icon-btn" data-z="out" title="Afastar"><span data-icon="minus"></span></button>
+        <span id="zoom-val">100%</span>
+        <button class="icon-btn" data-z="in" title="Aproximar"><span data-icon="plus"></span></button>
+        <span class="vsep"></span>
+        <button class="icon-btn" data-z="fit" title="Enquadrar a cena"><span data-icon="scan"></span></button>
+      </div>
+      <div id="board-actions"></div>
+      <a id="btn-help" class="help-btn" href="?tutorial" target="_blank" title="Tutorial interativo">?</a>
+    </main>
+
+    <aside id="right">
+      <div class="side-tabs" id="right-tabs"></div>
+      <div class="side-body" id="right-body">
+        <div id="props-slot"></div>
+        <div id="layers"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="windows"></div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/dice.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/images.js"></script>
+  <script src="js/scan.js"></script>
+  <script src="js/light.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/anim.js"></script>
+  <script src="js/triggers.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/explore.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/ctxmenu.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/bestiary.js"></script>
+  <script src="js/dados5e.js"></script>
+  <script src="js/regras5e.js"></script>
+  <script src="js/ficha5e.js"></script>
+  <script src="js/assistente5e.js"></script>
+  <script src="js/tutorial.js"></script>
+  <script src="js/main.js"></script><script src="_test.js"></script>
+
+
+</body></html>

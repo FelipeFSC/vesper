@@ -62,7 +62,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.viewAs = null; S.dispatch({ type: 'prop.update', sceneId: sc().id, id: p0.id, patch: { hidden: false } });
     // 9) biblioteca: ferramenta Imagem mostra a miniatura; clicar coloca outra
     B.setTool('prop'); App.UI.refresh(); await W(200);
-    const thumbs = document.querySelectorAll('#tool-opts .img-lib img');
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Imagens da campanha/.test(b.textContent)).click(); await W(50);
+    const thumbs = document.querySelectorAll('#tool-sub .img-lib img');
     log.push('biblioteca: ' + thumbs.length + ' miniatura(s)');
     if (thumbs[0]) thumbs[0].click(); await W(400);
     log.push('clicar na miniatura: ' + sc().props.length + ' imagens, mesma figura=' + (sc().props[1] && sc().props[1].img === p0.img) + ', nome "' + (sc().props[1] && sc().props[1].name) + '"');

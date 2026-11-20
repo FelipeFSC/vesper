@@ -124,7 +124,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // 10) Interface básica: ferramenta, criar com clique, Ctrl+D, Delete (a janela de configurar é testada em trig_ux.js)
     if (App.UI.mode !== 'edit') App.UI.setMode('edit');
     B.setTool('trigger'); await W(250);
-    log.push('opções: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | ') + ' · lista: ' + document.querySelectorAll('#tool-opts .trig-row').length);
+    log.push('opções: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | ') + ' · lista: ' + document.querySelectorAll('#tool-opts .trig-row').length);
     const rect = B.canvas.getBoundingClientRect();
     const scr = (x, y) => { const p = B.toScreen(x, y); return { clientX: rect.left + p.x, clientY: rect.top + p.y }; };
     const o = Object.assign({ bubbles: true, button: 0, buttons: 1, pointerId: 1 }, scr(8.5 * g, 2.5 * g));

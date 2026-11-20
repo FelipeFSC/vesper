@@ -77,7 +77,7 @@ window.addEventListener('load', () => setTimeout(async () => {
 
     // 6) menu da ferramenta: só a forma da área (a lista de gatilhos saiu a pedido do usuário)
     UI.refresh(); await W(200);
-    log.push(`menu da ferramenta: formas = ${[...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | ')} · lista de gatilhos = ${document.querySelectorAll('#tool-opts .trig-row').length}`);
+    log.push(`menu da ferramenta: formas = ${[...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | ')} · lista de gatilhos = ${document.querySelectorAll('#tool-opts .trig-row').length}`);
 
     // 7) barras recolhidas
     const w0 = B.w;

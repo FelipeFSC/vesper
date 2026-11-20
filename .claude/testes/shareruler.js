@@ -60,9 +60,9 @@ window.addEventListener('load', () => setTimeout(async () => {
 
     // 6) mestre com "Mostrar aos jogadores" desligado
     App.UI.refresh(); await W(50);
-    const cb = [...document.querySelectorAll('#tool-opts label.check')].find((l) => /Mostrar aos jogadores/.test(l.textContent));
-    log.push('opção na régua do mestre: ' + !!cb + ' · ligada = ' + (cb && cb.querySelector('input').checked));
-    cb.querySelector('input').click(); await W(30);
+    const cb = [...document.querySelectorAll('#tool-opts .to-row')].find((l) => /Mostrar aos jogadores/.test(l.textContent));
+    log.push('opção na régua do mestre: ' + !!cb + ' · ligada = ' + (cb && cb.classList.contains('on')));
+    cb.click(); await W(30);
     sent.length = 0;
     ev('pointerdown', x0, y0); ev('pointermove', x0 + 2 * g, y0); await W(150); ev('pointerup', x0 + 2 * g, y0);
     log.push('desligada: mensagens = ' + sent.length + ' · B.rulerShare = ' + B.rulerShare);

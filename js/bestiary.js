@@ -224,6 +224,7 @@
     return s;
   }
   B.clean = clean;
+  B.plain = (list) => plain(list);
   const text = (t) => units(clean(t));
   // Entradas do 5etools → DOM (texto, listas, tabelas, blocos com nome)
   function renderEntries(list, depth = 0) {
@@ -357,11 +358,151 @@
     return L.join('\n');
   };
 
-  // ---------- Criatura → ficha (sem conversão de regras) ----------
+  // ---------- Criatura → bloco da ficha 5e (Plano 53): nada do livro se perde ----------
+  const FT = 0.3;
+  // Na ficha 5e tudo fica em metros (Plano 40); cada tela mostra na unidade de quem vê
+  const br = (t) => (App.Units && App.Units.toBR ? App.Units.toBR(t) : String(t == null ? '' : t));
+  const ftM = (ft) => Math.round(Number(ft) * FT * 100) / 100;
+  const ABK = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+  const skillKey = (k) => String(k).toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+  const spellId = (body, ed) => { const p = String(body || '').split('|'); const nm = p[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); return nm + '-' + (p[1] ? p[1].toLowerCase() : ed === '2024' ? 'xphb' : 'phb'); };
+  // Vulnerabilidades, resistências e imunidades: as sem condição primeiro; cada uma com condição depois de ";"
+  function defText(arr, key) {
+    const plainL = [], cond = [];
+    for (const x of [].concat(arr || [])) {
+      if (typeof x === 'string') plainL.push(x);
+      else if (x.special) cond.push(clean(x.special));
+      else if (x[key]) { const inner = defText(x[key], key); if (x.note || x.cond || x.preNote) cond.push(((x.preNote ? x.preNote + ' ' : '') + inner + (x.note ? ' ' + x.note : '')).trim()); else plainL.push(inner); }
+    }
+    return [plainL.join(', ')].concat(cond).filter(Boolean).map(clean).join('; ');
+  }
+  // Uma entrada do bloco (traço, ação…) → item com nome, texto e, se houver, os números do ataque ou da salvaguarda
+  function npcItem(it, key, i, who) {
+    const raw = (it.entries || []).filter((x) => typeof x === 'string').join(' ');
+    let name = String(it.name || '');
+    const o = { id: key + i, name: '', text: br(plain(it.entries || [])), kind: 'text' };
+    const rc = /\{@recharge(?: (\d))?\}/.exec(name);
+    if (rc) { o.recharge = Number(rc[1] || 6); o.used = false; name = name.replace(rc[0], ''); }
+    name = clean(name).trim();
+    const uses = /\((\d+)\/(day|turn|rest|short rest|long rest|round)( each)?\)/i.exec(name);
+    if (uses) o.uses = { max: Number(uses[1]), cur: Number(uses[1]), per: uses[2].toLowerCase(), each: !!uses[3] };
+    const cost = /\(costs (\d+) actions?\)/i.exec(name);
+    if (cost) o.cost = Number(cost[1]);
+    o.name = name;
+    const hit = /\{@hit ([+-]?\d+)\}/.exec(raw);
+    const atk = /\{@atkr? ([^}]+)\}/.exec(raw);
+    const dmg = [];
+    const reD = /\{@damage ([^}]+)\}\)?\s*([a-z]+)\s+damage/gi;
+    let m;
+    // Dano com condição ("if the attack roll had Advantage", "or … if used with two hands") fica só no texto
+    while ((m = reD.exec(raw))) {
+      const before = raw.slice(Math.max(0, m.index - 12), m.index), after = raw.slice(reD.lastIndex).split(/[.;]|\bplus\b|\{@damage/i)[0];
+      const cond = /\bor\s+\d*\s*\(?$/i.test(before) || /\b(if|while|when|instead|against)\b/i.test(after);
+      dmg.push({ dice: m[1].replace(/\s+/g, ''), type: m[2].toLowerCase(), cond: cond || undefined });
+    }
+    if (!dmg.length) { const flat = /(?:\{@h\}|Hit: )\s*(\d+) ([a-z]+) damage/i.exec(raw); if (flat) dmg.push({ dice: flat[1], type: flat[2].toLowerCase() }); }
+    o.dmg = dmg;
+    const reach = /reach (\d+) ft/i.exec(raw), range = /range (\d+)(?:\/(\d+))? ft/i.exec(raw);
+    if (reach) o.reach = ftM(reach[1]);
+    if (range) o.range = { normal: ftM(range[1]), long: range[2] ? ftM(range[2]) : null };
+    const area = /(\d+)-foot[- ](cone|line|cube|sphere|radius|emanation|cylinder)/i.exec(raw);
+    if (area) o.area = { size: ftM(area[1]), shape: area[2].toLowerCase() };
+    const dc = /\{@dc (\d+)\}/.exec(raw);
+    const sv = /\{@actSave (\w+)\}/.exec(raw) || /(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw/i.exec(raw);
+    if (hit) { o.kind = 'attack'; o.hit = Number(hit[1]); o.atk = atk ? (/r/.test(atk[1]) && /m/.test(atk[1]) ? 'both' : /r/.test(atk[1]) ? 'ranged' : 'melee') : 'melee'; }
+    if (dc) { o.dc = Number(dc[1]); o.save = sv ? (ABK[sv[1].toLowerCase()] || sv[1].toLowerCase()) : 'dex'; o.onSave = /half as much|half damage|\{@actSaveSuccess\}\s*half/i.test(raw) ? 'half' : 'none'; }
+    // Salvaguarda de quem é atingido; não a da própria criatura ("the tarrasque must succeed on a DC 20 Constitution saving throw")
+    const dcSentence = (raw.split(/(?<=\.)\s+/).find((x) => /\{@dc /.test(x)) || '');
+    const selfSave = (who || []).some((w) => w && new RegExp('(?<!\\b(?:of|from|to|near|around|by)\\s)\\bthe ' + w.replace(/[^a-z ]/g, '') + ' must (succeed|make)', 'i').test(dcSentence));
+    const targetSaves = /\{@actSave /.test(raw) || !selfSave;
+    if (!hit && dc && sv && targetSaves && dmg.length) o.kind = 'save';
+    return o;
+  }
+  function npcSpells(sc, ed, i) {
+    const raw = (sc.headerEntries || []).filter((x) => typeof x === 'string').join(' ');
+    const dc = /\{@dc (\d+)\}/.exec(raw), hit = /\{@hit ([+-]?\d+)\}/.exec(raw);
+    const list = (arr) => [].concat(arr || []).map((x) => { const sp = /\{@spell ([^}]+)\}/.exec(typeof x === 'string' ? x : ''); return sp ? { name: clean('{@spell ' + sp[1] + '}') + (typeof x === 'string' ? clean(x.replace(sp[0], '')) : ''), ref: spellId(sp[1], ed) } : { name: clean(typeof x === 'string' ? x : x.entry || ''), ref: null }; });
+    const groups = [];
+    if (sc.will) groups.push({ label: 'À vontade', spells: list(sc.will) });
+    for (const [k, v] of Object.entries(sc.daily || {})) { const n = Number(k.replace('e', '')); groups.push({ label: n + '/dia' + (/e$/.test(k) ? ' cada' : ''), uses: { max: n, cur: n, each: /e$/.test(k) }, spells: list(v) }); }
+    for (const [k, v] of Object.entries(sc.spells || {})) groups.push({ label: k === '0' ? 'Truques' : k + 'º nível', level: Number(k), slots: v.slots ? { max: v.slots, cur: v.slots } : null, spells: list(v.spells) });
+    for (const [k, v] of Object.entries(sc.rest || {})) groups.push({ label: k.replace('e', '') + '/descanso' + (/e$/.test(k) ? ' cada' : ''), uses: { max: Number(k.replace('e', '')), cur: Number(k.replace('e', '')) }, spells: list(v) });
+    for (const [k, v] of Object.entries(sc.recharge || {})) groups.push({ label: 'Recarga ' + k, spells: list(v) });
+    return { id: 'sc' + i, name: clean(sc.name || 'Spellcasting'), place: sc.displayAs || 'trait', ability: sc.ability || '', dc: dc ? Number(dc[1]) : null, atk: hit ? Number(hit[1]) : null,
+      text: br(plain(sc.headerEntries || [])), footer: br(plain(sc.footerEntries || [])), groups };
+  }
+  B.toNpc = function (m) {
+    const ed = /^X/.test(String(m.source || '')) ? '2024' : '2014';
+    const sp = m.speed || {};
+    const speed = {};
+    for (const k of ['walk', 'fly', 'swim', 'climb', 'burrow']) if (sp[k] != null) speed[k] = ftM(typeof sp[k] === 'object' ? sp[k].number : sp[k]);
+    if (sp.canHover) speed.hover = true;
+    const saves = {}; for (const [k, v] of Object.entries(m.save || {})) saves[k] = Number(String(v).replace(/[^\d-]/g, '')) || 0;
+    const skills = {}; for (const [k, v] of Object.entries(m.skill || {})) if (k !== 'other' && App.Regras5e && App.Regras5e.SKILL[skillKey(k)]) skills[skillKey(k)] = Number(String(v).replace(/[^\d-]/g, '')) || 0;
+    const cr = m.cr == null ? '0' : typeof m.cr === 'object' ? String(m.cr.cr) : String(m.cr);
+    const lists = { traits: [].concat(m.trait || []), actions: [].concat(m.action || []), bonus: [].concat(m.bonus || []), reactions: [].concat(m.reaction || []), legendary: [].concat(m.legendary || []), mythic: [].concat(m.mythic || []), lair: [] };
+    const n = {
+      size: SIZE[[].concat(m.size || ['M'])[0]] || 'Medium', type: typeOf(m), align: alignOf(m),
+      ac: acNum(m.ac), acNote: clean(acText(m.ac)).replace(/^\d+\s*/, ''),
+      hp: m.hp && m.hp.average != null ? m.hp.average : 1, hpFormula: m.hp && m.hp.formula ? m.hp.formula : m.hp && m.hp.special ? clean(m.hp.special) : '',
+      speed, speedText: Object.values(sp).some((v) => v && typeof v === 'object' && v.condition) || sp.alternate ? br(speedText(m.speed)) : '',
+      saves, skills,
+      vuln: br(defText(m.vulnerable, 'vulnerable')), resist: br(defText(m.resist, 'resist')), immune: br(defText(m.immune, 'immune')), condImmune: condList(m.conditionImmune),
+      senses: br([].concat(m.senses || []).map((x) => clean(x).replace(/\.$/, '')).join(', ')).replace(/\.(?=,|$)/g, ''), passive: m.passive != null ? Number(m.passive) : null,
+      langs: [].concat(m.languages || []).map(clean).join(', '),
+      cr, crNote: typeof m.cr === 'object' ? clean(crText(m.cr)) : '', xp: null, pb: null, init: m._txt && m._txt.init != null ? Number(m._txt.init) : null,
+      legendaryCount: lists.legendary.length ? Number(m.legendaryActions || 3) : 0, legendaryUsed: 0,
+      legendaryText: br(plain(m.legendaryHeader || [])), mythicText: br(plain(m.mythicHeader || [])), lairText: '',
+      gear: [].concat(m.gear || []).map((g) => clean(typeof g === 'string' ? g : g.item + (g.quantity ? ' (' + g.quantity + ')' : '')).replace(/\|[^,()]*/g, '')).join(', '),
+      spellcasting: [].concat(m.spellcasting || []).map((sc, i) => npcSpells(sc, ed, i)), extra: [],
+    };
+    const nm = String(m.name || '').toLowerCase().replace(/\(.*?\)/g, '').trim(), words = nm.split(/\s+/);
+    const who = [nm, words[words.length - 1], words[0]];
+    for (const [k, arr] of Object.entries(lists)) n[k] = arr.map((it, i) => npcItem(it, k.slice(0, 2), i, who));
+    return n;
+  };
+  // Criatura → ficha de criatura 5e
+  function npcActor(m, e) {
+    const dv = [].concat(m.senses || []).map(String).join(' ').match(/darkvision (\d+)/i);
+    const R = App.Regras5e;
+    const a = {
+      kind: m.isNpc ? 'npc' : 'monster', name: m.name, img: null, color: B.colorOf(e || m), size: TOKEN[[].concat(m.size || ['M'])[0]] || 1, owner: '',
+      bars: [], stats: [], actions: [], testFormula: '1d20+@valor', initFormula: '1d20', notes: '',
+      darkvision: dv ? Math.round(Number(dv[1]) / 5) : 0, hpDice: m.hp && m.hp.formula ? m.hp.formula.replace(/\s+/g, '') : null,
+      imgStyle: 'token', source: '5etools', bestiaryId: (m.name + '|' + m.source).toLowerCase(), dados5e: JSON.parse(JSON.stringify(m)),
+    };
+    const d = R.blank(/^X/.test(String(m.source || '')) ? '2024' : '2014');
+    for (const k of SHORT) d.abil[k] = m[k] != null ? Number(m[k]) : 10;
+    d.npc = B.toNpc(m);
+    d.tamanho = d.npc.size;
+    a.dnd5e = d;
+    R.apply(a);
+    return a;
+  }
+  B.toNpcActor = npcActor;
+  // Fichas antigas do bestiário (genéricas, com a criatura em dados5e) → ficha de criatura 5e
+  // Fica: nome, imagem, dono, tipo, tamanho, cor, PV atual, dados de vida, notas e as ações feitas à mão
+  B.upgrade = function (a) {
+    if (!a || a.sistema || !a.dados5e || !App.Regras5e) return false;
+    const n = npcActor(a.dados5e, null);
+    const pv = (a.bars || []).find((b) => /^pv$/i.test(b.name));
+    n.dnd5e.npc.extra = (a.actions || []).map((x) => JSON.parse(JSON.stringify(x)));
+    for (const k of ['kind', 'name', 'img', 'owner', 'size', 'color', 'imgStyle', 'hpDice', 'rollHp', 'height', 'coverShow', 'mineId', 'bestiaryId']) if (a[k] !== undefined) n[k] = a[k];
+    if (a.notes && a.notes !== B.blockText(a.dados5e)) n.dnd5e.bio.notas = a.notes;
+    const keep = { id: a.id };
+    for (const k of Object.keys(a)) delete a[k];
+    Object.assign(a, n, keep);
+    App.Regras5e.apply(a);
+    if (pv) { const b = a.bars.find((x) => x.name === 'PV'); if (b) b.value = Math.max(0, Math.min(b.max, Number(pv.value) || 0)); }
+    return true;
+  };
+
+  // ---------- Criatura → ficha genérica (antes do Plano 53; ainda usada quando a ficha 5e não carregou) ----------
   const TYPE_COLOR = { aberration: '#7a4fa8', beast: '#6b8f4e', celestial: '#c9a44a', construct: '#7c8794', dragon: '#b04848', elemental: '#3f8f86', fey: '#5fae8a', fiend: '#8a3a3a', giant: '#9b6b3c', humanoid: '#5b7fbf', monstrosity: '#a0683b', ooze: '#6c9a3a', plant: '#4e7d3a', undead: '#6b6f80' };
   B.colorOf = (e) => TYPE_COLOR[String((e && (e.ty || typeText(e.type))) || '').split(/[ /(]/)[0]] || '#6b7280';
   const STAT = ['Força', 'Destreza', 'Constituição', 'Inteligência', 'Sabedoria', 'Carisma'];
   B.toActor = function (m, e) {
+    if (App.Regras5e) return npcActor(m, e);
     const dv = [].concat(m.senses || []).map(String).join(' ').match(/darkvision (\d+)/i);
     const hp = m.hp && m.hp.average != null ? m.hp.average : 1;
     const raw = JSON.parse(JSON.stringify(m));
@@ -401,6 +542,7 @@
     let a;
     if (mine) {
       a = U.clone(mine.actor);
+      B.upgrade(a); // Plano 53: as salvas antes viram ficha de criatura 5e
       if (mine.img) { const id = 'img_' + U.hash(mine.img); if (!S().assets[id]) { S().assets[id] = mine.img; App.Net.sendAsset(id, mine.img); } a.img = id; }
     } else {
       const m = await B.full(e);

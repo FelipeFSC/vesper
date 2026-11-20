@@ -191,8 +191,22 @@
   function posOf(t) {
     const sc = S().currentScene(), s = (t.size || 1) * sc.grid;
     if (B.drag && B.drag.id === t.id) return { x: B.drag.x + s / 2, y: B.drag.y + s / 2 };
+    // Plano 39: outra pessoa arrastando este token em tempo real: ele aparece andando (com a luz junto)
+    if (B.remote && B.remote.size) for (const r of B.remote.values()) {
+      if (r.kind === 'drag' && !r.done && r.tokenId === t.id && r.sceneId === sc.id) { const e = r.pts[r.pts.length - 1]; return { x: e.x, y: e.y }; }
+    }
     return { x: t.x + s / 2, y: t.y + s / 2 };
   }
+  // Plano 39: de onde o token ilumina e enxerga. No modo Desempenho, durante o arraste, a luz e a visão ficam
+  // onde o token estava e só mudam ao soltar; no modo Em tempo real acompanham o arraste
+  function lightPos(t) {
+    if (B.drag && B.drag.id === t.id && !(S().state && (S().state.rules || {}).liveRuler)) {
+      const sc = S().currentScene(), s = (t.size || 1) * sc.grid;
+      return { x: t.x + s / 2, y: t.y + s / 2 };
+    }
+    return posOf(t);
+  }
+  B.lightPos = lightPos;
   // ---------- movimento por um caminho ----------
   // Cada movimento novo (t.lastMove) ganha um início local; o token vai direto ao destino e o rastro fica trailSecs segundos
   B.moves = new Map();
@@ -276,6 +290,7 @@
   B.pathBlind = pathBlind;
   B.dragCenters = dragCenters;
   B.posOf = posOf;
+  B.visibleTokens = (sc) => visibleTokens(sc);
   B.movesActive = movesActive;
   // Olhos deste cliente quando a iluminação vale para ele (jogador, ou mestre na prévia); null = vê tudo
   function lightViewers(sc) {
@@ -293,7 +308,7 @@
     return Object.values(sc.tokens).filter((t) => {
       if (t.hidden && !gm) return false;
       const top = CB().flyOf(t) > 0 ? CB().topOf(t) : 0;
-      if (viewers && !ids.has(t.id) && !LT().pointVisible(sc, posOf(t), viewers, posOf, top)) return false;
+      if (viewers && !ids.has(t.id) && !LT().pointVisible(sc, posOf(t), viewers, lightPos, top)) return false;
       // Vulto escolhido pelo mestre: o jogador vê só a silhueta
       if (t.masked && !gm && !S().canControl(t)) { B.silhouettes.add(t.id); return true; }
       if (eyes && eyes.length && !S().canControl(t)) {
@@ -472,7 +487,7 @@
       const lsc = B.lightDrag ? Object.assign({}, sc, { lights: (sc.lights || []).map(lightNow) }) : sc;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf, explore: !gm && App.Explore ? App.Explore.maskCanvas(sc) : null });
+      LT().render(ctx, lsc, cam, B.w, B.h, { viewers, alpha: !gm ? 1 : 0.55, posOf: lightPos, explore: !gm && App.Explore ? App.Explore.maskCanvas(sc) : null });
       ctx.restore();
       if (LT().flickering(sc)) ensureAnim();
       if (asPlayer && !blind) drawWallHints(ctx, sc, viewers);
@@ -1170,7 +1185,7 @@
    * "Escolher no mapa" do painel do gatilho: o próximo clique escolhe uma porta, luz, token, imagem ou ponto.
    * kind: door|light|token|prop|point; cb(resultado)
    */
-  const PICK_MSG = { door: 'Clique na porta no mapa.', light: 'Clique no marcador da luz.', token: 'Clique no token.', prop: 'Clique na imagem (alavanca, baú…).', point: 'Clique no ponto de destino.',
+  const PICK_MSG = { door: 'Clique na porta no mapa.', light: 'Clique no marcador da luz.', token: 'Clique no token.', prop: 'Clique na imagem (alavanca, baú…).', point: 'Clique no ponto de destino.', portal: 'Clique no portal que vai ser ligado.',
     any: 'Clique numa luz, porta, token, som do mapa ou gatilho.', animable: 'Clique numa imagem, luz ou token.' };
   // onEnd roda no fim (escolheu ou cancelou): a janela do gatilho some durante a escolha e volta depois.
   // opts.multi = continua escolhendo (vários objetos seguidos) até Esc ou cancelPick; opts.exclude = id do próprio gatilho
@@ -1252,6 +1267,7 @@
     else if (P.kind === 'light') { const h = lightAt(sc, p); res = h ? h.o : null; }
     else if (P.kind === 'token') res = tokenAt(sc, p);
     else if (P.kind === 'prop') res = propAt(sc, p);
+    else if (P.kind === 'portal') res = (sc.triggers || []).slice().reverse().find((x) => x.portal && x.id !== P.exclude && (Math.hypot(p.x - TG().center(x).x, p.y - TG().center(x).y) <= 15 / B.cam.z || TG().inside(sc, x, p))) || null;
     else if (P.kind === 'point' && P.raw) res = { x: p.x, y: p.y };
     else if (P.kind === 'point') res = B.style.snap ? { x: Math.floor(p.x / sc.grid) * sc.grid + sc.grid / 2, y: Math.floor(p.y / sc.grid) * sc.grid + sc.grid / 2 } : { x: Math.round(p.x), y: Math.round(p.y) };
     else if (P.kind === 'any') { res = anyObjectAt(sc, p, P.exclude); if (!res && P.withProps) { const pr = propAt(sc, p); if (pr) res = { kind: 'prop', obj: pr }; } }
@@ -1863,7 +1879,7 @@
     x.save();
     x.beginPath();
     for (const v of viewers) {
-      const p = posOf(v), poly = LT().visibility(sc, p.x, p.y, diag, LT().eyeOf(v));
+      const p = lightPos(v), poly = LT().visibility(sc, p.x, p.y, diag, LT().eyeOf(v));
       x.moveTo(poly[0], poly[1]);
       for (let i = 2; i < poly.length; i += 2) x.lineTo(poly[i], poly[i + 1]);
       x.closePath();
@@ -1905,7 +1921,7 @@
     // Testa um ponto um pouco antes da porta, dos dois lados
     const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
     const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1, nx = -(w.y2 - w.y1) / len * 6, ny = (w.x2 - w.x1) / len * 6;
-    return LT().pointVisible(sc, { x: mx + nx, y: my + ny }, viewers, posOf) || LT().pointVisible(sc, { x: mx - nx, y: my - ny }, viewers, posOf);
+    return LT().pointVisible(sc, { x: mx + nx, y: my + ny }, viewers, lightPos) || LT().pointVisible(sc, { x: mx - nx, y: my - ny }, viewers, lightPos);
   }
   function doorAt(sc, p) {
     const r = 12 / B.cam.z, viewers = lightViewers(sc);
@@ -2030,8 +2046,9 @@
 
   function drawToken(ctx, sc, t, isTurn) {
     const g = sc.grid, s = (t.size || 1) * g, z = B.cam.z;
-    let x = t.x, y = t.y;
-    if (B.drag && B.drag.id === t.id) { x = B.drag.x; y = B.drag.y; }
+    // posição do arraste (meu ou, em tempo real, de outra pessoa)
+    const pc = posOf(t);
+    const x = pc.x - s / 2, y = pc.y - s / 2;
     const a = S().actorOf(t);
     const img = App.Images.get(t.img || (a && a.img));
     // Token pronto (Plano 26): a imagem já tem moldura; vai inteira, do tamanho do quadrado, sem disco nem aro
@@ -2133,7 +2150,7 @@
     }
 
     if (fly > 0) {
-      const lbl = '↑ ' + String(Math.round(fly * 10) / 10).replace('.', ',') + ' m';
+      const lbl = '↑ ' + App.Units.dist(fly);
       const fsz = U.clamp(g * 0.17, 10 / z, 18);
       ctx.font = '700 ' + fsz + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const tw = ctx.measureText(lbl).width, bx = cx + r * 0.75, by = cy - r * 0.95;
@@ -2231,7 +2248,7 @@
       }
     }
     const b = pts[pts.length - 1], dist = Math.round(cost.total * sc.cellDist * 10) / 10;
-    const label = `${String(cost.total).replace('.', ',')} quad. · ${String(dist).replace('.', ',')} ${sc.unit}`;
+    const label = `${String(cost.total).replace('.', ',')} quad. · ${App.Units.dist(dist)}`;
     ctx.font = '600 ' + 12.5 / z + 'px ' + SANS; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     const tw = ctx.measureText(label).width, lx = b.x + 14 / z, ly = b.y - 28 / z;
     roundRect(ctx, lx - 8 / z, ly - 6 / z, tw + 16 / z, 25 / z, 6 / z);
@@ -2705,7 +2722,7 @@
     const tr = B.markHover && (sc.triggers || []).find((t) => t.id === B.markHover);
     if (!tr || !tr.mark || !tr.mark.show || !tr.mark.label) return;
     const c = markSpot(tr), gm = S().gmView();
-    if (!gm && (fogCovers(sc, c) || (viewers && !LT().pointVisible(sc, c, viewers, posOf)))) return;
+    if (!gm && (fogCovers(sc, c) || (viewers && !LT().pointVisible(sc, c, viewers, lightPos)))) return;
     const z = B.cam.z, col = U.safeColor(tr.mark.color, PORTAL_C), label = String(tr.mark.label).slice(0, 40);
     ctx.save();
     ctx.font = '600 ' + 13 / z + 'px ' + SANS; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2767,6 +2784,21 @@
     if (key !== F.key) { F.key = key; Object.assign(B.cam, camOn(T.sc, T.t)); }
   }
 
+  // Plano 41: escolher o portal para ligar. Em outra cena a tela vai para lá e volta; Esc cancela
+  B.pickPortal = function (destId, exclude, cb, back) {
+    const st = S().state, here = S().currentScene();
+    if (!st.scenes[destId] || !here) return;
+    const far = destId !== here.id, camBack = { x: B.cam.x, y: B.cam.y, z: B.cam.z };
+    let chosen = null;
+    const end = () => {
+      if (far) { B.afterScene = Object.assign({ sceneId: here.id, cam: camBack }, back || {}); S().viewSceneId = here.id === st.activeSceneId ? null : here.id; S().emit('local'); }
+      if (chosen) cb(chosen);
+      if (!far && back && back.trigger) { B.selectedTrigger = back.trigger; if (App.UI) App.UI.refresh(); }
+      B.requestRender();
+    };
+    B.pick('portal', (o) => { chosen = o; }, end, { sceneId: destId, exclude });
+    if (far) { S().viewSceneId = destId; S().emit('local'); }
+  };
   B.pickInScene = function (destId, cb, back) {
     const st = S().state, here = S().currentScene();
     if (!st.scenes[destId] || !here) return;
@@ -3061,7 +3093,7 @@
         if (!gm) {
           const ck = clickableAt(sc, p), vw = lightViewers(sc);
           const mine = Object.values(sc.tokens).filter((t) => S().canControl(t));
-          if (ck && mine.length && (!vw || LT().pointVisible(sc, { x: ck.prop.x + ck.prop.w / 2, y: ck.prop.y + ck.prop.h / 2 }, vw, posOf))) {
+          if (ck && mine.length && (!vw || LT().pointVisible(sc, { x: ck.prop.x + ck.prop.w / 2, y: ck.prop.y + ck.prop.h / 2 }, vw, lightPos))) {
             const who = (B.selected && mine.find((t) => t.id === B.selected)) || mine[0];
             S().dispatch({ type: 'trigger.click', sceneId: sc.id, id: ck.tr.id, tokenId: who.id });
             break;

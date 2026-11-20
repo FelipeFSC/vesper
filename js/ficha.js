@@ -74,7 +74,8 @@
   let pending = 0;
   function later() { if (!pending) pending = setTimeout(() => { pending = 0; render(); }, 0); }
 
-  function newActor(kind) {
+  function newActor(kind, sistema) {
+    if (!sistema) { askSystem(kind); return null; }
     const a = {
       id: U.uid('ac_'), kind, img: null, color: U.randColor(), size: 1, owner: '',
       name: kind === 'pc' ? 'Novo personagem' : kind === 'npc' ? 'Novo NPC' : 'Nova criatura',
@@ -82,13 +83,28 @@
       stats: DEFAULT_ATTRS.map((n) => ({ name: n, value: U.slug(n) === 'defesa' ? 10 : 0 })), actions: [],
       testFormula: '1d20+@valor', initFormula: '1d20', notes: '',
     };
+    if (sistema === '5e') { a.dnd5e = App.Regras5e.blank(); if (kind !== 'pc') a.dnd5e.npc = App.Regras5e.blankNpc(); App.Regras5e.apply(a); }
     F.actors[a.id] = a;
     select(a.id);
     save();
-    setTimeout(() => { const n = $('.fp-name'); if (n) { n.focus(); n.select(); } }, 0);
+    setTimeout(() => { const n = $('.fp-name, .f5-name'); if (n) { n.focus(); n.select(); } }, 0);
     return a;
   }
   F.newActor = newActor;
+  // Plano 51: a ficha nova pode ser genérica (qualquer sistema) ou de D&D 5e
+  function askSystem(kind) {
+    const back = h('div', { class: 'modal-back' });
+    const close = () => back.remove();
+    const pickIt = (s) => { close(); newActor(kind, s); };
+    back.append(h('div', { class: 'modal', style: { width: 'min(520px, calc(100vw - 32px))' } },
+      h('div', { class: 'win-head' }, ic('scroll-text'), h('span', { class: 'win-title' }, 'Nova ficha: ' + KIND[kind]), iconBtn('x', 'Fechar', close)),
+      h('div', { class: 'win-body' }, h('div', { class: 'f5-kind' },
+        h('button', { 'data-sys': 'generic', onclick: () => pickIt('generic') }, ic('list-ordered'), h('b', {}, 'Genérica'), h('small', {}, 'Atributos, barras e ações livres. Serve para qualquer sistema.')),
+        h('button', { 'data-sys': '5e', onclick: () => pickIt('5e') }, ic('shield'), h('b', {}, 'D&D 5e'), h('small', {}, 'Ficha completa: atributos, perícias, ataques, magias, inventário, ligada aos cadastros. Você preenche.')),
+        h('button', { 'data-sys': '5e-assist', onclick: () => { close(); App.Assist5e.open({ onDone: (res) => { const a = newActor(kind, '5e'); edit((x) => { x.dnd5e = res.d; if (res.name) x.name = res.name; App.Regras5e.apply(x); }); void a; } }); } }, ic('wand'), h('b', {}, 'D&D 5e passo a passo'), h('small', {}, 'O assistente pergunta classe, espécie, antecedente, atributos e escolhas, e monta a ficha.'))))));
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+    document.body.append(back);
+  }
 
   function select(id) {
     F.sel = id; F.act = null; F.sideOpen = false;
@@ -188,6 +204,12 @@
         h('span', { class: 'fp-roll-detail', html: U.esc(p.formula) + ' → ' + cleanDetail(p.detail) }))))));
   }
 
+  function sub5e(a) {
+    const d = a.dnd5e || {};
+    const c = d.npc ? 'ND ' + (d.npc.cr || '0') : (d.classes || []).filter((x) => x.name).map((x) => x.name + ' ' + x.level).join(' / ');
+    const pv = (a.bars || []).find((b) => b.name === 'PV');
+    return ['5e', c || 'sem classe', pv ? 'PV ' + pv.max : ''].filter(Boolean).join(' · ');
+  }
   // ---------- Lista "Minhas fichas" ----------
   function renderSide() {
     const side = $('#fp-side');
@@ -214,7 +236,7 @@
         body.append(h('button', { class: 'actor-item fp-item' + (a.id === F.sel ? ' on' : ''), onclick: () => select(a.id) },
           avatar(a, 34),
           h('div', { class: 'grow' }, h('div', { class: 'name' }, a.name),
-            h('div', { class: 'sub' }, (a.bars || []).slice(0, 2).map((b) => `${b.name} ${b.max}`).join(' · ') || KIND[a.kind]))));
+            h('div', { class: 'sub' }, a.sistema === '5e' ? sub5e(a) : (a.bars || []).slice(0, 2).map((b) => `${b.name} ${b.max}`).join(' · ') || KIND[a.kind]))));
       }
     }
     side.append(body);
@@ -244,6 +266,15 @@
           btnI('skull', 'Nova criatura', { onclick: () => newActor('monster') }),
           btnI('book-open', 'A partir do bestiário', { onclick: fromBestiary, 'data-bst': '1' }),
           btnI('folder-open', 'Importar ficha', { onclick: importFile }))));
+      return;
+    }
+    if (a.sistema === '5e' && App.Ficha5e) {
+      main.append(App.Ficha5e.render(a, {
+        wide: true, edit, rerender: render,
+        roll: (label, f) => roll(label, f, a),
+        avatar: (size) => { const av = avatar(a, size); av.title = 'Clique para escolher a imagem'; av.onclick = pickImage; return av; },
+        config: () => h('div', {}, identity(a), footer(a)),
+      }));
       return;
     }
     main.append(datalist('fp-attrs', attrNames(a)), datalist('fp-bars', barNames(a)));
@@ -548,6 +579,8 @@
     a.kind = KIND[a.kind] ? a.kind : 'pc';
     for (const k of ['bars', 'stats', 'actions']) if (!Array.isArray(a[k])) a[k] = [];
     a.name = String(a.name || 'Ficha importada');
+    if (!a.sistema && a.dados5e && App.Bestiary && App.Bestiary.upgrade) App.Bestiary.upgrade(a);
+    if (a.sistema === '5e' && App.Regras5e) App.Regras5e.apply(a);
     F.actors[a.id] = a;
     select(a.id);
     saveNow();
@@ -586,6 +619,8 @@
     try { saved = await Promise.race([idbGet('fichas'), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]); }
     catch { U.toast('Não consegui acessar o salvamento do navegador. Use Exportar para guardar a ficha.', 'error', 7000); }
     if (saved) { F.actors = saved.actors || {}; F.assets = saved.assets || {}; }
+    // Plano 53: fichas antigas do bestiário viram ficha de criatura 5e
+    if (App.Bestiary && App.Bestiary.upgrade) for (const a of Object.values(F.actors)) { try { App.Bestiary.upgrade(a); } catch (e) { console.error(e); } }
     let sel = null;
     try { sel = localStorage.getItem(SEL_KEY); } catch { /* */ }
     F.sel = sel && F.actors[sel] ? sel : null;

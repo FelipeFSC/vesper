@@ -8,13 +8,13 @@ window.addEventListener('load', () => setTimeout(async () => {
     const S = App.Store, B = App.Board, N = App.Net, sc = () => S.currentScene(), g = sc().grid, sid = sc().id;
     if (App.UI.mode !== 'edit') App.UI.setMode('edit');
     B.setTool('note'); await W(200);
-    log.push('opções: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
+    log.push('opções: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
     const rect = () => B.canvas.getBoundingClientRect();
     const scr = (x, y) => { const p = B.toScreen(x, y), r = rect(); return { clientX: r.left + p.x, clientY: r.top + p.y }; };
     const ptr = (type, x, y, extra = {}) => (type === 'pointerdown' ? B.canvas : window).dispatchEvent(new PointerEvent(type, Object.assign({ bubbles: true, button: 0, buttons: 1, pointerId: 1 }, scr(x, y), extra)));
     const click = (x, y) => { ptr('pointerdown', x, y); ptr('pointerup', x, y); };
     // 1) criar com a ferramenta
-    [...document.querySelectorAll('#tool-opts .seg button')].find((b) => /Tesouro/.test(b.textContent)).click(); await W(100);
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Tesouro/.test(b.textContent)).click(); await W(100);
     click(5.3 * g, 4.6 * g); await W(300);
     const n1 = sc().notes[0];
     const win = () => document.querySelector('.win.note-win');
@@ -42,9 +42,10 @@ window.addEventListener('load', () => setTimeout(async () => {
     App.UI.closeWindow('note:' + sc().notes[0].id);
     // 4) lista com busca
     B.setTool('note'); await W(200);
-    const search = document.querySelector('#tool-opts input[type=search]');
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Notas desta cena/.test(b.textContent)).click(); await W(50);
+    const search = document.querySelector('#tool-sub input[type=search]');
     search.value = 'cripta'; search.dispatchEvent(new Event('input'));
-    log.push(`busca "cripta": ${[...document.querySelectorAll('#tool-opts .note-item b')].map((b) => b.textContent).join(', ')} · total ${sc().notes.length}`);
+    log.push(`busca "cripta": ${[...document.querySelectorAll('#tool-sub .note-item b')].map((b) => b.textContent).join(', ')} · total ${sc().notes.length}`);
     // 5) duplicar, apagar, desfazer
     B.selectedNote = sc().notes[2].id;
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', ctrlKey: true, bubbles: true }));

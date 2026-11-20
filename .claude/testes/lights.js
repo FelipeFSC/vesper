@@ -77,7 +77,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // Interface: ferramenta, criar arrastando, painel
     if (App.UI.mode !== 'edit') App.UI.setMode('edit');
     B.setTool('light'); await W(200);
-    log.push('opções da ferramenta: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
+    log.push('opções da ferramenta: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
     const rect = B.canvas.getBoundingClientRect();
     const scr = (x, y) => { const p = B.toScreen(x, y); return { clientX: rect.left + p.x, clientY: rect.top + p.y }; };
     const n1 = sc().lights.length;
@@ -105,7 +105,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push(`Ctrl+D duplicou (${n2 - n1 - 1}), Delete apagou (${n2 - sc().lights.length})`);
     // Área: só ponto a ponto (sem o modo retângulo)
     B.lightShape = 'area'; App.UI.refresh(); await W(200);
-    log.push('opções com Área: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
+    log.push('opções com Área: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
     const na = sc().lights.length;
     const clk = (x, y) => { B.canvas.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ bubbles: true, button: 0, buttons: 1, pointerId: 1 }, scr(x, y)))); window.dispatchEvent(new PointerEvent('pointerup', Object.assign({ bubbles: true, button: 0, pointerId: 1 }, scr(x, y)))); };
     clk(1 * g, 6 * g); clk(4 * g, 6 * g); clk(4 * g, 9 * g); clk(2 * g, 9 * g);

@@ -71,7 +71,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('ficha: ' + g.name + ' · ' + g.kind + ' · PV ' + g.bars[0].max + ' · ' + g.stats.map((s) => s.name.slice(0, 3) + ' ' + s.value).join(', ') + ' · ações ' + g.actions.length + ' · dados5e ' + Object.keys(g.dados5e).length + ' campos · token baixado de ' + (fetched[0] || '').slice(-40));
     ok(g && g.img && S.assets[g.img] && /tokens\/XMM\/Goblin%20Warrior\.webp$/.test(fetched[0] || ''), 'token da web na ficha');
     ok(g.bars[0].max === 10 && g.stats.find((s) => s.name === 'Defesa').value === 15 && g.stats.find((s) => s.name === 'Destreza').value === 2, 'PV, Defesa e atributos');
-    ok(g.actions.length === 0 && g.dados5e && g.dados5e.name === 'Goblin Warrior' && /Melee Attack Roll/.test(g.notes), 'sem ações automáticas, com dados e notas');
+    // Plano 53: a ficha é a de criatura 5e, com as ações do livro prontas para a mesa
+    ok(g.sistema === '5e' && g.dnd5e.npc && g.actions.length > 0 && g.dados5e && g.dados5e.name === 'Goblin Warrior', 'ficha de criatura com as ações do livro e os dados');
     ok(await BS.addToCampaign('goblin warrior|xmm') === idG && Object.keys(S.state.actors).length === n0 + 1, 'não duplica');
 
     // Colocar no mapa: dragão vermelho adulto (2024)

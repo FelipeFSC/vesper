@@ -103,7 +103,16 @@
     trailSecs: 3,       // segundos que o caminho de um movimento fica no mapa para todos (0 = não mostra)
     liveRuler: false,   // régua e arraste dos outros: true = em tempo real | false = desempenho (só ao soltar)
     exploreMode: 'group', // memória de exploração: 'group' (o que um viu, todos lembram) | 'player' (cada um a sua)
+    units: null,        // Plano 40: unidade da mesa { dist, weight, speed, liquid: 'metric' | 'imperial' } (null = métrico)
   };
+  // Plano 40: a unidade é da mesa; a cena guarda só quanto vale o quadrado, em metros. Devolve o fator da unidade antiga
+  function sceneToMeters(sc) {
+    if (sc.unit === 'm') return 1;
+    const k = App.Units.legacyFactor(sc.unit);
+    if (k) sc.cellDist = Math.round((Number(sc.cellDist) || 0) * k * 1000) / 1000;
+    sc.unit = 'm';
+    return k;
+  }
 
   // Som: biblioteca (categoria por nome de arquivo), o que toca em cada canal e volumes. Só o mestre altera.
   function newAudio() {
@@ -133,9 +142,11 @@
     const base = newCampaign();
     st = Object.assign({ name: base.name, gm: null, scenes: {}, sceneOrder: [], actors: {}, chat: [],
       combat: base.combat, players: {}, conditions: base.conditions }, st);
+    let feet = 0;
     for (const id of Object.keys(st.scenes)) {
       const sc = Object.assign(newScene(), st.scenes[id]);
       sc.id = id;
+      if (sceneToMeters(sc) === 0.3) feet++;
       sc.fog = Object.assign({ enabled: false, shapes: [], v: 0 }, sc.fog);
       sc.walls = Array.isArray(sc.walls) ? sc.walls : [];
       sc.wallsV = sc.wallsV || 0;
@@ -184,13 +195,18 @@
       for (const ac of a.actions) upgradeAction(ac, a);
       // Plano 26: fichas do bestiário (token do 5etools) desenham o token pronto
       if (a.source === '5etools' && a.imgStyle === undefined) a.imgStyle = 'token';
+      // Plano 53: ficha do bestiário ainda genérica (com a criatura em dados5e) → ficha de criatura 5e, sem perder nada
+      if (!a.sistema && a.dados5e && App.Bestiary && App.Bestiary.upgrade) { try { App.Bestiary.upgrade(a); } catch (e) { console.error('Conversão de ' + a.name, e); } }
     }
     // Campanhas antigas: a lista nasce dos nomes que as fichas já usam
     if (!Array.isArray(st.attrs)) { const used = uniqNames(Object.values(st.actors).flatMap((a) => a.stats.map((x) => x.name))); st.attrs = used.length ? uniqNames(DEFAULT_ATTRS.filter((n) => used.some((u) => U.slug(u) === U.slug(n))).concat(used)) : DEFAULT_ATTRS.slice(); }
     if (!Array.isArray(st.barNames)) { const used = uniqNames(Object.values(st.actors).flatMap((a) => a.bars.map((x) => x.name))); st.barNames = used.length ? used : DEFAULT_BARS.slice(); }
     st.combat = Object.assign({ active: false, round: 0, turn: 0, entries: [] }, st.combat);
     pruneCombat(st);
+    const hadUnits = !!(st.rules && st.rules.units);
     st.rules = Object.assign({}, DEFAULT_RULES, st.rules);
+    // Plano 40: mesa antiga com as cenas em pés começa com a distância em pés
+    st.rules.units = Object.assign({}, App.Units.DEFAULT, hadUnits ? st.rules.units : (feet ? { dist: 'imperial' } : {}));
     st.audio = Object.assign(newAudio(), st.audio);
     st.audio.vol = Object.assign(newAudio().vol, st.audio.vol);
     st.audio.lib = st.audio.lib || {};
@@ -317,6 +333,7 @@
     },
 
     'scene.add': (s, a) => {
+      sceneToMeters(a.scene);
       s.scenes[a.scene.id] = a.scene;
       s.sceneOrder.push(a.scene.id);
       if (!s.activeSceneId) s.activeSceneId = a.scene.id;
@@ -487,7 +504,13 @@
     // Gatilhos (só o mestre)
     'trigger.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.triggers = sc.triggers || []; if (a.trigger && a.trigger.id) { for (const x of a.trigger.actions || []) upgradeTrigAction(x); sc.triggers.push(a.trigger); } },
     'trigger.update': (s, a) => { const x = (sceneOf(s, a.sceneId).triggers || []).find((y) => y.id === a.id); if (!x || !a.patch) return false; for (const y of a.patch.actions || []) upgradeTrigAction(y); Object.assign(x, a.patch); },
-    'trigger.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.triggers = (sc.triggers || []).filter((y) => y.id !== a.id); },
+    'trigger.delete': (s, a) => {
+      const sc = sceneOf(s, a.sceneId); sc.triggers = (sc.triggers || []).filter((y) => y.id !== a.id);
+      // Plano 41: os portais ligados a ele ficam sem ligação
+      for (const o of Object.values(s.scenes)) for (const tr of o.triggers || []) for (const x of tr.actions || []) {
+        if (x.type === 'teleport' && x.portalId === a.id && (x.sceneId || o.id) === a.sceneId) Object.assign(x, { portalId: null, sceneId: null, x: null, y: null, area: null });
+      }
+    },
     // Animação (Plano 21): começa (gravando antes o que parou) e termina (gravando o resultado)
     'anim.start': (s, a) => {
       const sc = sceneOf(s, a.sceneId);
@@ -827,8 +850,7 @@
         const ch = { sceneId: sc.id, tokenId: t.id, bar: bi, delta: after - before };
         if (ch.delta !== 0) { applied.push(ch); this.commit(Object.assign({ type: 'bar.change' }, ch)); }
       };
-      const rollDamage = (crit) => {
-        const f = act.damage || '0';
+      const rollOne = (f, crit) => {
         if (crit && rules.critMode === 'dice') {
           const r = D.roll(D.doubleDice(D.substitute(f, vars)));
           r.formula = f + ' (crítico: dados dobrados)';
@@ -837,6 +859,34 @@
         const r = D.roll(f, vars);
         if (crit && rules.critMode === 'double') { r.total *= 2; r.formula = f + ' ×2 (crítico)'; }
         return r;
+      };
+      // Plano 53: dano com tipo (act.parts = [{ f, type }]) rola cada parte; sem partes, a fórmula inteira (act.dmgType opcional)
+      const rollDamage = (crit) => {
+        const parts = Array.isArray(act.parts) && act.parts.length ? act.parts : null;
+        if (!parts) { const r = rollOne(act.damage || '0', crit); r.parts = [{ type: String(act.dmgType || '').toLowerCase(), total: r.total }]; return r; }
+        const rs = parts.map((p) => Object.assign(rollOne(p.f || '0', crit), { type: String(p.type || '').toLowerCase() }));
+        return { total: rs.reduce((t, r) => t + r.total, 0), formula: rs.map((r) => r.formula + (r.type ? ' ' + r.type : '')).join(' + '), detail: rs.map((r) => r.detail).join(' + '), nat: [], parts: rs.map((r) => ({ type: r.type, total: r.total })) };
+      };
+      // Imunidade, resistência e vulnerabilidade do alvo (ficha 5e), por tipo de dano; half = passou na salvaguarda
+      const TYPE_PT = { acid: 'ácido', bludgeoning: 'concussão', cold: 'frio', fire: 'fogo', force: 'energia', lightning: 'elétrico', necrotic: 'necrótico', piercing: 'perfurante', poison: 'veneno', psychic: 'psíquico', radiant: 'radiante', slashing: 'cortante', thunder: 'trovejante' };
+      const typed = (t, d, half) => {
+        const ta = this.actorOf(t);
+        const def = App.Regras5e && ta ? App.Regras5e.defensesOf(ta) : null;
+        const base = half ? Math.floor(d.total / 2) : d.total;
+        if (!def) return { amount: base, note: '' };
+        const notes = [];
+        let changed = false, sum = 0;
+        for (const p of d.parts || []) {
+          let v = half ? p.total / 2 : p.total;
+          const nm = TYPE_PT[p.type] || p.type;
+          if (p.type && def.immune.has(p.type)) { v = 0; notes.push(nm + ': imune'); changed = true; }
+          else {
+            if (p.type && def.resist.has(p.type)) { v = v / 2; notes.push(nm + ': resistência'); changed = true; }
+            if (p.type && def.vuln.has(p.type)) { v = v * 2; notes.push(nm + ': vulnerável'); changed = true; }
+          }
+          sum += v;
+        }
+        return { amount: changed ? Math.floor(sum) : base, note: notes.join(', ') };
       };
 
       try {
@@ -865,16 +915,20 @@
             const hit = cov.level === 'total' ? false : fumble ? false : crit && rules.critHits ? true : def == null ? true : atk.total >= def;
             const row = { tokenId: t.id, name: t.name, masked: !!t.masked, atk: pick(atk), def, noDef: def == null, hit, crit: crit && hit, fumble };
             if (cov.level !== 'none') row.cover = { level: cov.level, label: cov.label, bonus: cov.bonus };
-            if (hit && act.damage) { const d = rollDamage(row.crit); row.dmg = pick(d); applyTo(t, row, -Math.max(0, d.total)); }
+            if (hit && (act.damage || (act.parts || []).length)) { const d = rollDamage(row.crit); row.dmg = pick(d); const ty = typed(t, d, false); if (ty.note) row.dmgNote = ty.note; applyTo(t, row, -Math.max(0, ty.amount)); }
             msg.targets.push(row);
           }
         } else if (mode === 'save') {
           const dc = D.roll(String(act.dc || '10'), vars).total;
           msg.dc = dc; msg.saveStat = act.save || '';
-          const d = act.damage ? rollDamage(false) : null;
+          const d = act.damage || (act.parts || []).length ? rollDamage(false) : null;
           if (d) msg.dmg = pick(d);
           for (const t of targets) {
-            const ta = this.actorOf(t), sv = this.statOf(t, act.save) || 0;
+            const ta = this.actorOf(t);
+            let sv = this.statOf(t, act.save) || 0;
+            // Plano 51: alvo com ficha 5e rola a salvaguarda dele (com proficiência)
+            const sv5 = App.Regras5e && ta ? App.Regras5e.saveFor(ta, act.save) : null;
+            if (sv5 != null) sv = sv5;
             const f = ((ta && ta.testFormula) || '1d20+@valor').replace(/@valor/gi, '(' + sv + ')');
             const r = D.roll(f, ta ? this.vars(ta, t) : {});
             // Cobertura vista do ponto da área (ou do lançador): bônus no teste de resistência
@@ -884,17 +938,19 @@
             const row = { tokenId: t.id, name: t.name, masked: !!t.masked, save: pick(r), success: ok };
             if (cov.level !== 'none') row.cover = { level: cov.level, label: cov.label, bonus: cov.bonus };
             if (d) {
-              const amt = cov.level === 'total' ? 0 : ok ? (act.onSave === 'none' ? 0 : Math.floor(d.total / 2)) : d.total;
+              let amt = 0;
+              if (cov.level !== 'total' && !(ok && act.onSave === 'none')) { const ty = typed(t, d, ok); amt = ty.amount; if (ty.note) row.dmgNote = ty.note; }
               applyTo(t, row, -Math.max(0, amt));
             }
             msg.targets.push(row);
           }
         } else if (mode === 'damage' || mode === 'heal') {
-          const r = D.roll(act.damage || '0', vars);
+          const r = mode === 'heal' ? D.roll(act.damage || '0', vars) : rollDamage(false);
           msg.dmg = pick(r);
           for (const t of targets) {
             const row = { tokenId: t.id, name: t.name, masked: !!t.masked };
-            applyTo(t, row, (mode === 'heal' ? 1 : -1) * Math.max(0, r.total));
+            if (mode === 'heal') applyTo(t, row, Math.max(0, r.total));
+            else { const ty = typed(t, r, false); if (ty.note) row.dmgNote = ty.note; applyTo(t, row, -Math.max(0, ty.amount)); }
             msg.targets.push(row);
           }
         } else {

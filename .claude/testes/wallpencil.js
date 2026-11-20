@@ -9,8 +9,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.dispatch({ type: 'wall.clear', sceneId: sc().id });
     if (App.UI.mode !== 'edit') App.UI.setMode('edit');
     B.setTool('wall'); await W(200);
-    const pencilBtn = [...document.querySelectorAll('#tool-opts .seg button')].find((b) => /Lápis/.test(b.textContent));
-    log.push('opções da Parede: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
+    const pencilBtn = [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Lápis/.test(b.textContent));
+    log.push('opções da Parede: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
     pencilBtn.click(); await W(100);
     const rect = B.canvas.getBoundingClientRect();
     const scr = (x, y) => { const p = B.toScreen(x, y); return { clientX: rect.left + p.x, clientY: rect.top + p.y }; };
@@ -48,7 +48,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push(`borracha num trecho do arco: ${n0} → ${sc().walls.length} paredes (apagou ${n0 - sc().walls.length}, o arco tinha ${w1.length})`);
     // modo reta continua igual
     B.setTool('wall'); await W(100);
-    [...document.querySelectorAll('#tool-opts .seg button')].find((b) => /Reta/.test(b.textContent)).click(); await W(50);
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Reta/.test(b.textContent)).click(); await W(50);
     const n1 = sc().walls.length;
     draw([[1 * g, 9 * g], [3 * g, 9 * g], [5 * g, 9 * g]]); await W(50);
     const nw = sc().walls[sc().walls.length - 1];
@@ -56,7 +56,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // foto: caverna a lápis
     if (location.hash === '#shot') {
       S.dispatch({ type: 'wall.clear', sceneId: sc().id });
-      [...document.querySelectorAll('#tool-opts .seg button')].find((b) => /Lápis/.test(b.textContent)).click(); await W(50);
+      [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /Lápis/.test(b.textContent)).click(); await W(50);
       const cave = [];
       for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2 * 0.98, r = 3.2 + 0.7 * Math.sin(a * 3) + 0.3 * Math.sin(a * 7); cave.push([8 * g + Math.cos(a) * r * g * 1.6, 5 * g + Math.sin(a) * r * g]); }
       draw(cave); await W(100);

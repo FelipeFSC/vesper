@@ -428,6 +428,7 @@
     $('#lb-offline').onclick = () => showStories(false);
     $('#st-back').onclick = hideStories;
     $('#lb-sheet').onclick = () => { location.href = 'ficha.html'; };
+    $('#lb-cad').onclick = () => { location.href = 'cadastros.html'; };
     $('#lb-join').onclick = startPlayer;
     $('#lb-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
     $('#mn-bg-pick').onclick = pickBg;

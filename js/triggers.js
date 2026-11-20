@@ -10,7 +10,8 @@
  *  times: once|always|n, n, used, cooldown (s), lastAt, ask, stop, enabled, actions: [{id, type, delay, …}]}
  *
  * Portal (Plano 31): um gatilho com portal: true e uma ação só, teleport {sceneId, x, y, portalId}.
- * portalId = o portal do outro lado (ida e volta): a chegada é um quadrado livre sorteado dentro da área dele.
+ * portalId = o portal ligado (Plano 41): a chegada é um quadrado livre sorteado dentro da área dele. Ida e volta = os dois
+ * apontam um para o outro; só ida = só este aponta. Sem ligação o portal não leva a lugar nenhum.
  * Sem portalId: act.area {shape, x, y, r, pts} (área desenhada, Plano 35) ou só o ponto x, y.
  * Marcador para os jogadores (Plano 35): tr.mark = {show, style: area|line, line [[x,y],[x,y]], icon, img, color, label}.
  */
@@ -339,72 +340,42 @@
     if (a.x != null && Number.isFinite(Number(a.x))) return { scene: dest, x: Number(a.x), y: Number(a.y), linked: false };
     return { scene: dest, x: (dest.cols * dest.grid) / 2, y: (dest.rows * dest.grid) / 2, linked: false, center: true };
   };
-  // Ida e volta: cria o portal de volta no destino (1 quadrado), ligado a este
-  T.linkPortal = function (sceneId, trId) {
-    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
-    const d = tr && T.portalDest(sc, tr);
-    if (!d || d.linked) return null;
-    const c = T.center(tr), g = d.scene.grid;
-    const px = Math.floor(d.x / g) * g + g / 2, py = Math.floor(d.y / g) * g + g / 2;
-    // A volta é a área de chegada desenhada (ou 1 quadrado no ponto); o marcador vem com o ícone par
-    const geo = d.area ? T.areaOf(d.area) : { shape: 'circle', x: px, y: py, r: 0.5 };
-    const mk = tr.mark && tr.mark.show ? T.newMark(Object.assign({}, tr.mark, { icon: T.MARK_PAIR[tr.mark.icon] || tr.mark.icon, line: null, style: tr.mark.style === 'line' ? 'area' : tr.mark.style, label: '' })) : undefined;
-    const back = T.newPortal(d.scene, Object.assign({ name: 'Volta de ' + (tr.name || 'Portal'), fx: tr.fx !== false }, geo, mk ? { mark: mk } : {}));
-    Object.assign(back.actions[0], { sceneId: d.scene.id === sc.id ? null : sc.id, x: Math.round(c.x), y: Math.round(c.y), portalId: tr.id });
-    S().dispatch({ type: 'trigger.add', sceneId: d.scene.id, trigger: back });
-    const bc = T.center(back);
-    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { portalId: back.id, x: Math.round(bc.x), y: Math.round(bc.y), area: null }) : a));
-    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
-    return back;
-  };
-  // Tira a volta: apaga o portal do outro lado e este passa a levar ao ponto onde ele estava
-  T.unlinkPortal = function (sceneId, trId) {
-    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+  // =============== Plano 41: ligar dois portais ===============
+  const findTr = (sceneId, trId) => { const sc = S().state.scenes[sceneId]; return sc && (sc.triggers || []).find((x) => x.id === trId); };
+  // aponta o portal (sceneId, trId) para o portal (toScene, toId); null = sem ligação
+  function point(sceneId, trId, toScene, toId) {
+    const tr = findTr(sceneId, trId);
     if (!tr) return;
-    const p = T.portalPartner(sc, tr), c = p ? T.center(p.tr) : null;
-    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { portalId: null }, c ? { x: Math.round(c.x), y: Math.round(c.y), area: T.areaOf(p.tr) } : {}) : a));
+    const o = toId ? findTr(toScene, toId) : null, c = o ? T.center(o) : null;
+    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { sceneId: o && toScene !== sceneId ? toScene : null, portalId: o ? o.id : null,
+      x: c ? Math.round(c.x) : null, y: c ? Math.round(c.y) : null, area: null }) : a));
     S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
-    if (p) S().dispatch({ type: 'trigger.delete', sceneId: p.scene.id, id: p.tr.id });
+  }
+  // o outro portal também aponta para este?
+  T.portalTwoWay = function (sc, tr) {
+    const p = T.portalPartner(sc, tr), b = p && T.portalAct(p.tr);
+    return !!(b && b.portalId === tr.id && (b.sceneId || p.scene.id) === sc.id);
   };
-  // Muda o destino (patch: {sceneId} ou {x, y}). Com volta: move o portal de volta (ou recria na cena nova)
-  T.setPortalDest = function (sceneId, trId, patch) {
-    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
-    if (!tr) return;
-    const p = T.portalPartner(sc, tr);
-    if ('sceneId' in patch) {
-      const had = !!p;
-      if (p) T.unlinkPortal(sceneId, trId);
-      const t2 = (S().state.scenes[sceneId].triggers || []).find((x) => x.id === trId);
-      const acts = U.clone(t2.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { sceneId: patch.sceneId || null, x: null, y: null, portalId: null, area: null }) : a));
-      S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
-      // Outra cena: já vem com ida e volta (o mestre pode tirar); no mesmo mapa, mantém o que estava
-      if (patch.sceneId && patch.sceneId !== sceneId ? true : had) T.linkPortal(sceneId, trId);
-      return;
-    }
-    if (p && patch.x != null) {
-      const g = p.scene.grid, c = T.center(p.tr), px = Math.floor(patch.x / g) * g + g / 2, py = Math.floor(patch.y / g) * g + g / 2, dx = px - c.x, dy = py - c.y;
-      S().dispatch({ type: 'trigger.update', sceneId: p.scene.id, id: p.tr.id, patch: Object.assign({ x: p.tr.x + dx, y: p.tr.y + dy }, p.tr.pts ? { pts: p.tr.pts.map(([x, y]) => [x + dx, y + dy]) } : {}) });
-      const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { x: px, y: py }) : a));
-      S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
-      return;
-    }
-    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, patch) : a));
-    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+  // liga A → B (e B → A se twoWay)
+  T.connectPortals = function (sceneA, idA, sceneB, idB, twoWay) {
+    if (sceneA === sceneB && idA === idB) return false;
+    point(sceneA, idA, sceneB, idB);
+    if (twoWay) point(sceneB, idB, sceneA, idA);
+    return true;
   };
-
-  // Desenhou a área de chegada (Plano 35): com volta, a volta passa a ter essa forma; sem volta, fica guardada no portal
-  T.setPortalArea = function (sceneId, trId, part) {
-    const st = S().state, sc = st.scenes[sceneId], tr = sc && (sc.triggers || []).find((x) => x.id === trId);
+  // desfaz a ligação deste portal (e a volta, se o outro apontava para ele)
+  T.disconnectPortal = function (sceneId, trId) {
+    const sc = S().state.scenes[sceneId], tr = findTr(sceneId, trId);
     if (!tr) return;
-    const geo = T.areaOf(part), c = T.center(geo), p = T.portalPartner(sc, tr);
-    if (p) {
-      S().dispatch({ type: 'trigger.update', sceneId: p.scene.id, id: p.tr.id, patch: Object.assign({ pts: null, r: 0.5 }, geo, { x: Math.round(c.x), y: Math.round(c.y) }) });
-      const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { x: Math.round(c.x), y: Math.round(c.y) }) : a));
-      S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
-      return;
-    }
-    const acts = U.clone(tr.actions).map((a) => (a.type === 'teleport' ? Object.assign(a, { area: geo, x: Math.round(c.x), y: Math.round(c.y) }) : a));
-    S().dispatch({ type: 'trigger.update', sceneId, id: trId, patch: { actions: acts } });
+    const p = T.portalPartner(sc, tr), two = T.portalTwoWay(sc, tr);
+    point(sceneId, trId, null, null);
+    if (p && two) point(p.scene.id, p.tr.id, null, null);
+  };
+  // Ida e volta ligada ou não: o outro portal aponta para este, ou fica sem ligação (só recebe quem chega)
+  T.setTwoWay = function (sceneId, trId, on) {
+    const sc = S().state.scenes[sceneId], tr = findTr(sceneId, trId), p = tr && T.portalPartner(sc, tr);
+    if (!p) return;
+    point(p.scene.id, p.tr.id, on ? sceneId : null, on ? trId : null);
   };
   // Quantos quadrados cabem na área de chegada (para o painel)
   T.areaCells = function (dest, area) {
@@ -679,7 +650,8 @@
   function teleport(sc, t, act, tr, taken) {
     if (!t) return;
     const st = S().state, d = T.portalDest(sc, null, act);
-    if (!d) return;
+    // Plano 41: portal ainda sem ligação não leva a lugar nenhum
+    if (!d || (d.center && tr && tr.portal)) return;
     const dest = d.scene;
     const pos = d.area ? freeSpotIn(dest, t, d.area, taken || new Set(), dest === sc ? t.id : null) : freeSpot(dest, t, d.x, d.y, taken || new Set(), dest === sc ? t.id : null);
     // warp: cada tela mostra o brilho na saída e na chegada; a câmera de quem controla vai junto

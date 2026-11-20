@@ -12,7 +12,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // Página vazia
     ok($('.fp-empty'), 'estado vazio'); ok(!$('#app') && !$('canvas'), 'sem mesa nem tabuleiro');
     log.push('vazio: ' + $('.fp-empty b').textContent);
-    [...$$('.fp-empty .btn')].find((b) => /personagem/i.test(b.textContent)).click(); await W(30);
+    [...$$('.fp-empty .btn')].find((b) => /personagem/i.test(b.textContent)).click(); await W(30); $('[data-sys="generic"]').click(); await W(30);
     let a = Object.values(F.actors)[0];
     ok(a && a.kind === 'pc' && a.bars.length === 2 && a.stats.length === 7, 'ficha nova com padrões');
     log.push('nova: ' + a.name + ' · barras ' + a.bars.map((b) => b.name).join('/') + ' · atributos ' + a.stats.length + ' · foco no nome ' + (document.activeElement === $('.fp-name')));
@@ -173,8 +173,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     $$('.fp-bst-item').find((x) => /^Wolf$/.test(x.querySelector('.name').textContent) && /\(XMM\)/.test(x.textContent)).click();
     for (let i = 0; i < 40 && Object.keys(F.actors).length === nBefore; i++) await W(50);
     const wolf = F.actors[F.sel];
-    ok(wolf && wolf.bestiaryId === 'wolf|xmm' && wolf.actions.length === 0 && wolf.bars[0].max === 11 && wolf.img && F.assets[wolf.img] && wolf.dados5e && !$('.fp-bst-modal'), 'ficha a partir do lobo');
-    log.push('ficha do lobo: ' + wolf.name + ' · ' + wolf.stats.map((s) => s.name.slice(0, 3) + ' ' + s.value).join(', ') + ' · token ' + !!wolf.img + ' · notas ' + wolf.notes.split('\n')[1]);
+    ok(wolf && wolf.bestiaryId === 'wolf|xmm' && wolf.sistema === '5e' && wolf.actions.some((x) => x.name === 'Bite') && wolf.bars[0].max === 11 && wolf.img && F.assets[wolf.img] && wolf.dados5e && !$('.fp-bst-modal'), 'ficha a partir do lobo');
+    log.push('ficha do lobo: ' + wolf.name + ' · ' + wolf.stats.map((s) => s.name.slice(0, 3) + ' ' + s.value).join(', ') + ' · token ' + !!wolf.img + ' · ' + wolf.dnd5e.npc.size + ' ' + wolf.dnd5e.npc.type);
     // Gravação do bestiário no navegador (ligação à mão e Meu bestiário)
     await App.Bestiary.link('wolf|xmm', 'lobo.png');
     await App.Bestiary.saveMine(wolf, null);

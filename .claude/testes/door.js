@@ -70,8 +70,8 @@ window.addEventListener('load', () => setTimeout(async () => {
 
     // 5) ferramenta Porta com "Trancada"
     B.setTool('door'); await W(150);
-    log.push('opções da Porta: ' + [...document.querySelectorAll('#tool-opts .seg button')].map((b) => b.textContent).join(' | '));
-    [...document.querySelectorAll('#tool-opts .seg button')].find((b) => /^Trancada/.test(b.textContent)).click(); await W(50);
+    log.push('opções da Porta: ' + [...document.querySelectorAll('#tool-opts .to-row')].map((b) => b.textContent).join(' | '));
+    [...document.querySelectorAll('#tool-opts .to-row')].find((b) => /^Trancada/.test(b.textContent)).click(); await W(50);
     drag([[12 * g, 2 * g], [13 * g, 2 * g], [14 * g, 2 * g]]); await W(50);
     const nd = sc().walls[sc().walls.length - 1];
     log.push(`porta nova com "Trancada": porta = ${!!nd.door} · trancada = ${!!nd.locked}`);
