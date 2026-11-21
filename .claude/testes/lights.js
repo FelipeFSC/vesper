@@ -114,7 +114,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push(`área por cliques: ${sc().lights.length - na} nova · ${ar.shape} com ${ar.pts.length} cantos · dentro ${NV[L.levelOf(sc(), src(ar.id), P(2.5, 7.5))]}`);
     B.lightShape = 'circle';
     // exportar cena leva as luzes
-    const bundle = App.Storage.sceneBundle(sc().id);
+    const bundle = await App.Storage.sceneBundle(sc().id);
     log.push('exportar cena leva as luzes: ' + (bundle.scene.lights || []).length);
     log.push('tremular: ' + L.flickering(sc()) + ' → ' + (S.dispatch({ type: 'lightpt.update', sceneId: sc().id, id: c.id, patch: { flicker: true } }), L.flickering(sc())));
     B.setTool('select');

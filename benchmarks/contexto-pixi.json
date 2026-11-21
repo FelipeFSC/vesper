@@ -1,0 +1,23 @@
+{
+  "browser": "157.0.8103.79",
+  "results": [
+    {
+      "name": "pequeno",
+      "dpr": 1,
+      "run": 1,
+      "backend": "pixi",
+      "setup": 689,
+      "renderP95": 0.8000000007450581,
+      "frameP95": 7.099999999999909,
+      "heap": 21084680,
+      "context": {
+        "supported": true,
+        "lost": true,
+        "restored": true,
+        "rendered": true
+      },
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 (0x00002F04) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "maxTexture": 16384
+    }
+  ]
+}

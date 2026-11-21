@@ -34,3 +34,9 @@ imagens/bestiario/**
 
 # Bestiário importado do 5etools (Plano 25): dados dos livros do usuário, gerados localmente
 data/5etools/
+
+# Build e dependências do frontend
+node_modules/
+dist/
+.npm-cache/
+benchmarks/*.local.json

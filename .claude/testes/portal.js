@@ -144,7 +144,7 @@ window.addEventListener('load', () => setTimeout(async () => {
 
     // 10) exportar a principal leva a sub-cena; importar recria as duas, com o portal apontando para a cópia
     TG.setTwoWay(sid, p2.id, true);
-    const bundle = App.Storage.sceneBundle(sid);
+    const bundle = await App.Storage.sceneBundle(sid);
     log.push('exportar a principal: sub-cenas no arquivo = ' + (bundle.subs || []).length);
     const before = new Set(S.state.sceneOrder);
     await App.UI.importParsed(await App.Storage.parse(JSON.stringify(bundle))); // mesmo caminho do botão Importar

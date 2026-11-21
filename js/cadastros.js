@@ -1,4 +1,7 @@
 'use strict';
+import { mount, unmount } from 'svelte';
+import { writable } from 'svelte/store';
+import CatalogList from '../src/ui/CatalogList.svelte';
 /*
  * Página de cadastros (cadastros.html, Planos 42 e 43). Nome provisório no menu: "test".
  * Cada aba do topo é um cadastro: Ataques, Itens (as armas são itens da categoria Weapon), Magias, Talentos, Antecedentes, Espécies, Opções de classe, Classes e Subclasses.
@@ -38,7 +41,10 @@
   const btnI = (icon, label, attrs = {}) => h('button', Object.assign({ class: 'btn' }, attrs), ic(icon), label);
   const Units = App.Units;
   const UI_KEY = 'vesper-cadastros-ui';
-  const LIST_STEP = 300;
+  const listState = writable();
+  const profile = new URLSearchParams(location.search).has('perf');
+  let listComponent, listTab, listId = null;
+  const listScroll = new Map();
 
   // ---------- Vocabulário (em inglês, como o 5etools) ----------
   const ABIL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
@@ -85,7 +91,7 @@
   const rarClass = (r) => 'rar-' + String(r || '').toLowerCase().replace(/\s+/g, '-');
 
   // ---------- Estado ----------
-  const C = { defaults: {}, sources: {}, local: {}, tab: 'attacks', sel: {}, filters: {}, q: {}, limit: {}, famBase: {}, optView: {}, optOpen: {}, featOpen: {}, descEdit: false, loaded: false };
+  const C = { defaults: {}, sources: {}, local: {}, tab: 'attacks', sel: {}, filters: {}, q: {}, famBase: {}, optView: {}, optOpen: {}, featOpen: {}, descEdit: false, loaded: false };
   App.Cadastros = C;
 
   // ---------- IndexedDB (mesmo banco da página "Criar ficha") ----------
@@ -601,7 +607,7 @@
     const base = filtered(Object.assign({}, fl, { cat: '' }));
     const count = {};
     for (const r of base) for (const t of r.types || []) count[t] = (count[t] || 0) + 1;
-    const pick = (c) => { fl.cat = c; C.limit.options = 0; saveUi(); renderSide(); };
+    const pick = (c) => { fl.cat = c; saveUi(); renderSide(); };
     const types = Object.keys(C.optTypes || {}).filter((t) => count[t] || fl.cat === t).sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)));
     return h('div', { class: 'cd-cats', role: 'group', 'aria-label': 'Tipos' },
       h('button', { class: 'cd-cat' + (!fl.cat ? ' on' : ''), 'data-cat': '', onclick: () => pick('') }, 'Todos', h('span', {}, String(base.length))),
@@ -683,7 +689,7 @@
     }
     return h('label', { class: 'cd-filter' }, label, h('select', {
       value: f[key] || '', 'data-filter': key,
-      onchange: (e) => { f[key] = e.target.value; C.limit[C.tab] = 0; saveUi(); renderSide(); },
+      onchange: (e) => { f[key] = e.target.value; saveUi(); renderSide(); },
     }, Object.entries(opts).map(([v, l]) => h('option', { value: v }, l))));
   }
   // Categorias dos itens: botões com a contagem (respeitando a pesquisa e os outros filtros)
@@ -692,7 +698,7 @@
     const base = filtered(Object.assign({}, f, { cat: '' }));
     const count = {};
     for (const r of base) for (const c of r.categories || [r.category]) count[c] = (count[c] || 0) + 1;
-    const pick = (c) => { f.cat = c; if (c !== 'Weapon') delete f.prop; if (c !== 'Armor') delete f.armor; C.limit.items = 0; saveUi(); renderSide(); };
+    const pick = (c) => { f.cat = c; if (c !== 'Weapon') delete f.prop; if (c !== 'Armor') delete f.armor; saveUi(); renderSide(); };
     return h('div', { class: 'cd-cats', role: 'group', 'aria-label': 'Categorias' },
       h('button', { class: 'cd-cat' + (!f.cat ? ' on' : ''), 'data-cat': '', onclick: () => pick('') }, 'Todos', h('span', {}, String(base.length))),
       CATS.filter((c) => count[c] || f.cat === c).map((c) => h('button', { class: 'cd-cat' + (f.cat === c ? ' on' : ''), 'data-cat': c, onclick: () => pick(f.cat === c ? '' : c) },
@@ -704,7 +710,7 @@
     const base = filtered(Object.assign({}, f, { level: '' }));
     const count = {};
     for (const r of base) count[r.level] = (count[r.level] || 0) + 1;
-    const pick = (l) => { f.level = l; C.limit.spells = 0; saveUi(); renderSide(); };
+    const pick = (l) => { f.level = l; saveUi(); renderSide(); };
     return h('div', { class: 'cd-cats', role: 'group', 'aria-label': 'Níveis' },
       h('button', { class: 'cd-cat' + (f.level === '' || f.level == null ? ' on' : ''), 'data-cat': '', onclick: () => pick('') }, 'Todos', h('span', {}, String(base.length))),
       LEVEL_PT.map((l, i) => h('button', { class: 'cd-cat' + (String(f.level) === String(i) ? ' on' : ''), 'data-level': String(i), onclick: () => pick(String(f.level) === String(i) ? '' : String(i)) },
@@ -716,7 +722,7 @@
     const base = filtered(Object.assign({}, fl, { cat: '' }));
     const count = {};
     for (const r of base) count[r.category] = (count[r.category] || 0) + 1;
-    const pick = (c) => { fl.cat = c; C.limit.feats = 0; saveUi(); renderSide(); };
+    const pick = (c) => { fl.cat = c; saveUi(); renderSide(); };
     return h('div', { class: 'cd-cats', role: 'group', 'aria-label': 'Categorias' },
       h('button', { class: 'cd-cat' + (!fl.cat ? ' on' : ''), 'data-cat': '', onclick: () => pick('') }, 'Todos', h('span', {}, String(base.length))),
       FEAT_CATS.filter((c) => count[c] || fl.cat === c).map((c) => h('button', { class: 'cd-cat' + (fl.cat === c ? ' on' : ''), 'data-cat': c, onclick: () => pick(fl.cat === c ? '' : c) }, c, h('span', {}, String(count[c] || 0)))));
@@ -727,7 +733,7 @@
     const base = filtered(Object.assign({}, fl, { cat: '' }));
     const count = {};
     for (const r of base) count[r.className] = (count[r.className] || 0) + 1;
-    const pick = (c) => { fl.cat = c; C.limit.subclasses = 0; saveUi(); renderSide(); };
+    const pick = (c) => { fl.cat = c; saveUi(); renderSide(); };
     return h('div', { class: 'cd-cats', role: 'group', 'aria-label': 'Classes' },
       h('button', { class: 'cd-cat' + (!fl.cat ? ' on' : ''), 'data-cat': '', onclick: () => pick('') }, 'Todas', h('span', {}, String(base.length))),
       Object.keys(count).sort().map((c) => h('button', { class: 'cd-cat' + (fl.cat === c ? ' on' : ''), 'data-cat': c, onclick: () => pick(fl.cat === c ? '' : c) }, c, h('span', {}, String(count[c])))));
@@ -735,19 +741,33 @@
   const chipBar = () => (C.tab === 'items' ? [catBar()] : C.tab === 'spells' ? [levelBar()] : C.tab === 'feats' ? [featCatBar()] : C.tab === 'options' ? [optTypeBar()] : C.tab === 'subclasses' ? [subClassBar()] : []);
   function renderSide() {
     const t = T(), side = $('#cd-side');
+    const tab = C.tab;
     const f = (C.filters[C.tab] = C.filters[C.tab] || {});
     const search = h('input', {
       type: 'search', class: 'cd-search', placeholder: C.tab === 'items' ? 'Pesquisar (nome, categoria, propriedade, base…)' : C.tab === 'spells' ? 'Pesquisar (nome, escola, classe, dano…)' : C.tab === 'feats' ? 'Pesquisar (nome, pré-requisito, benefício…)' : C.tab === 'backgrounds' ? 'Pesquisar (nome, talento, perícia…)' : C.tab === 'species' ? 'Pesquisar (nome, traço, sub-raça…)' : C.tab === 'options' ? 'Pesquisar (nome, tipo, classe, pré-requisito…)' : C.tab === 'classes' ? 'Pesquisar (nome, característica…)' : C.tab === 'subclasses' ? 'Pesquisar (nome, classe, característica, magia…)' : 'Pesquisar (nome, tipo de dano, espécie…)', value: C.q[C.tab] || '', 'data-f': 'search',
-      oninput: U.debounce((e) => { C.q[C.tab] = e.target.value; C.limit[C.tab] = 0; saveUi(); { const cb = $('.cd-cats'), nb = chipBar()[0]; if (cb && nb) cb.replaceWith(nb); } renderList(); }, 150),
+      oninput: U.debounce((e) => {
+        C.q[tab] = e.target.value;
+        saveUi();
+        if (tab !== C.tab) return;
+        const cb = $('.cd-cats'), nb = chipBar()[0];
+        if (cb && nb) cb.replaceWith(nb);
+        renderList();
+      }, 150),
     });
+    const old = $('#cd-list');
+    if (old && listComponent) {
+      listScroll.set(listTab, old.scrollTop);
+      void unmount(listComponent);
+      listComponent = null;
+    }
     side.replaceChildren(
       h('div', { class: 'cd-search-row' }, ic('search'), search),
       ...chipBar(),
       h('div', { class: 'cd-filters' }, t.filters(f).map(([k, l, o]) => filterSelect(k, l, o))),
       h('div', { class: 'cd-list-head' },
         h('span', { class: 'cd-found', id: 'cd-found' }),
-        h('button', { class: 'btn small ghost', id: 'cd-clear', title: 'Limpar a pesquisa e os filtros', onclick: () => { C.filters[C.tab] = {}; C.q[C.tab] = ''; C.limit[C.tab] = 0; saveUi(); renderSide(); } }, ic('x'), 'Limpar')),
-      h('div', { class: 'cd-list', id: 'cd-list', role: 'listbox' }),
+        h('button', { class: 'btn small ghost', id: 'cd-clear', title: 'Limpar a pesquisa e os filtros', onclick: () => { C.filters[C.tab] = {}; C.q[C.tab] = ''; saveUi(); renderSide(); } }, ic('x'), 'Limpar')),
+      h('div', { class: 'cd-list', id: 'cd-list', role: 'listbox', tabindex: 0, 'aria-label': 'Resultados', 'aria-describedby': 'cd-found' }),
       h('div', { class: 'cd-side-foot' },
         btnI('plus', t.novo, { class: 'btn primary block', id: 'cd-new', onclick: () => create() }),
         h('div', { class: 'cd-foot-row' },
@@ -758,46 +778,45 @@
     renderList();
   }
   function renderList() {
-    const list = filtered();
     const box = $('#cd-list'), t = T();
     if (!box) return;
-    const fl = C.filters[C.tab] || {};
-    $('#cd-clear').hidden = !(Object.values(fl).some(Boolean) || C.q[C.tab]);
+    const start = profile ? performance.now() : 0;
+    const list = filtered();
+    if (profile) performance.measure('cadastros.filtro', { start, end: performance.now() });
+    const tab = C.tab, selected = C.sel[tab] || null, fl = C.filters[tab] || {};
+    $('#cd-clear').hidden = !(Object.values(fl).some(Boolean) || C.q[tab]);
     $('#cd-found').textContent = list.length.toLocaleString('pt-BR') + (list.length === 1 ? ' encontrado' : ' encontrados');
-    if (!(C.defaults[C.tab] || []).length && !list.length) {
-      box.replaceChildren(h('div', { class: 'empty-state' }, h('div', { class: 'bubble' }, ic('library')), h('b', {}, 'Sem os padrões'),
-        h('p', {}, 'Na pasta do Vésper, rode: node tools/importar-cadastros.mjs'), h('p', {}, 'Ou use "' + t.novo + '".')));
-      return;
+    const rows = list.map((r) => {
+      const badges = [];
+      if (r.kind === 'family' || r.kind === 'group') badges.push({ label: KINDS[r.kind] });
+      if (r._virtual) badges.push({ label: r._virtual === 'spell' ? 'da magia' : 'da arma' });
+      if (tab === 'spells' && r.duration?.concentration) badges.push({ label: 'C', title: 'Concentration' });
+      if (tab === 'spells' && r.ritual) badges.push({ label: 'R', title: 'Ritual' });
+      if (r.edition) badges.push({ label: r.edition, className: r.edition === '2024' ? 'blue' : '' });
+      if (r._custom && !r._virtual) badges.push({ label: 'meu', className: 'gold' });
+      else if (r._edited) badges.push({ label: 'editado', className: 'gold' });
+      return {
+        id: r.id, name: r.name, title: r.name + ' · ' + srcName(r.source),
+        source: r.source === 'custom' ? '' : r.source, rarity: r.magic ? rarClass(r.rarity) : '',
+        badges, summary: () => t.summary(r),
+      };
+    });
+    const reveal = listTab !== tab || listId !== selected;
+    listId = selected;
+    listState.set({ rows, selected, reveal, newLabel: t.novo,
+      empty: !list.length && !(C.defaults[tab] || []).length ? 'no-defaults' : '' });
+    if (!listComponent) {
+      listTab = tab;
+      const initialOffset = listScroll.get(tab) || 0;
+      listComponent = mount(CatalogList, { target: box, props: { state: listState, viewport: box, onselect: select, initialOffset } });
     }
-    if (!list.length) { box.replaceChildren(h('p', { class: 'empty' }, 'Nada encontrado com essa pesquisa.')); return; }
-    const lim = Math.max(LIST_STEP, C.limit[C.tab] || 0);
-    const frag = document.createDocumentFragment();
-    for (const r of list.slice(0, lim)) {
-      frag.append(h('button', {
-        class: 'cd-item' + (r.id === C.sel[C.tab] ? ' on' : ''), role: 'option', 'data-id': r.id, title: r.name + ' · ' + srcName(r.source),
-        onclick: () => select(r.id),
-      },
-      h('span', { class: 'cd-item-top' }, h('b', { class: r.magic ? rarClass(r.rarity) : '' }, r.name),
-        r.kind === 'family' || r.kind === 'group' ? h('span', { class: 'badge' }, KINDS[r.kind]) : null,
-        r._virtual ? h('span', { class: 'badge' }, r._virtual === 'spell' ? 'da magia' : 'da arma') : null,
-        C.tab === 'spells' && (r.duration || {}).concentration ? h('span', { class: 'badge', title: 'Concentration' }, 'C') : null,
-        C.tab === 'spells' && r.ritual ? h('span', { class: 'badge', title: 'Ritual' }, 'R') : null,
-        r.edition ? h('span', { class: 'badge' + (r.edition === '2024' ? ' blue' : '') }, r.edition) : null,
-        r._custom && !r._virtual ? h('span', { class: 'badge gold' }, 'meu') : r._edited ? h('span', { class: 'badge gold' }, 'editado') : null,
-        h('span', { class: 'cd-src' }, r.source === 'custom' ? '' : r.source)),
-      h('span', { class: 'cd-item-sub' }, t.summary(r))));
-    }
-    if (list.length > lim) frag.append(h('button', { class: 'btn small block cd-more', onclick: () => { C.limit[C.tab] = lim + LIST_STEP; renderList(); } }, 'Mostrar mais ' + Math.min(LIST_STEP, list.length - lim) + ' (de ' + (list.length - lim) + ')'));
-    box.replaceChildren(frag);
-    const on = box.querySelector('.cd-item.on');
-    if (on && on.scrollIntoViewIfNeeded) on.scrollIntoViewIfNeeded(false);
   }
 
-  // ---------- Ações ----------
   function select(id, tab) {
     if (tab && tab !== C.tab) { C.tab = tab; C.sel[tab] = id; saveUi(); render(true); return; }
     C.sel[C.tab] = id; C.descEdit = false; saveUi();
-    for (const el of document.querySelectorAll('.cd-item')) el.classList.toggle('on', el.dataset.id === id);
+    listId = id;
+    listState.update((value) => ({ ...value, selected: id, reveal: false }));
     renderMain();
     $('#cd-main').scrollTop = 0;
   }
@@ -2235,7 +2254,9 @@
         delete C.sel.weapons; delete C.filters.weapons; delete C.q.weapons;
       }
     } catch { /* */ }
+    const start = profile ? performance.now() : 0;
     const [atk, itm, spl, fet, bkg, spc, opt, cls, sub] = await Promise.all([loadDefaults('attacks', 'attacks'), loadDefaults('items', 'items'), loadDefaults('spells', 'spells'), loadDefaults('feats', 'feats'), loadDefaults('backgrounds', 'backgrounds'), loadDefaults('species', 'species'), loadDefaults('options', 'options'), loadDefaults('classes', 'classes'), loadDefaults('subclasses', 'subclasses')]);
+    if (profile) performance.measure('cadastros.leitura', { start, end: performance.now() });
     C.defaults.options = opt; C.defaults.classes = cls; C.defaults.subclasses = sub;
     C.defaults.attacks = atk; C.defaults.items = itm; C.defaults.spells = spl; C.defaults.feats = fet; C.defaults.backgrounds = bkg; C.defaults.species = spc;
     // O que já estava salvo entra por baixo do que a pessoa mudou enquanto o banco abria

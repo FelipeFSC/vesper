@@ -88,6 +88,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     await click('[data-act="finish"]'); await W(500);
     const a = Object.values(F.actors).find((x) => x.sistema === '5e');
     ok(a && a.dnd5e.abil.str === 18 && a.dnd5e.abil.con >= 24 && a.dnd5e.criacao.metodo === 'manual', 'ficha criada com os valores digitados: ' + JSON.stringify(a && a.dnd5e.abil));
+    log.push('atributos confirmados na ficha');
   } catch (e) { (window.__err = window.__err || []).push('EXC ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
   flush();
 }, 300));

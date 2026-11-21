@@ -1,4 +1,11 @@
 'use strict';
+import { referencedAssets, setAsset } from '../src/services/image-assets.ts';
+import { flushSync, mount, unmount } from 'svelte';
+import { writable } from 'svelte/store';
+import BoardResolution from '../src/ui/BoardResolution.svelte';
+import ChatLog from '../src/ui/ChatLog.svelte';
+import WindowChrome from '../src/ui/WindowChrome.svelte';
+import { mergePanelChange } from '../src/domain/ui-changes.ts';
 /* Interface: barra superior, laterais (fichas/cenas · propriedades/camadas), ferramentas do mapa,
  * dock inferior (chat, dados, combate, mesa), janelas de ficha, painel do token e modais. */
 (function (App) {
@@ -70,7 +77,7 @@
     App.Board.init($('#board'));
     App.Audio.init();
     App.Audio.on(() => { if (UI.tab === 'audio') renderAudio(true); });
-    S().on((kind) => UI.schedule(kind));
+    S().on((kind, action) => UI.schedule(kind, action));
     UI.schedule('reset');
     window.addEventListener('beforeunload', () => { if (S().gmView()) App.Storage.save(); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => App.Board.requestRender());
@@ -197,13 +204,47 @@
   }
 
   // rAF + setTimeout de reserva: o navegador pausa rAF em abas de segundo plano
-  let pendingRefresh = false;
-  UI.schedule = function () {
-    if (pendingRefresh) return;
-    pendingRefresh = true;
-    const run = () => { if (!pendingRefresh) return; pendingRefresh = false; UI.refresh(); };
-    requestAnimationFrame(run);
-    setTimeout(run, 150);
+  let pendingRefresh = null;
+  let refreshFrame, refreshTimer;
+  UI.schedule = function (kind = 'reset', action) {
+    const scheduled = !!pendingRefresh;
+    pendingRefresh ||= { chat: false, sheetIds: new Set(), full: false };
+    if (kind === 'asset' || kind === 'reset') {
+      UI.chatSig = '';
+      for (const selector of ['#party-col', '#init-strip', '#left-body', '#token-hud']) {
+        const panel = $(selector);
+        if (panel) panel._sig = null;
+      }
+    }
+    if (kind === 'actor.update' && action?.patch && Object.keys(action.patch).every((key) => key === 'bars')) kind = 'actor.bars';
+    let actorId = action?.id;
+    if (kind === 'bar.change') {
+      const token = S().state?.scenes[action?.sceneId]?.tokens[action?.tokenId];
+      actorId = action?.tokenId ? (token?.linked ? token.actorId : null) : action?.actorId;
+    }
+    mergePanelChange(pendingRefresh, kind, actorId);
+    if (scheduled) return;
+    const run = () => {
+      const change = pendingRefresh;
+      pendingRefresh = null;
+      cancelAnimationFrame(refreshFrame);
+      clearTimeout(refreshTimer);
+      if (!change) return;
+      if (change.full) { UI.refresh(); return; }
+      if (change.chat) {
+        renderDock();
+        renderChat();
+        renderFeed();
+        checkHandouts();
+      }
+      if (change.sheetIds.size && !S().gmView() && UI.leftTab === 'actors') renderActors();
+      for (const id of change.sheetIds) {
+        const w = UI.windows.get('actor:' + id);
+        if (w) renderWindow(w);
+      }
+    };
+    refreshFrame = requestAnimationFrame(run);
+    refreshTimer = setTimeout(run, 150);
   };
 
   UI.refresh = function () {
@@ -1146,6 +1187,7 @@
   }
 
   // =============== Chat ===============
+  const chatMessages = writable([]);
   function buildChatPanel() {
     const p = $('#p-chat');
     const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: 'Mensagem ou /r 1d20+@forca' });
@@ -1156,6 +1198,7 @@
     });
     const secretBtn = h('button', { class: 'btn', id: 'secret-btn', title: 'Rolagens secretas: só você e o mestre veem', onclick: () => setSecret(!UI.secret) }, ic('lock-open'));
     const log = h('div', { id: 'chat-log' });
+    mount(ChatLog, { target: log, props: { messages: chatMessages } });
     log.addEventListener('click', (e) => {
       const b = e.target.closest('[data-undo]');
       if (b) S().undoAction(b.dataset.undo);
@@ -1231,7 +1274,7 @@
     if (sig === UI.chatSig) return;
     UI.chatSig = sig;
     const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-    log.innerHTML = st.chat.filter(visibleMsg).slice(-200).map(msgHtml).join('');
+    flushSync(() => chatMessages.set(st.chat.filter(visibleMsg).slice(-200).map((m, i) => ({ key: m.id || 'legacy-' + i, html: msgHtml(m) }))));
     if (atBottom || (last && last.playerId === S().me.id)) log.scrollTop = log.scrollHeight;
   }
 
@@ -1250,9 +1293,9 @@
   function openHandout(m) {
     const gmPreview = S().gmView();
     UI.openWindow('handout:' + m.id, m.title || 'Do mestre', (w) => {
-      if (w._view) return w._view;
-      const box = h('div', { class: 'ho-win' });
       const src = m.img && App.Images.src(m.img);
+      if (w._view && w._src === src) return null;
+      const box = h('div', { class: 'ho-win' });
       if (gmPreview) box.append(h('p', { class: 'hint', style: { margin: 0 } }, 'Prévia: é assim que os jogadores veem.'));
       if (src) {
         const img = h('img', { src, alt: m.title || '', draggable: 'false' });
@@ -1281,6 +1324,7 @@
       if (m.text) box.append(h('div', { class: 'ho-text' }, String(m.text)));
       box.append(h('div', { class: 'muted small-text' }, 'Mostrado pelo mestre às ' + U.fmtTime(m.ts)));
       w._view = box;
+      w._src = src;
       return box;
     }, { w: m.img ? 560 : 420, icon: 'scroll-text' });
   }
@@ -1586,15 +1630,16 @@
       left: Math.max(8, Math.min(window.innerWidth - (opts.w || 440) - 8, 260 + n * 26)) + 'px',
       top: 70 + n * 26 + 'px', width: (opts.w || 440) + 'px',
     } });
-    const titleEl = h('span', { class: 'win-title' }, title);
-    const head = h('div', { class: 'win-head' }, opts.icon ? ic(opts.icon) : null, titleEl, iconBtn('x', 'Fechar', () => UI.closeWindow(id)));
-    const body = h('div', { class: 'win-body' });
-    el.append(head, body);
+    const chrome = flushSync(() => mount(WindowChrome, { target: el, props: {
+      title, icon: opts.icon ? App.Icons.svg(opts.icon) : '', closeIcon: App.Icons.svg('x'),
+      onclose: () => UI.closeWindow(id),
+    } }));
+    const head = el.querySelector('.win-head'), body = el.querySelector('.win-body'), titleEl = head.querySelector('.win-title');
     el.addEventListener('pointerdown', () => bringFront(el));
     $('#windows').append(el);
     fitWin(el);
     dragBy(head, el);
-    w = { id, el, body, titleEl, build };
+    w = { id, el, body, titleEl, build, chrome };
     UI.windows.set(id, w);
     renderWindow(w);
     bringFront(el);
@@ -1602,7 +1647,7 @@
   };
   UI.closeWindow = function (id) {
     const w = UI.windows.get(id);
-    if (w) { w.el.remove(); UI.windows.delete(id); }
+    if (w) { w.off?.(); App.Ficha5e?.release(w.body.firstElementChild); if (w.chrome) void unmount(w.chrome); w.el.remove(); UI.windows.delete(id); }
     if (id === 'anim-editor' && UI.animWin) { UI.animWin = null; if (App.Board) App.Board.requestRender(); }
     if (String(id).startsWith('trigger:')) { UI.trigHover = null; UI.trigEdit = null; if (App.Board) App.Board.requestRender(); }
     if (id === 'scan' && App.Board) { App.Board.scan = null; App.Board.requestRender(); }
@@ -1719,6 +1764,7 @@
       if (r === false) { UI.closeWindow(w.id); return; }
       if (r === null) return; // nada mudou: mantém o que está na tela
       const scroll = w.body.scrollTop;
+      App.Ficha5e?.release(w.body.firstElementChild);
       w.body.innerHTML = '';
       if (r) w.body.append(r);
       w.body.scrollTop = scroll;
@@ -3737,9 +3783,11 @@
     return box;
   }
 
+  let resolutionControl;
   function renderTable() {
     const p = $('#p-table');
     safeRender(p, () => {
+      if (resolutionControl) { void unmount(resolutionControl); resolutionControl = null; }
       p.innerHTML = '';
       const st = S().state, gm = S().gmView(), N = App.Net;
       if (!st) { p.append(h('p', { class: 'muted' }, 'Conectando à mesa…')); return; }
@@ -3768,6 +3816,9 @@
       if (!players.length) p.append(h('p', { class: 'empty' }, 'Nenhum jogador entrou ainda.'));
 
       p.append(unitsSection(gm));
+      const display = h('div', { style: { margin: '12px 0' } });
+      p.append(display);
+      resolutionControl = mount(BoardResolution, { target: display, props: { onresize: () => App.Board.resize() } });
 
       if (!gm) {
         p.append(h('p', { class: 'hint' }, 'Tudo é salvo pelo mestre. Para guardar sua ficha, abra-a e use Configurar → Exportar.'));
@@ -3851,7 +3902,7 @@
     state.gm = { id: S_.me.id, name: S_.me.name, color: S_.me.color };
     S_.viewSceneId = null;
     App.Board.selected = null;
-    S_.setState(state, assets);
+    S_.setState(state, { ...referencedAssets(state, S_.assets), ...assets }, true);
     App.Net.broadcastFull();
     App.Storage.save();
   }
@@ -3860,11 +3911,18 @@
     const ta = h('textarea', { rows: 8, readonly: true, value: 'Gerando…' });
     const info = h('p', { class: 'hint' });
     const withImg = h('input', { type: 'checkbox', checked: true });
+    let generation = 0, ready = false;
     const gen = async () => {
+      const current = ++generation;
+      ready = false;
       ta.value = 'Gerando…';
-      const code = await App.Storage.toCode(App.Storage.campaignBundle(withImg.checked));
-      ta.value = code;
-      info.textContent = `${U.fmtSize(code.length)} de texto` + (code.length > 2e6 ? '. Grande demais para colar em chat: prefira o arquivo .json.' : '');
+      try {
+        const code = await App.Storage.toCode(await App.Storage.campaignBundle(withImg.checked));
+        if (current !== generation) return;
+        ta.value = code;
+        ready = true;
+        info.textContent = `${U.fmtSize(code.length)} de texto` + (code.length > 2e6 ? '. Grande demais para colar em chat: prefira o arquivo .json.' : '');
+      } catch (e) { if (current === generation) ta.value = 'Não consegui gerar o código: ' + e.message; }
     };
     withImg.onchange = gen;
     UI.modal('Código da campanha', h('div', { class: 'col' },
@@ -3872,7 +3930,7 @@
       h('label', { class: 'check' }, withImg, 'Incluir imagens (deixa o código bem maior)'),
       ta, info), [
       { label: 'Fechar' },
-      { label: 'Copiar', primary: true, onclick: () => { U.copy(ta.value); return false; } },
+      { label: 'Copiar', primary: true, onclick: () => { if (ready) U.copy(ta.value); return false; } },
     ]);
     gen();
   }
@@ -3906,8 +3964,8 @@
     const addAssets = (assets) => {
       for (const [id, data] of Object.entries(assets || {})) {
         if (!/^img_[0-9a-f]{16}$/.test(id) || typeof data !== 'string' || S_.assets[id]) continue;
-        S_.assets[id] = data;
-        App.Net.sendAsset(id, data);
+        setAsset(S_.assets, id, data);
+        App.Net.sendAsset(id, S_.assets[id]);
       }
     };
     if (obj.format === 'mesarpg') {

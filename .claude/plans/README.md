@@ -78,3 +78,4 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 52 | [Multiclasse na ficha 5e e no assistente](52-multiclasse.md) | Implementado (testes do usuário) |
 | 53 | [Ficha de criatura 5e (bestiário fiel ao livro)](53-ficha-de-criatura-5e.md) | Implementado (testes do usuário) |
 | 54 | [Etapa de atributos do assistente no modelo do Roll20](54-etapa-de-atributos-modelo-roll20.md) | Implementado (testes do usuário) |
+| 55 | [Migração do frontend e performance do VTT](55-migracao-frontend-e-performance.md) | Em andamento |

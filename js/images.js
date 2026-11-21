@@ -1,7 +1,10 @@
 'use strict';
+import { ImageUrls, joinAsset, setAsset, withImageUrl } from '../src/services/image-assets.ts';
 /* Imagens: converte para WebP (redimensionando), deduplica por hash e mantém cache de <img>. */
 (function (App) {
   const cache = new Map();
+  const urls = new ImageUrls();
+  let nextCleanup = 0;
 
   function loadImg(src) {
     return new Promise((res, rej) => {
@@ -12,9 +15,15 @@
     });
   }
 
-  async function toWebP(file, maxSide) {
-    const url = URL.createObjectURL(file);
-    try {
+  const canvasImage = (canvas, quality) => new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Não foi possível converter a imagem'));
+    }, 'image/webp', quality);
+  });
+
+  function toWebP(file, maxSide) {
+    return withImageUrl(file, async (url) => {
       const img = await loadImg(url);
       const ow = img.naturalWidth, oh = img.naturalHeight;
       const k = Math.min(1, maxSide / Math.max(ow, oh));
@@ -24,12 +33,8 @@
       const ctx = c.getContext('2d');
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, w, h);
-      let data = c.toDataURL('image/webp', 0.8);
-      if (!data.startsWith('data:image/webp')) data = c.toDataURL('image/png'); // navegador sem WebP
-      return { data, w, h, ow, oh };
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+      return { blob: await canvasImage(c, 0.8), w, h, ow, oh };
+    });
   }
 
   const I = {
@@ -39,13 +44,13 @@
 
     async add(file, maxSide) {
       const r = await toWebP(file, maxSide);
-      const id = 'img_' + App.U.hash(r.data);
+      const id = await I.idOf(r.blob);
       if (!App.Store.assets[id]) {
-        App.Store.assets[id] = r.data;
-        App.Net.sendAsset(id, r.data);
+        setAsset(App.Store.assets, id, r.blob);
+        App.Net.sendAsset(id, r.blob);
         App.Storage.autosave();
       }
-      App.U.toast(`Imagem convertida: ${r.w}×${r.h} · ${App.U.fmtSize(r.data.length * 0.75)}`);
+      App.U.toast(`Imagem convertida: ${r.w}×${r.h} · ${App.U.fmtSize(r.blob.size)}`);
       return { id, w: r.w, h: r.h, ow: r.ow, oh: r.oh };
     },
 
@@ -61,18 +66,30 @@
       if (!id) return null;
       const data = App.Store.assets[id];
       if (!data) return null;
+      const now = performance.now();
+      if (cache.size > 128 && now >= nextCleanup) {
+        nextCleanup = now + 5000;
+        for (const [key, entry] of cache) if (now - entry.used > 15_000) cache.delete(key);
+      }
       let e = cache.get(id);
       if (!e || e.src !== data) {
         const im = new Image();
-        im.onload = () => App.Board.requestRender();
-        im.src = data;
-        e = { img: im, src: data };
+        im.onload = () => { if (cache.get(id)?.img === im) App.Board.requestRender(); };
+        im.src = I.src(id);
+        e = { img: im, src: data, used: now };
         cache.set(id, e);
       }
+      e.used = now;
       return e.img.complete && e.img.naturalWidth ? e.img : null;
     },
-    src(id) { return (id && App.Store.assets[id]) || null; },
-    invalidate(id) { cache.delete(id); },
+    src(id) { return id ? urls.src(id, App.Store.assets[id]) : null; },
+    invalidate(id) { cache.delete(id); urls.delete(id); },
+    retain(ids) {
+      urls.retain(ids);
+      for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
+    },
+    canvasImage,
+    idOf: async (asset) => 'img_' + App.U.hash(await joinAsset(asset)),
   };
 
   I.toWebP = toWebP;

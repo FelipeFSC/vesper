@@ -1,4 +1,5 @@
 'use strict';
+import { ImageUrls } from '../src/services/image-assets.ts';
 /*
  * Menu do botão direito (Plano 28): clicar com o direito, sem arrastar, abre as opções do que está
  * embaixo do mouse (token, imagem, luz, gatilho, porta, parede, som, nota ou o mapa vazio).
@@ -252,12 +253,16 @@
 
   // "Colocar ficha aqui": busca nas fichas da campanha e no bestiário; o token entra no ponto clicado
   function placeHere(sc, p) {
-    const back = h('div', { class: 'modal-back' }), close2 = () => back.remove();
+    const back = h('div', { class: 'modal-back' });
+    const imageUrls = new ImageUrls();
+    const close2 = () => { back.remove(); imageUrls.clear(); };
     const list = h('div', { class: 'bst-list cm-place-list' });
     let q = '';
     const BS = App.Bestiary;
     const fill = () => {
+      if (!back.isConnected) return;
       list.innerHTML = '';
+      imageUrls.clear();
       const s = U.slug(q);
       const actors = Object.values(S().state.actors).filter((a) => !s || U.slug(a.name).includes(s)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
       if (actors.length) list.append(h('div', { class: 'eyebrow' }, 'Fichas da campanha'));
@@ -266,7 +271,7 @@
         const L = BS.list.filter((e) => U.slug(e.n).includes(s)).slice(0, 40);
         if (L.length) list.append(h('div', { class: 'eyebrow' }, 'Bestiário'));
         for (const e of L) list.append(h('button', { class: 'bst-item cm-place-item', onclick: async () => { close2(); try { await BS.place(e.k, p); } catch (err) { U.toast(err.message, 'error'); } } },
-          BS.thumb(e, 30), h('span', { class: 'grow' }, h('div', { class: 'name' }, e.n), h('div', { class: 'sub' }, `${e.ty || '—'} · ND ${e.cr == null ? '—' : e.cr} · ${e.s}`))));
+          BS.thumb(e, 30, imageUrls), h('span', { class: 'grow' }, h('div', { class: 'name' }, e.n), h('div', { class: 'sub' }, `${e.ty || '—'} · ND ${e.cr == null ? '—' : e.cr} · ${e.s}`))));
       }
       if (!list.children.length) list.append(h('p', { class: 'empty' }, s.length < 2 ? 'Digite o nome (fichas e bestiário).' : 'Nada com esse nome.'));
     };

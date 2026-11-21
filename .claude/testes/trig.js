@@ -136,7 +136,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const n1 = sc().triggers.length;
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     log.push(`Ctrl+D e Delete: ${n1 - 1} → ${n1} → ${sc().triggers.length}`);
-    log.push('exportar a cena leva os gatilhos: ' + (App.Storage.sceneBundle(sid).scene.triggers || []).length);
+    log.push('exportar a cena leva os gatilhos: ' + ((await App.Storage.sceneBundle(sid)).scene.triggers || []).length);
     B.setTool('select');
   } catch (e) { log.push('EXC ' + e.stack); }
   log.push('erros: ' + JSON.stringify(window.__err || []));

@@ -1,0 +1,83 @@
+[
+  {
+    "name": "pequeno",
+    "repeat": 1,
+    "segments": 100,
+    "queries": 2000,
+    "buildMs": 0.17839999999999634,
+    "indexedMs": 0.6748999999999938,
+    "linearMs": 6.66940000000001
+  },
+  {
+    "name": "pequeno",
+    "repeat": 2,
+    "segments": 100,
+    "queries": 2000,
+    "buildMs": 0.21189999999999998,
+    "indexedMs": 0.7434000000000083,
+    "linearMs": 4.979299999999995
+  },
+  {
+    "name": "pequeno",
+    "repeat": 3,
+    "segments": 100,
+    "queries": 2000,
+    "buildMs": 0.2790999999999997,
+    "indexedMs": 0.8524000000000029,
+    "linearMs": 4.3733
+  },
+  {
+    "name": "medio",
+    "repeat": 1,
+    "segments": 500,
+    "queries": 2000,
+    "buildMs": 0.4817999999999927,
+    "indexedMs": 0.9472000000000094,
+    "linearMs": 16.59359999999998
+  },
+  {
+    "name": "medio",
+    "repeat": 2,
+    "segments": 500,
+    "queries": 2000,
+    "buildMs": 0.555499999999995,
+    "indexedMs": 0.9463000000000079,
+    "linearMs": 16.760199999999998
+  },
+  {
+    "name": "medio",
+    "repeat": 3,
+    "segments": 500,
+    "queries": 2000,
+    "buildMs": 0.34799999999998477,
+    "indexedMs": 1.0778999999999996,
+    "linearMs": 16.41720000000001
+  },
+  {
+    "name": "estresse",
+    "repeat": 1,
+    "segments": 2000,
+    "queries": 2000,
+    "buildMs": 1.203300000000013,
+    "indexedMs": 2.692700000000002,
+    "linearMs": 79.0258
+  },
+  {
+    "name": "estresse",
+    "repeat": 2,
+    "segments": 2000,
+    "queries": 2000,
+    "buildMs": 1.2853999999999814,
+    "indexedMs": 3.4657000000000266,
+    "linearMs": 71.93179999999995
+  },
+  {
+    "name": "estresse",
+    "repeat": 3,
+    "segments": 2000,
+    "queries": 2000,
+    "buildMs": 1.2449000000000296,
+    "indexedMs": 3.528599999999983,
+    "linearMs": 69.58960000000002
+  }
+]

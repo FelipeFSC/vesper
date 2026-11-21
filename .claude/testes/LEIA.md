@@ -1,5 +1,7 @@
 # Scripts de teste
 
+No build Vite, execute `npm run build` e `npm run test:browser -- --legacy=walk`. O runner Playwright injeta o roteiro antes de iniciar a página e testa o build sob `/vesper/`. Passe `--legacy=<nome>` para escolher outro roteiro desta pasta. As opções PowerShell mencionadas abaixo referem-se ao runner da versão anterior.
+
 | Script | O que confere |
 |---|---|
 | `walk.js` | Tutorial inteiro, passo a passo (precisa terminar em "Pronto" sem erros) |
