@@ -1,7 +1,20 @@
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { cp, mkdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
+
+// Versão mostrada no rodapé do menu: número do CHANGELOG + commit exato (+ aviso se há alterações não salvas no git).
+function buildLabel(): string {
+  let version = '?';
+  try { version = /^## ([\d.]+)/m.exec(readFileSync('.claude/CHANGELOG.md', 'utf8'))?.[1] || '?'; } catch { /* sem changelog */ }
+  try {
+    const hash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    const dirty = execSync('git status --porcelain', { encoding: 'utf8' }).trim() !== '';
+    return `${version} · ${hash}${dirty ? ' · com alterações locais' : ''}`;
+  } catch { return version; }
+}
 
 function localResources(): Plugin {
   return {
@@ -31,6 +44,7 @@ export default defineConfig({
   appType: 'mpa',
   publicDir: false,
   plugins: [svelte(), localResources()],
+  define: { __VESPER_BUILD__: JSON.stringify(buildLabel()) },
   build: {
     rolldownOptions: {
       input: ['index.html', 'ficha.html', 'cadastros.html'],

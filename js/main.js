@@ -474,6 +474,8 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
     document.querySelectorAll('#lobby [data-icon]').forEach((el) => { el.innerHTML = App.Icons.svg(el.dataset.icon); });
     if (new URLSearchParams(location.search).has('tutorial')) { startTutorial(); return; }
     $('#lb-name').value = App.Store.me.name || '';
+    // eslint-disable-next-line no-undef -- trocado pelo Vite (vite.config.mts)
+    $('#mn-ver').textContent = 'Vésper ' + (typeof __VESPER_BUILD__ !== 'undefined' ? __VESPER_BUILD__ : '?');
 
     void loadBg();
     animateBg();
