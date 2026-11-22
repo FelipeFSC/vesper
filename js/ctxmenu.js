@@ -172,15 +172,34 @@ import { ImageUrls } from '../src/services/image-assets.ts';
       { icon: 'trash-2', label: 'Apagar', kbd: 'Del', danger: true, run: () => { D({ type: 'trigger.delete', sceneId: sc.id, id: tr.id }); if (B().selectedTrigger === tr.id) B().selectedTrigger = null; UI().closeWindow('trigger:' + tr.id); } },
     ];
   }
-  const COVER = [['full', 'Parede absoluta (nunca deixa ver)'], ['high', 'Muro alto'], ['three', 'Meia parede alta (ombro)'], ['half', 'Meia parede (cintura)']];
-  const coverSub = (sc, ids, cur) => COVER.map(([k, l]) => ({ label: l, on: cur === k, run: () => D({ type: 'wall.update', sceneId: sc.id, ids, patch: { cover: k } }) }));
+  const COVER = [['full', 'Parede absoluta (nunca deixa ver)'], ['high', 'Muro alto'], ['three', 'Meia parede alta (ombro)'], ['half', 'Meia parede (cintura)'], ['window', 'Janela']];
+  const coverSub = (sc, ids, cur, noWindow) => COVER.filter(([k]) => !(noWindow && k === 'window')).map(([k, l]) => ({ label: l, on: cur === k, run: () => D({ type: 'wall.update', sceneId: sc.id, ids, patch: { cover: k } }) }));
+  // Parede mágica (Plano 57): Ligar/Desligar se já é mágica; senão, tornar mágica
+  const magicItems = (sc, w, ids) => (w.magic ? [
+    { icon: 'sparkles', label: w.off ? 'Ligar' : 'Desligar', run: () => D({ type: 'wall.magic', sceneId: sc.id, ids, off: !w.off }) },
+    { icon: 'x', label: 'Deixar de ser mágica', run: () => D({ type: 'wall.update', sceneId: sc.id, ids, patch: { magic: false } }) },
+  ] : [{ icon: 'sparkles', label: 'Tornar mágica', title: 'Você liga e desliga quando quiser. Desligada, é como se não existisse', run: () => D({ type: 'wall.update', sceneId: sc.id, ids, patch: { magic: true } }) }]);
+  function windowItems(sc, w) {
+    const gm = S().gmView();
+    if (!gm) return [{ icon: w.open ? 'app-window' : 'door-open', label: w.open ? 'Fechar a janela' : 'Abrir a janela', disabled: !w.playersOpen, run: () => D({ type: 'wall.door', sceneId: sc.id, id: w.id, open: !w.open }) }];
+    return [
+      { icon: w.open ? 'app-window' : 'door-open', label: w.open ? 'Fechar a janela' : 'Abrir a janela', run: () => D({ type: 'wall.door', sceneId: sc.id, id: w.id, open: !w.open }) },
+      { icon: w.playersOpen ? 'crown' : 'users', label: w.playersOpen ? 'Só eu abro' : 'Jogadores podem abrir', run: () => D({ type: 'wall.update', sceneId: sc.id, id: w.id, patch: { playersOpen: !w.playersOpen } }) },
+      ...magicItems(sc, w, [w.id]),
+      { icon: 'sliders-horizontal', label: 'Editar', run: () => panel('door', w) },
+      { icon: 'brick-wall', label: 'Tipo de parede', sub: coverSub(sc, [w.id], 'window') },
+      '-',
+      { icon: 'trash-2', label: 'Apagar a janela', danger: true, run: () => D({ type: 'wall.delete', sceneId: sc.id, id: w.id }) },
+    ];
+  }
   function doorItems(sc, w) {
+    if (w.window) return windowItems(sc, w);
     const gm = S().gmView();
     return [
       { icon: w.open ? 'door-closed' : 'door-open', label: w.open ? 'Fechar a porta' : 'Abrir a porta', disabled: !gm && w.locked && !w.open, title: !gm && w.locked ? 'Trancada' : '', run: () => D({ type: 'wall.door', sceneId: sc.id, id: w.id, open: !w.open }) },
       gm ? { icon: w.locked ? 'lock-open' : 'lock', label: w.locked ? 'Destrancar' : 'Trancar', run: () => D({ type: 'wall.lock', sceneId: sc.id, id: w.id, locked: !w.locked }) } : null,
       gm ? { icon: 'sliders-horizontal', label: 'Editar', run: () => panel('door', w) } : null,
-      gm ? { icon: 'brick-wall', label: 'Tipo de parede', sub: coverSub(sc, [w.id], w.cover || 'full') } : null,
+      gm ? { icon: 'brick-wall', label: 'Tipo de parede', sub: coverSub(sc, [w.id], w.cover || 'full', true) } : null,
       gm ? '-' : null,
       gm ? { icon: 'trash-2', label: 'Apagar a porta', danger: true, run: () => D({ type: 'wall.delete', sceneId: sc.id, id: w.id }) } : null,
     ];
@@ -189,6 +208,7 @@ import { ImageUrls } from '../src/services/image-assets.ts';
     const stroke = w.stroke ? (sc.walls || []).filter((x) => x.stroke === w.stroke).map((x) => x.id) : [w.id];
     return [
       { icon: 'brick-wall', label: 'Tipo de parede', sub: coverSub(sc, stroke, w.cover || 'full') },
+      ...magicItems(sc, w, stroke),
       '-',
       stroke.length > 1 ? { icon: 'eraser', label: `Apagar o traço (${stroke.length} paredes)`, danger: true, run: () => D({ type: 'wall.delete', sceneId: sc.id, ids: stroke }) } : null,
       { icon: 'trash-2', label: 'Apagar esta parede', danger: true, run: () => D({ type: 'wall.delete', sceneId: sc.id, id: w.id }) },

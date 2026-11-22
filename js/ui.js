@@ -552,6 +552,14 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         toSep(),
         ...App.Combat.COVER_TYPES.map(([k, label]) => toRow(h('i', { class: 'wt-line wt-' + k }), label, { on: B.wallType === k, cls: 'wall-type', right: hgt[k],
           title: info[k] + '. Clique numa parede já desenhada para trocar o tipo. Alturas e bônus: Configurar cena → Cobertura', onclick: () => { B.wallType = k; redo(); } })),
+        // Plano 57: janela e parede mágica
+        toRow(h('i', { class: 'wt-line wt-window' }), 'Janela', { on: B.wallType === 'window', cls: 'wall-type',
+          title: 'Ninguém atravessa nem ataca através dela, mas todos enxergam o outro lado e a luz passa. Abre e fecha pelo marcador no meio (Shift + clique: jogadores podem abrir)', onclick: () => { B.wallType = 'window'; redo(); } }),
+        B.wallType === 'window' ? toRow('door-open', 'Jogadores podem abrir', { on: B.windowPlayersOpen, cls: 'to-check', right: B.windowPlayersOpen ? ic('check') : '',
+          title: 'Vale para as próximas janelas. Desligado, só você abre', onclick: () => { B.windowPlayersOpen = !B.windowPlayersOpen; redo(); } }) : '',
+        toSep(),
+        toRow('sparkles', 'Mágica', { on: B.wallMagic, cls: 'to-check', right: B.wallMagic ? ic('check') : '',
+          title: 'As próximas paredes nascem mágicas: você liga e desliga clicando no losango roxo. Desligada, é como se não existisse. Para os jogadores é uma parede comum', onclick: () => { B.wallMagic = !B.wallMagic; redo(); } }),
         toSep(),
         toRow('scan', 'Procurar paredes no mapa', { title: 'O sistema lê a imagem do mapa e sugere paredes e portas; você confere e cria', onclick: () => UI.openScan() }));
     } else {
@@ -3048,7 +3056,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         if (s.startsWith('g:')) { const gr = (sc.groups || []).find((x) => x.id === s.slice(2)); return gr ? 'Grupo ' + gr.name : null; }
         const t = sc.tokens[s.replace(/^t:/, '')]; return t ? t.name : null;
       }
-      let k = { door: 'door', light: 'light', sound: 'sound', trigger: 'trigger' }[a.type], id = s;
+      let k = { door: 'door', magic: 'magic', light: 'light', sound: 'sound', trigger: 'trigger' }[a.type], id = s;
       if (a.type === 'anim') { const j = s.indexOf(':'); k = s.slice(0, j); id = s.slice(j + 1); }
       const o = TG.objOf(sc, k, id);
       return o ? (a.type === 'anim' ? { prop: 'Imagem', light: 'Luz', token: 'Token' }[k] + ': ' : '') + TG.nameOf(sc, k, o) : null;
@@ -3059,6 +3067,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       const door = (w) => TG.nameOf(sc, 'door', w);
       switch (a.type) {
         case 'door': return (sc.walls || []).filter((w) => w.door).map((w) => [w.id, door(w)]).concat(tags);
+        case 'magic': return (sc.walls || []).filter((w) => w.magic).map((w) => [w.id, TG.nameOf(sc, 'magic', w)]);
         case 'light': return (sc.lights || []).map((o) => [o.id, o.name || 'Luz']).concat(tags);
         case 'sound': return (sc.sounds || []).map((s) => [s.id, Au.label(s.name)]).concat(tags);
         case 'trigger': return (sc.triggers || []).filter((x) => x.id !== tr.id).map((x) => [x.id, x.name]);
@@ -3111,6 +3120,8 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       switch (a.type) {
         case 'door':
           return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.door), (v) => set({ op: v })))];
+        case 'magic':
+          return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.magic), (v) => set({ op: v })))];
         case 'light':
           return [targetsBox(a, 'any'), field('Fazer', sel(a.op, Object.entries(TG.OPS.light), (v) => set({ op: v })))];
         case 'token':
@@ -3272,7 +3283,31 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       const B = App.Board;
       const setOpen = (open) => { if (!!w.open !== open) S().dispatch({ type: 'wall.door', sceneId: sc.id, id: w.id, open }); };
       const setLock = (locked) => { if (!!w.locked !== locked) S().dispatch({ type: 'wall.lock', sceneId: sc.id, id: w.id, locked }); };
-      hud.append(
+      if (w.window) {
+        // Janela (Plano 57): aberta/fechada, quem abre e parede mágica
+        const setPl = (v) => { if (!!w.playersOpen !== v) S().dispatch({ type: 'wall.update', sceneId: sc.id, id: w.id, patch: { playersOpen: v } }); };
+        hud.append(
+          h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble door' }, ic(w.open ? 'door-open' : 'app-window')),
+            h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, 'Janela'),
+              h('div', { class: 'hud-sub' }, (w.open ? 'Aberta' : 'Fechada') + ' · ' + (w.playersOpen ? 'jogadores podem abrir' : 'só você abre') + (w.magic ? ' · mágica ' + (w.off ? 'desligada' : 'ligada') : '')))),
+          h('div', { class: 'hud-section vis-sec' },
+            h('div', { class: 'seg vis-seg' },
+              h('button', { class: w.open ? 'on' : '', title: 'Abrir (um clique no marcador também)', onclick: () => setOpen(true) }, ic('door-open'), 'Aberta'),
+              h('button', { class: w.open ? '' : 'on', onclick: () => setOpen(false) }, ic('app-window'), 'Fechada')),
+            h('div', { class: 'seg vis-seg' },
+              h('button', { class: w.playersOpen ? 'on' : '', title: 'Shift + clique no marcador também', onclick: () => setPl(true) }, ic('users'), 'Jogadores abrem'),
+              h('button', { class: w.playersOpen ? '' : 'on', title: 'Shift + clique no marcador também', onclick: () => setPl(false) }, ic('crown'), 'Só você')),
+            h('p', { class: 'hint', style: { margin: 0 } }, w.open
+              ? 'Aberta: vira passagem. Os jogadores veem um ícone discreto de porta no lugar.'
+              : 'Fechada: ninguém atravessa nem ataca através dela, mas todos enxergam o outro lado. Os jogadores não veem marca nenhuma.'),
+            w.magic ? h('div', { class: 'seg vis-seg' },
+              h('button', { class: w.off ? '' : 'on', onclick: () => { if (w.off) S().dispatch({ type: 'wall.magic', sceneId: sc.id, id: w.id, off: false }); } }, ic('sparkles'), 'Ligada'),
+              h('button', { class: w.off ? 'on' : '', onclick: () => { if (!w.off) S().dispatch({ type: 'wall.magic', sceneId: sc.id, id: w.id, off: true }); } }, ic('eye-off'), 'Desligada')) : '',
+            tagField(sc, w, (v) => S().dispatch({ type: 'wall.update', sceneId: sc.id, id: w.id, patch: { tag: v } }))),
+          h('div', { class: 'hud-btns' },
+            h('span', { class: 'grow' }),
+            btnI('trash-2', 'Apagar janela', { class: 'btn danger', title: 'Apagar (Delete)', onclick: () => { S().dispatch({ type: 'wall.delete', sceneId: sc.id, id: w.id }); B.selectedDoor = null; B.requestRender(); } })));
+      } else hud.append(
         h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble door' + (w.locked ? ' locked' : '') }, ic(w.locked ? 'lock' : w.open ? 'door-open' : 'door-closed')),
           h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, 'Porta'),
             h('div', { class: 'hud-sub' }, (w.open ? 'Aberta' : 'Fechada') + ' · ' + (w.locked ? 'trancada' : 'destrancada')))),

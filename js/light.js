@@ -69,12 +69,14 @@ import { invalidateVision, prefetchVision } from '../src/geometry/vision-prefetc
     const W = sc.cols * sc.grid, H = sc.rows * sc.grid;
     const cfg = App.Combat ? App.Combat.coverCfg(sc) : null, on = !!(cfg && cfg.enabled);
     const type = (w) => (App.Combat ? App.Combat.wallType(w) : 'full');
-    const walls = source.filter((w) => !(w.door && w.open)).map((wall) => ({
-      seg: [wall.x1, wall.y1, wall.x2, wall.y2], type: type(wall),
-      passable: wall.door && !wall.locked,
+    // Porta ou janela aberta e parede mágica desligada (Plano 57) não contam
+    const walls = source.filter((w) => !(w.door && w.open) && !(w.magic && w.off)).map((wall) => ({
+      seg: [wall.x1, wall.y1, wall.x2, wall.y2], type: type(wall), window: !!wall.window,
+      passable: wall.door && !wall.window && !wall.locked,
     }));
     const border = [[0, 0, W, 0], [W, 0, W, H], [W, H, 0, H], [0, H, 0, 0]];
-    const entries = walls.map(({ seg, type, passable }) => ({
+    // Janela fechada (Plano 57): deixa passar luz e visão, mas segura movimento e ataque (ver `solid` em blocked)
+    const entries = walls.map(({ seg, type, passable, window }) => (window ? { seg, window: true } : {
       seg, passable,
       absolute: type === 'full' || (!on && type === 'high'),
       stopsLight: type === 'full' || type === 'high',
@@ -128,10 +130,11 @@ import { invalidateVision, prefetchVision } from '../src/geometry/vision-prefetc
   L.invalidateVision = invalidateVision;
 
   // Algum segmento bloqueante cruza a linha a→b?
-  function blocked(sc, ax, ay, bx, by, eyeH, skip) {
+  // solid: conta também a janela fechada (movimento e ataque); sem ele, só o que tapa luz/visão
+  function blocked(sc, ax, ay, bx, by, eyeH, skip, solid) {
     prepare(sc);
     return prepared.index.search(bounds(ax, ay, bx, by)).some((entry) =>
-      !entry.border && !(skip && entry.passable) && blocks(entry, eyeH) && crosses(entry.seg, ax, ay, bx, by));
+      !entry.border && !(skip && entry.passable) && (blocks(entry, eyeH) || (solid && entry.window)) && crosses(entry.seg, ax, ay, bx, by));
   }
   L.blocked = blocked;
   /*
@@ -145,7 +148,7 @@ import { invalidateVision, prefetchVision } from '../src/geometry/vision-prefetc
     if (!len) return false;
     prepare(sc);
     const nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
-    return [1, -1].every((k) => blocked(sc, a.x + nx * k, a.y + ny * k, b.x + nx * k, b.y + ny * k, eyeH, true));
+    return [1, -1].every((k) => blocked(sc, a.x + nx * k, a.y + ny * k, b.x + nx * k, b.y + ny * k, eyeH, true, true));
   };
 
   const center = (sc, t) => { const s = (t.size || 1) * sc.grid; return { x: t.x + s / 2, y: t.y + s / 2 }; };

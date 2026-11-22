@@ -23,13 +23,14 @@
   T.EVENTS = [['enter', 'Entrar na área'], ['leave', 'Sair da área'], ['click', 'Clicar numa imagem']];
   T.WHO = [['party', 'Personagens do grupo'], ['foes', 'Criaturas'], ['any', 'Qualquer token'], ['pick', 'Tokens escolhidos']];
   T.ACTIONS = [
-    ['door', 'Porta'], ['light', 'Luz'], ['token', 'Token ou grupo'], ['sound', 'Som'],
+    ['door', 'Porta'], ['magic', 'Parede mágica'], ['light', 'Luz'], ['token', 'Token ou grupo'], ['sound', 'Som'],
     ['anim', 'Animar'], ['trap', 'Armadilha'], ['fog', 'Névoa'], ['trigger', 'Outro gatilho'],
   ];
 
-  T.ICON = { door: 'door-closed', light: 'lightbulb', token: 'users', sound: 'volume-2', trap: 'swords', fog: 'cloud-fog', teleport: 'sparkles', trigger: 'zap', anim: 'move' };
+  T.ICON = { door: 'door-closed', magic: 'sparkles', light: 'lightbulb', token: 'users', sound: 'volume-2', trap: 'swords', fog: 'cloud-fog', teleport: 'sparkles', trigger: 'zap', anim: 'move' };
   const OPS = {
     door: { open: 'Abrir', close: 'Fechar', lock: 'Trancar', unlock: 'Destrancar', toggle: 'Alternar' },
+    magic: { on: 'Ligar', off: 'Desligar' }, // Plano 57
     light: { on: 'Acender', off: 'Apagar', toggle: 'Alternar' },
     token: { show: 'Aparecer', hide: 'Sumir', mask: 'Virar vulto' },
     sound: { sfx: 'Efeito', 'spot-fire': 'Tocar som do mapa', 'spot-on': 'Ligar som do mapa', 'spot-off': 'Desligar som do mapa', music: 'Música', 'music-stop': 'Parar a música', ambient: 'Ambiente', 'ambient-stop': 'Parar o ambiente', 'sfx-stop': 'Parar efeito', 'all-stop': 'Parar todos os sons' },
@@ -47,10 +48,11 @@
    * Alvos de uma ação (Plano 21): a lista a.ids e o grupo de objetos a.tag (nome livre posto no painel de cada objeto).
    * Devolve [{kind, key, obj, name}] sem repetir. kind = door|light|sound|trigger|token|prop.
    */
-  const ACT_KIND = { door: 'door', light: 'light', sound: 'sound', trigger: 'trigger' };
+  const ACT_KIND = { door: 'door', magic: 'magic', light: 'light', sound: 'sound', trigger: 'trigger' };
   T.tagKinds = { door: ['door'], light: ['light'], sound: ['sound'], anim: ['prop', 'light'] };
   function objOf(sc, kind, id) {
     if (kind === 'door') { const w = (sc.walls || []).find((x) => x.id === id); return w && w.door ? w : null; }
+    if (kind === 'magic') { const w = (sc.walls || []).find((x) => x.id === id); return w && w.magic ? w : null; }
     if (kind === 'light') return (sc.lights || []).find((x) => x.id === id) || null;
     if (kind === 'sound') return (sc.sounds || []).find((x) => x.id === id) || null;
     if (kind === 'trigger') return (sc.triggers || []).find((x) => x.id === id) || null;
@@ -60,7 +62,8 @@
   }
   T.objOf = objOf;
   T.nameOf = function (sc, kind, o) {
-    if (kind === 'door') return 'Porta ' + cellOf(sc, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2);
+    if (kind === 'door') return (o.window ? 'Janela ' : 'Porta ') + cellOf(sc, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2);
+    if (kind === 'magic') return 'Parede ' + cellOf(sc, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2);
     if (kind === 'light') return o.name || 'Luz';
     if (kind === 'sound') return App.Audio.label(o.name);
     if (kind === 'trigger') return o.name || 'Gatilho';
@@ -101,15 +104,15 @@
     return out;
   };
   // "Luz (Tocha)", "3 luzes", "Grupo tochas (3)"
-  const PLURAL = { door: 'portas', light: 'luzes', sound: 'sons', trigger: 'gatilhos', token: 'tokens', prop: 'imagens' };
-  const SING = { door: 'Porta', light: 'Luz', sound: 'Som', trigger: 'Gatilho', token: 'Token', prop: 'Imagem' };
+  const PLURAL = { door: 'portas', magic: 'paredes mágicas', light: 'luzes', sound: 'sons', trigger: 'gatilhos', token: 'tokens', prop: 'imagens' };
+  const SING = { door: 'Porta', magic: 'Parede mágica', light: 'Luz', sound: 'Som', trigger: 'Gatilho', token: 'Token', prop: 'Imagem' };
   T.PLURAL = PLURAL;
   function targetLabel(sc, a, list, fallback) {
     const groups = a.type === 'token' ? (a.ids || []).filter((r) => String(r).startsWith('g:')).map((r) => (sc.groups || []).find((x) => x.id === r.slice(2))).filter(Boolean) : [];
     if (a.tag && !(a.ids || []).length) return 'Grupo "' + a.tag + '"' + (list.length ? ' (' + list.length + ')' : ' (vazio)');
     if (groups.length === 1 && (a.ids || []).length === 1) return 'Grupo ' + groups[0].name;
     if (!list.length) return fallback;
-    if (list.length === 1) { const x = list[0]; return x.kind === 'door' || x.kind === 'token' ? x.name : SING[x.kind] + ' (' + x.name + ')'; }
+    if (list.length === 1) { const x = list[0]; return x.kind === 'door' || x.kind === 'token' || x.kind === 'magic' ? x.name : SING[x.kind] + ' (' + x.name + ')'; }
     const kinds = [...new Set(list.map((x) => x.kind))];
     return kinds.length === 1 ? list.length + ' ' + PLURAL[kinds[0]] : list.length + ' objetos';
   }
@@ -117,6 +120,7 @@
     const st = S().state, Au = App.Audio, op = (OPS[a.type] || {})[a.op] || '';
     switch (a.type) {
       case 'door': { const l = T.targets(sc, a); return { target: targetLabel(sc, a, l, 'Porta'), op, missing: !l.length }; }
+      case 'magic': { const l = T.targets(sc, a); return { target: targetLabel(sc, a, l, 'Parede mágica'), op, missing: !l.length }; }
       case 'light': { const l = T.targets(sc, a); return { target: targetLabel(sc, a, l, 'Luz'), op, missing: !l.length }; }
       case 'token': { const l = T.targets(sc, a); return { target: targetLabel(sc, a, l, 'Token ou grupo'), op, missing: !l.length && !(a.ids || []).some((r) => String(r).startsWith('g:')) }; }
       case 'anim': {
@@ -152,6 +156,7 @@
     switch (pick.kind) {
       case 'light': return Object.assign(T.newAction('light'), keep, { ids: [o.id], op: o.on === false ? 'on' : 'off' });
       case 'door': return Object.assign(T.newAction('door'), keep, { ids: [o.id], op: o.open ? 'close' : 'open' });
+      case 'magic': return Object.assign(T.newAction('magic'), keep, { ids: [o.id], op: o.off ? 'on' : 'off' });
       case 'token': return Object.assign(T.newAction('token'), keep, { ids: ['t:' + o.id], op: o.hidden || o.masked ? 'show' : 'hide' });
       case 'sound': return Object.assign(T.newAction('sound'), keep, { ids: [o.id], op: o.once ? 'spot-fire' : o.on ? 'spot-off' : 'spot-on' });
       case 'trigger': return Object.assign(T.newAction('trigger'), keep, { ids: [o.id], op: o.enabled === false ? 'enable' : 'fire' });
@@ -177,7 +182,7 @@
     a.ids.push(ref);
     return true;
   };
-  T.PICK_NAME = { light: 'Luz', door: 'Porta', token: 'Token', sound: 'Som do mapa', trigger: 'Gatilho', prop: 'Imagem' };
+  T.PICK_NAME = { light: 'Luz', door: 'Porta', magic: 'Parede mágica', token: 'Token', sound: 'Som do mapa', trigger: 'Gatilho', prop: 'Imagem' };
 
   // Frase do gatilho: "Quando o grupo entrar na área"
   T.sentence = function (tr) {
@@ -218,7 +223,7 @@
   // Onde fica um alvo no mapa (para piscar e para as ligações numeradas)
   T.spotOf = function (sc, x) {
     const L = App.Light, o = x.obj;
-    if (x.kind === 'door') return { x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 };
+    if (x.kind === 'door' || x.kind === 'magic') return { x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 };
     if (x.kind === 'light') return o.shape === 'area' && o.pts ? L.areaCenter(o.pts) : { x: o.x, y: o.y };
     if (x.kind === 'token') return Object.assign(L.center(sc, o), { r: ((o.size || 1) * sc.grid) / 2 + 4 });
     if (x.kind === 'prop') return { x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) / 2 };
@@ -388,7 +393,7 @@
   T.newAction = function (type) {
     const base = { id: U.uid('ta_'), type, delay: 0 };
     const def = {
-      door: { ids: [], tag: '', op: 'close' }, light: { ids: [], tag: '', op: 'toggle' }, token: { ids: [], op: 'show' },
+      door: { ids: [], tag: '', op: 'close' }, magic: { ids: [], op: 'off' }, light: { ids: [], tag: '', op: 'toggle' }, token: { ids: [], op: 'show' },
       sound: { op: 'sfx', name: '', ids: [], tag: '' }, trap: { save: 'Destreza', dc: 13, damage: '2d6', bar: '', onSave: 'half' },
       fog: { op: 'reveal' }, teleport: { sceneId: null, x: null, y: null }, trigger: { ids: [], op: 'enable' },
       anim: { ids: [], tag: '', op: 'play', spec: App.Anim.newSpec('move') },
@@ -513,6 +518,11 @@
           else if (act.op === 'unlock') D({ type: 'wall.lock', sceneId, id: w.id, locked: false });
           else D({ type: 'wall.door', sceneId, id: w.id, open: !w.open });
         }
+        return;
+      }
+      case 'magic': {
+        const ids = T.targets(sc, act).map((x) => x.obj.id);
+        if (ids.length) D({ type: 'wall.magic', sceneId, ids, off: act.op === 'off' });
         return;
       }
       case 'light': {

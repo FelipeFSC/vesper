@@ -804,6 +804,7 @@ input.bad { border-color: color-mix(in srgb, var(--danger) 70%, transparent) !im
 .wt-line.wt-full { border-top: 4px double #b07cff; height: 4px; }
 .wt-line.wt-three { border-top: 3px dashed #e8b44f; }
 .wt-line.wt-half { border-top: 3px dotted #6fc2b0; }
+.wt-line.wt-window { border-top: 1.5px solid #8fd3ff; border-bottom: 1.5px solid #8fd3ff; height: 3px; } /* Plano 57 */
 .cover-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(4, minmax(0, 1fr)); gap: 6px 8px; align-items: center; font-size: 12px; }
 .cover-grid .ch { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
 .cover-grid input { width: 100%; text-align: center; }

@@ -48,7 +48,7 @@ try {
         criatura5e: 'Dragão: ', multi5e: 'Cleric 3 / Wizard 3:', animsom: 'cartão: opções ',
         ficha5e_mesa: 'Rajada CD 40 Con: ',
         nofile: 'jogador tentando remover outro:', atrib5e: 'atributos confirmados na ficha',
-        walk: 'chance 1d20+3', cadastros: 'largura sem rolagem horizontal: ',
+        walk: 'chance 1d20+3', cadastros: 'largura sem rolagem horizontal: ', paredes57: 'fim das paredes 57',
       }[name];
       await checkPage(standalone ? 'ficha.html' : name === 'cadastros' ? 'cadastros.html' : name === 'stories' ? 'index.html' : 'index.html?tutorial',
         async (page) => {

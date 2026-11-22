@@ -409,9 +409,40 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       const sc = sceneOf(s, a.sceneId), ids = new Set(Array.isArray(a.ids) ? a.ids : [a.id]);
       const ws = sc.walls.filter((x) => ids.has(x.id));
       if (!ws.length || !a.patch) return;
-      if ('cover' in a.patch && ['full', 'high', 'three', 'half'].includes(a.patch.cover)) for (const w of ws) w.cover = a.patch.cover;
+      if ('cover' in a.patch && ['full', 'high', 'three', 'half'].includes(a.patch.cover)) for (const w of ws) {
+        w.cover = a.patch.cover;
+        // Janela que vira parede (Plano 57) deixa de ser janela
+        if (w.window) { delete w.window; delete w.door; delete w.open; delete w.playersOpen; delete w.locked; }
+      }
+      // Parede que vira janela (Plano 57): fechada; só o mestre abre até ele liberar
+      if (a.patch.cover === 'window') for (const w of ws) {
+        if (w.door && !w.window) continue; // porta continua porta
+        w.window = true; w.door = true; w.open = false; w.playersOpen = !!w.playersOpen; delete w.cover; delete w.locked;
+      }
+      if ('playersOpen' in a.patch) for (const w of ws) if (w.window) w.playersOpen = !!a.patch.playersOpen;
+      // Parede mágica (Plano 57): vale para parede e janela, não para porta
+      if ('magic' in a.patch) for (const w of ws) {
+        if (w.door && !w.window) continue;
+        if (a.patch.magic) w.magic = true; else { delete w.magic; delete w.off; }
+      }
       // Grupo de objetos da porta (Plano 21)
-      if ('tag' in a.patch) { for (const w of ws) w.tag = String(a.patch.tag || '').slice(0, 40); if (!('cover' in a.patch)) return; }
+      if ('tag' in a.patch) { for (const w of ws) w.tag = String(a.patch.tag || '').slice(0, 40); if (!('cover' in a.patch) && !('magic' in a.patch)) return; }
+      sc.wallsV++;
+    },
+    // Desenhar por cima (Plano 57): tira as paredes cortadas e põe os pedaços que sobraram + o trecho novo, num passo só.
+    // O mestre calcula tudo (ids novos) e manda pronto, para todos ficarem iguais.
+    'wall.replace': (s, a) => {
+      const sc = sceneOf(s, a.sceneId), gone = new Set(Array.isArray(a.remove) ? a.remove : []);
+      sc.walls = sc.walls.filter((w) => !gone.has(w.id));
+      for (const w of a.walls || []) sc.walls.push(w);
+      sc.wallsV++;
+    },
+    // Ligar/desligar parede mágica (Plano 57). Só o mestre.
+    'wall.magic': (s, a) => {
+      const sc = sceneOf(s, a.sceneId), ids = new Set(Array.isArray(a.ids) ? a.ids : [a.id]);
+      const ws = sc.walls.filter((w) => ids.has(w.id) && w.magic);
+      if (!ws.length) return false;
+      for (const w of ws) { if (a.off) w.off = true; else delete w.off; }
       sc.wallsV++;
     },
     'wall.clear': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.walls = []; sc.wallsV++; },
@@ -419,12 +450,12 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       const sc = sceneOf(s, a.sceneId), w = sc.walls.find((x) => x.id === a.id);
       if (!w || !w.door) return false;
       w.open = !!a.open; sc.wallsV++;
-      if (w.open) w.locked = false; // só o mestre abre porta trancada (permit); aberta, deixa de estar trancada
+      if (w.open && !w.window) w.locked = false; // só o mestre abre porta trancada (permit); aberta, deixa de estar trancada
     },
     // Trancar (fecha a porta) ou destrancar. Só o mestre.
     'wall.lock': (s, a) => {
       const sc = sceneOf(s, a.sceneId), w = sc.walls.find((x) => x.id === a.id);
-      if (!w || !w.door) return false;
+      if (!w || !w.door || w.window) return false; // janela não tranca: usa "Jogadores podem abrir"
       w.locked = !!a.locked;
       if (w.locked) w.open = false;
       sc.wallsV++;
@@ -1042,8 +1073,10 @@ import { binaryAssets } from '../src/services/image-assets.ts';
         return !d || d.by === pid;
       }
       case 'wall.door': {
-        // Jogadores podem abrir e fechar portas (não paredes), menos as trancadas
+        // Jogadores podem abrir e fechar portas (não paredes), menos as trancadas;
+        // janela, só se o mestre ligou "Jogadores podem abrir" (Plano 57)
         const sc = s.scenes[a.sceneId], w = sc && sc.walls.find((x) => x.id === a.id);
+        if (w && w.window) return !!w.playersOpen;
         return !!w && !!w.door && !w.locked;
       }
       case 'combat.next': {

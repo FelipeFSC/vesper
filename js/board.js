@@ -303,7 +303,8 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
   function crossesWall(sc, a, b) {
     const cr = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
     const hit = (ax, ay, bx, by) => (sc.walls || []).some((w) => {
-      if (w.door && (w.open || !w.locked)) return false; // porta aberta ou destrancada: dá para passar
+      if (w.magic && w.off) return false; // parede mágica desligada (Plano 57)
+      if (w.door && (w.open || (!w.window && !w.locked))) return false; // porta aberta ou destrancada: dá para passar (janela, só aberta)
       const d1 = cr(w.x1, w.y1, w.x2, w.y2, ax, ay), d2 = cr(w.x1, w.y1, w.x2, w.y2, bx, by);
       const d3 = cr(ax, ay, bx, by, w.x1, w.y1), d4 = cr(ax, ay, bx, by, w.x2, w.y2);
       return ((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6));
@@ -466,13 +467,20 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (L.drawings) for (const d of sc.drawings) drawShape(ctx, d);
     if (B.draft) drawShape(ctx, B.draft);
 
-    if (B.wallDraft) drawWall(ctx, B.wallDraft, true);
+    if (B.wallDraft) {
+      drawWall(ctx, B.wallDraft, true);
+      // Onde a ponta grudou numa parede (Plano 57): um círculo
+      const D = B.wallDraft;
+      ctx.save(); ctx.lineWidth = 1.5 / cam.z; ctx.strokeStyle = '#fff';
+      for (const [x, y, s] of [[D.x1, D.y1, D.s1], [D.x2, D.y2, D.s2]]) if (s) { ctx.beginPath(); ctx.arc(x, y, 6 / cam.z, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
     if (B.wallPencil && B.wallPencil.pts.length > 1) {
       ctx.save();
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.beginPath(); B.wallPencil.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       ctx.lineWidth = 6 / cam.z; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.stroke();
-      ctx.lineWidth = 3 / cam.z; ctx.strokeStyle = WALL_COLOR[B.wallType] || WALL_COLOR.high; ctx.stroke();
+      ctx.lineWidth = 3 / cam.z; ctx.strokeStyle = B.wallType === 'window' ? WINDOW_COLOR : WALL_COLOR[B.wallType] || WALL_COLOR.high; ctx.stroke();
       ctx.restore();
     }
 
@@ -1300,6 +1308,9 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     const z = B.cam.z;
     const door = (sc.walls || []).find((w) => w.door && Math.hypot(p.x - (w.x1 + w.x2) / 2, p.y - (w.y1 + w.y2) / 2) <= 12 / z) || (() => { const w = wallAt(sc, p); return w && w.door ? w : null; })();
     if (door) return { kind: 'door', obj: door };
+    // Parede mágica (Plano 57): o losango ou a própria linha
+    const mg = magicAt(sc, p) || (() => { const w = wallAt(sc, p); return w && w.magic ? w : null; })();
+    if (mg) return { kind: 'magic', obj: mg };
     const snd = soundAt(sc, p);
     if (snd) return { kind: 'sound', obj: snd };
     const tg = (sc.triggers || []).find((x) => x.id !== exclude && Math.hypot(p.x - TG().center(x).x, p.y - TG().center(x).y) <= 15 / z);
@@ -1890,13 +1901,21 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
 
   // ---------- paredes e portas ----------
   const WALL_COLOR = { full: '#b07cff', high: '#e07b4f', three: '#e8b44f', half: '#6fc2b0' };
-  B.wallType = 'high'; // tipo das próximas paredes (escolhido nas opções da ferramenta)
+  B.wallType = 'high'; // tipo das próximas paredes (escolhido nas opções da ferramenta); 'window' = janela (Plano 57)
+  B.wallMagic = false; // próximas paredes nascem mágicas (Plano 57)
+  B.windowPlayersOpen = false; // próximas janelas: jogadores podem abrir (Plano 57)
   function drawWall(ctx, w, draft) {
     const z = B.cam.z;
     ctx.save();
     ctx.lineCap = 'round';
+    // Parede mágica (Plano 57): brilho roxo ligada; desligada, apagada e tracejada
+    if (w.magic) {
+      if (w.off) { ctx.globalAlpha = 0.45; ctx.setLineDash([4 / z, 5 / z]); }
+      else { ctx.lineWidth = 11 / z; ctx.strokeStyle = 'rgba(176,124,255,.35)'; ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke(); }
+    }
     ctx.lineWidth = 6 / z; ctx.strokeStyle = 'rgba(0,0,0,.55)';
     ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+    if (w.window) { drawWindowLine(ctx, w, z, draft); ctx.restore(); return; }
     ctx.lineWidth = 3 / z;
     const type = w.door ? 'full' : CB().wallType(w);
     ctx.strokeStyle = w.door ? C.gold : WALL_COLOR[type];
@@ -1916,7 +1935,52 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     }
     ctx.restore();
   }
+  // Janela (Plano 57): duas linhas finas azul-claras (vidro); aberta, tracejadas
+  const WINDOW_COLOR = '#8fd3ff';
+  function drawWindowLine(ctx, w, z, draft) {
+    const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1, off = 1.8 / z;
+    const nx = -(w.y2 - w.y1) / len * off, ny = (w.x2 - w.x1) / len * off;
+    ctx.lineWidth = 1.6 / z; ctx.strokeStyle = WINDOW_COLOR;
+    if (draft) ctx.globalAlpha = 0.8;
+    if (w.open) ctx.setLineDash([5 / z, 5 / z]);
+    for (const k of [1, -1]) { ctx.beginPath(); ctx.moveTo(w.x1 + nx * k, w.y1 + ny * k); ctx.lineTo(w.x2 + nx * k, w.y2 + ny * k); ctx.stroke(); }
+  }
+  // Marcador da janela. Mestre: sempre (azul; cheio = fechada). Jogador: só aberta, um ícone de porta bem discreto
+  function drawWindowMark(ctx, w, gm) {
+    const z = B.cam.z, mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2, r = 8 / z;
+    const sel = B.selectedDoor === w.id && gm;
+    ctx.save();
+    if (!gm) ctx.globalAlpha = 0.55;
+    roundRect(ctx, mx - r * 0.8, my - r, r * 1.6, r * 2, 2 / z);
+    ctx.fillStyle = gm && !w.open ? WINDOW_COLOR : 'rgba(17,17,20,.8)'; ctx.fill();
+    ctx.lineWidth = (sel ? 2.5 : 1.3) / z; ctx.strokeStyle = sel ? '#fff' : gm && !w.open ? 'rgba(17,17,20,.9)' : WINDOW_COLOR; ctx.stroke();
+    ctx.fillStyle = gm && !w.open ? '#0d1a22' : WINDOW_COLOR;
+    ctx.beginPath(); ctx.arc(mx + r * 0.35, my, 1.4 / z, 0, Math.PI * 2); ctx.fill();
+    // "Jogadores podem abrir": um pontinho verde no canto (só o mestre vê)
+    if (gm && w.playersOpen) { ctx.beginPath(); ctx.arc(mx + r * 0.8, my - r, 3 / z, 0, Math.PI * 2); ctx.fillStyle = '#6fe08a'; ctx.fill(); }
+    ctx.restore();
+  }
+  // Losango roxo da parede mágica (só o mestre): cheio = ligada, vazado = desligada. Na janela, fica ao lado do marcador dela
+  function magicMarkPos(w) {
+    const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
+    if (!w.window) return { x: mx, y: my };
+    const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1, d = 20 / B.cam.z;
+    return { x: mx + (w.x2 - w.x1) / len * d, y: my + (w.y2 - w.y1) / len * d };
+  }
+  function drawMagicMark(ctx, w) {
+    const z = B.cam.z, { x, y } = magicMarkPos(w), r = 7 / z;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
+    ctx.fillStyle = w.off ? 'rgba(17,17,20,.85)' : '#b07cff'; ctx.fill();
+    ctx.lineWidth = 1.5 / z; ctx.strokeStyle = w.off ? '#b07cff' : 'rgba(17,17,20,.9)'; ctx.stroke();
+    ctx.restore();
+  }
+  function magicAt(sc, p) {
+    const r = 10 / B.cam.z;
+    return (sc.walls || []).find((w) => w.magic && (() => { const m = magicMarkPos(w); return Math.abs(p.x - m.x) <= r && Math.abs(p.y - m.y) <= r; })()) || null;
+  }
   function drawDoorMark(ctx, w) {
+    if (w.window) { drawWindowMark(ctx, w, S().gmView()); return; }
     const z = B.cam.z, mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2, r = 9 / z;
     const sel = B.selectedDoor === w.id && S().gmView();
     ctx.save();
@@ -1940,11 +2004,14 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
   function drawWalls(ctx, sc, showWalls, viewers, walls) {
     if (!walls.length) return;
     if (showWalls) for (const w of walls) drawWall(ctx, w);
+    const gm = S().gmView();
     for (const w of walls) {
       if (!w.door) continue;
+      if (w.window && !w.open && !gm) continue; // janela fechada: o jogador não vê marca (Plano 57)
       if (!showWalls && viewers && !doorVisible(sc, w, viewers)) continue;
       drawDoorMark(ctx, w);
     }
+    if (showWalls) for (const w of walls) if (w.magic) drawMagicMark(ctx, w);
   }
   /*
    * Contorno das paredes para o jogador no escuro: uma linha clara nas paredes que os tokens dele enxergam
@@ -1970,7 +2037,9 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     x.lineCap = 'round'; x.lineWidth = 2.4 / z;
     const solid = new Path2D(), doors = new Path2D(), openings = new Path2D();
     for (const w of walls) {
-      const path = w.door ? (w.open ? openings : doors) : solid;
+      if (w.magic && w.off) continue; // desligada: como se não existisse (Plano 57)
+      // Janela fechada parece parede para o jogador; aberta, vira passagem (Plano 57)
+      const path = w.window ? (w.open ? openings : solid) : w.door ? (w.open ? openings : doors) : solid;
       path.moveTo(w.x1, w.y1); path.lineTo(w.x2, w.y2);
     }
     x.strokeStyle = 'rgba(225,223,235,.2)'; x.stroke(solid);
@@ -1985,8 +2054,9 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       for (const w of walls) {
         const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2, len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
         const nx = (-(w.y2 - w.y1) / len) * off, ny = ((w.x2 - w.x1) / len) * off;
+        if (w.magic && w.off) continue;
         if (!App.Explore.seen(sc, mx + nx, my + ny) && !App.Explore.seen(sc, mx - nx, my - ny)) continue;
-        x.strokeStyle = w.door ? 'rgba(226,186,110,.3)' : 'rgba(225,223,235,.16)';
+        x.strokeStyle = w.door && !w.window ? 'rgba(226,186,110,.3)' : 'rgba(225,223,235,.16)';
         x.beginPath(); x.moveTo(w.x1, w.y1); x.lineTo(w.x2, w.y2); x.stroke();
       }
       x.restore();
@@ -2022,7 +2092,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
    * Traço do lápis → paredes: simplifica (Ramer-Douglas-Peucker, tolerância de ~8% do quadrado), junta as pontas se
    * o traço terminar perto de onde começou, e cada trecho vira uma parede do tipo escolhido, todas com o mesmo `stroke`.
    */
-  function pencilWalls(sc, raw) {
+  function pencilWalls(sc, raw, stick) {
     if (!raw || raw.length < 2) return [];
     let len = 0;
     for (let i = 1; i < raw.length; i++) len += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
@@ -2039,15 +2109,91 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     const pts = rdp(raw).map(([x, y]) => [Math.round(x), Math.round(y)]);
     const [fx, fy] = pts[0], last = pts[pts.length - 1];
     if (pts.length > 2 && Math.hypot(last[0] - fx, last[1] - fy) <= sc.grid * 0.5) pts[pts.length - 1] = [fx, fy]; // terminou perto do começo: fecha o contorno
+    // Pontas soltas grudam numa parede perto (Plano 57; sem o grid, que no lápis não faz sentido)
+    if (stick) {
+      const closed = pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1];
+      if (!closed) for (const i of [0, pts.length - 1]) { const q = wallSnap(sc, { x: pts[i][0], y: pts[i][1] }, false); if (q.stuck) pts[i] = [q.x, q.y]; }
+    }
     const stroke = U.uid('st_'), out = [];
     for (let i = 1; i < pts.length; i++) {
       const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
       if (Math.hypot(x2 - x1, y2 - y1) < 2) continue;
-      out.push({ id: U.uid('w_'), x1, y1, x2, y2, cover: B.wallType, stroke });
+      const w = { id: U.uid('w_'), x1, y1, x2, y2, stroke };
+      if (B.wallType === 'window') Object.assign(w, newWindow()); else w.cover = B.wallType;
+      if (B.wallMagic) w.magic = true;
+      out.push(w);
     }
     return out;
   }
   B.pencilWalls = pencilWalls;
+  // Janela nova (Plano 57): fechada; "Jogadores podem abrir" vem da opção da ferramenta
+  const newWindow = () => ({ door: true, window: true, open: false, playersOpen: !!B.windowPlayersOpen });
+  const wallTypeLabel = (k) => (k === 'window' ? 'Janela' : (CB().COVER_TYPES.find((x) => x[0] === k) || [, k])[1]);
+  B.wallTypeLabel = wallTypeLabel;
+
+  /*
+   * Plano 57: a ponta gruda, nesta ordem, na ponta de uma parede/porta/janela a até ¼ de quadrado, num ponto da linha
+   * de uma parede (encontro em T) ou no canto do grid (se o encaixe estiver ligado). stuck diz se grudou numa parede.
+   */
+  function wallSnap(sc, p, grid) {
+    const tol = sc.grid * 0.25, walls = sc.walls || [];
+    let end = null, bd = tol;
+    for (const w of walls) for (const [x, y] of [[w.x1, w.y1], [w.x2, w.y2]]) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= bd) { bd = d; end = { x, y }; }
+    }
+    if (end) return { x: end.x, y: end.y, stuck: true };
+    const corner = grid ? snapVertex(sc, p) : null;
+    let line = null; bd = tol;
+    for (const w of walls) {
+      const dx = w.x2 - w.x1, dy = w.y2 - w.y1, l2 = dx * dx + dy * dy;
+      if (!l2) continue;
+      const k = U.clamp(((p.x - w.x1) * dx + (p.y - w.y1) * dy) / l2, 0, 1), qx = w.x1 + k * dx, qy = w.y1 + k * dy;
+      const d = Math.hypot(p.x - qx, p.y - qy);
+      if (d <= bd) { bd = d; line = { w, x: qx, y: qy }; }
+    }
+    if (line) {
+      // Parede no grid: o canto do grid já fica em cima dela e é melhor (encaixa certinho)
+      if (corner && distSeg(corner.x, corner.y, line.w.x1, line.w.y1, line.w.x2, line.w.y2) < 0.5) return { x: corner.x, y: corner.y, stuck: true };
+      return { x: line.x, y: line.y, stuck: true };
+    }
+    return corner ? { x: corner.x, y: corner.y } : { x: p.x, y: p.y };
+  }
+  B.wallSnap = wallSnap;
+
+  /*
+   * Plano 57: o trecho novo `d` está em cima de paredes (paralelo, as duas pontas a até 0,3 quadrado da linha e sobrepondo)?
+   * Então as pontas dele vão exatamente para a linha da primeira parede, e cada parede embaixo é cortada nesses mesmos
+   * pontos: os pedaços que sobram guardam as opções dela. Porta só sai se ficar toda coberta (não vira duas portas).
+   * → { a, b, remove: [ids], pieces: [paredes novas] } ou null
+   */
+  function replaceCut(sc, d) {
+    const g = sc.grid;
+    let a = { x: d.x1, y: d.y1 }, b = { x: d.x2, y: d.y2 }, projected = false;
+    const remove = [], pieces = [];
+    for (const w of sc.walls || []) {
+      const wl = Math.hypot(w.x2 - w.x1, w.y2 - w.y1), dl = Math.hypot(b.x - a.x, b.y - a.y);
+      if (!wl || !dl) continue;
+      const ux = (w.x2 - w.x1) / wl, uy = (w.y2 - w.y1) / wl;
+      if (Math.abs(((b.x - a.x) * ux + (b.y - a.y) * uy) / dl) < Math.cos(0.15)) continue; // não é paralela
+      const off = (p) => Math.abs((p.x - w.x1) * uy - (p.y - w.y1) * ux);
+      if (off(a) > g * 0.3 || off(b) > g * 0.3) continue; // não está colada
+      const along = (p) => (p.x - w.x1) * ux + (p.y - w.y1) * uy;
+      let sa = along(a), sb = along(b);
+      if (Math.max(sa, sb) <= 1 || Math.min(sa, sb) >= wl - 1) continue; // não sobrepõe
+      if (w.door && !w.window && !(Math.min(sa, sb) <= 1 && Math.max(sa, sb) >= wl - 1)) continue;
+      if (!projected) {
+        a = { x: w.x1 + ux * sa, y: w.y1 + uy * sa }; b = { x: w.x1 + ux * sb, y: w.y1 + uy * sb };
+        projected = true; sa = along(a); sb = along(b);
+      }
+      const [A, Bp] = sa <= sb ? [a, b] : [b, a], lo = Math.min(sa, sb), hi = Math.max(sa, sb);
+      remove.push(w.id);
+      if (lo > 1) pieces.push(Object.assign({}, w, { id: U.uid('w_'), x1: w.x1, y1: w.y1, x2: A.x, y2: A.y }));
+      if (hi < wl - 1) pieces.push(Object.assign({}, w, { id: U.uid('w_'), x1: Bp.x, y1: Bp.y, x2: w.x2, y2: w.y2 }));
+    }
+    return remove.length ? { a, b, remove, pieces } : null;
+  }
+  B.replaceCut = replaceCut;
   function wallAt(sc, p) {
     const tol = 8 / B.cam.z;
     let best = null, bd = tol;
@@ -2362,7 +2508,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       for (let cy = r0; cy <= r1; cy++) {
         const p = { x: cx * g + g / 2, y: cy * g + g / 2 };
         if (CB().distToPoint(sc, src, p) > R) continue;
-        if (walls && LT().blocked(sc, o.x, o.y, p.x, p.y, CB().heightOf(src))) continue;
+        if (walls && LT().blocked(sc, o.x, o.y, p.x, p.y, CB().heightOf(src), false, true)) continue;
         cells.add(cx + ',' + cy); list.push([cx, cy]);
       }
     }
@@ -3054,14 +3200,25 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (B.picking) { if (gm) pickAt(App.Anim ? App.Anim.view(sc) : sc, p); else B.picking = null; return; }
 
     if (B.tool === 'select' || B.tool === 'wall' || B.tool === 'door') {
+      // Losango da parede mágica (Plano 57, só o mestre com as paredes à mostra): liga e desliga
+      const mg = gm && (App.UI.mode === 'edit' || B.tool === 'wall' || B.tool === 'door') && B.layers.walls !== false ? magicAt(sc, p) : null;
+      if (mg) {
+        S().dispatch({ type: 'wall.magic', sceneId: sc.id, ids: wallGroup(sc, mg), off: !mg.off });
+        U.toast(mg.off ? 'Parede ligada.' : 'Parede desligada.');
+        B.requestRender();
+        return;
+      }
       const door = doorAt(sc, p);
-      if (door && (B.tool === 'select' || B.tool === 'door')) {
+      // Janela (Plano 57): ferramenta Parede também abre/fecha, já que é nela que a janela é desenhada
+      if (door && (B.tool === 'select' || B.tool === 'door' || (door.window && gm))) {
         if (gm) {
-          // Mestre: Shift + clique tranca/destranca; clique abre ou fecha. Os dois mostram o painel da porta.
+          // Mestre: Shift + clique tranca/destranca (janela: libera ou não para os jogadores); clique abre ou fecha.
           B.selectedDoor = door.id; B.selected = null; B.selectedSound = null; B.selectedRoom = null; B.selectedProp = null; B.selectedLight = null;
-          if (e.shiftKey) { S().dispatch({ type: 'wall.lock', sceneId: sc.id, id: door.id, locked: !door.locked }); U.toast(door.locked ? 'Porta destrancada.' : 'Porta trancada.'); }
+          if (e.shiftKey && door.window) { S().dispatch({ type: 'wall.update', sceneId: sc.id, id: door.id, patch: { playersOpen: !door.playersOpen } }); U.toast(door.playersOpen ? 'Só você abre esta janela.' : 'Os jogadores podem abrir esta janela.'); }
+          else if (e.shiftKey) { S().dispatch({ type: 'wall.lock', sceneId: sc.id, id: door.id, locked: !door.locked }); U.toast(door.locked ? 'Porta destrancada.' : 'Porta trancada.'); }
           else S().dispatch({ type: 'wall.door', sceneId: sc.id, id: door.id, open: !door.open });
-        } else if (door.locked) U.toast('A porta está trancada.');
+        } else if (door.window && !door.playersOpen) U.toast('A janela não abre.');
+        else if (!door.window && door.locked) U.toast('A porta está trancada.');
         else S().dispatch({ type: 'wall.door', sceneId: sc.id, id: door.id, open: !door.open });
         B.requestRender();
         return;
@@ -3073,8 +3230,10 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       case 'wall': case 'door': {
         if (!gm) break;
         if (B.tool === 'wall' && B.wallMode === 'pencil') { B.wallPencil = { pts: [[p.x, p.y]], p0: { x: p.x, y: p.y } }; break; }
-        const q = st.snap && !e.altKey ? snapVertex(sc, p) : p;
-        B.wallDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, door: B.tool === 'door', p0: { x: p.x, y: p.y } };
+        const q = e.altKey ? p : wallSnap(sc, p, st.snap);
+        const isWin = B.tool === 'wall' && B.wallType === 'window';
+        B.wallDraft = { x1: q.x, y1: q.y, x2: q.x, y2: q.y, door: B.tool === 'door' || isWin, window: isWin, magic: B.tool === 'wall' && !!B.wallMagic,
+          s1: q.stuck, p0: { x: p.x, y: p.y } };
         break;
       }
       case 'room': {
@@ -3298,7 +3457,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       }
     }
     if (B.fogDraft) { const q = snap ? snapPt(sc, p) : p; B.fogDraft.x2 = q.x; B.fogDraft.y2 = q.y; }
-    if (B.wallDraft) { const q = snap && !e.altKey ? snapVertex(sc, p) : p; B.wallDraft.x2 = q.x; B.wallDraft.y2 = q.y; }
+    if (B.wallDraft) { const q = e.altKey ? p : wallSnap(sc, p, snap); B.wallDraft.x2 = q.x; B.wallDraft.y2 = q.y; B.wallDraft.s2 = q.stuck; B.wallDraft.free = e.altKey; }
     if (B.wallPencil) {
       const pts = B.wallPencil.pts, [lx, ly] = pts[pts.length - 1];
       if (Math.hypot(p.x - lx, p.y - ly) > 3 / B.cam.z) pts.push([p.x, p.y]);
@@ -3465,14 +3624,19 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (B.wallPencil && sc) {
       const P = B.wallPencil;
       B.wallPencil = null;
-      const walls = pencilWalls(sc, P.pts);
+      const walls = pencilWalls(sc, P.pts, !e.altKey);
       if (walls.length) S().dispatch({ type: 'wall.add', sceneId: sc.id, walls });
       else {
         // Clique sem desenhar em cima de uma parede: aplica o tipo escolhido (no traço inteiro, se for de lápis)
         const hit = wallAt(sc, P.p0);
-        if (hit && !hit.door && CB().wallType(hit) !== B.wallType) {
-          S().dispatch({ type: 'wall.update', sceneId: sc.id, ids: wallGroup(sc, hit), patch: { cover: B.wallType } });
-          U.toast('Parede agora é: ' + CB().COVER_TYPES.find((x) => x[0] === B.wallType)[1]);
+        if (hit && !(hit.door && !hit.window)) {
+          const patch = {}, cur = hit.window ? 'window' : CB().wallType(hit);
+          if (cur !== B.wallType) patch.cover = B.wallType;
+          if (!!hit.magic !== !!B.wallMagic) patch.magic = !!B.wallMagic;
+          if (Object.keys(patch).length) {
+            S().dispatch({ type: 'wall.update', sceneId: sc.id, ids: wallGroup(sc, hit), patch });
+            U.toast('Parede agora é: ' + wallTypeLabel(B.wallType) + (B.wallMagic ? ' (mágica)' : ''));
+          }
         }
       }
     }
@@ -3481,14 +3645,27 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       B.wallDraft = null;
       if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) > 4) {
         const wall = { id: U.uid('w_'), x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 };
-        if (w.door) { wall.door = true; wall.open = false; wall.locked = !!B.doorLocked; } else wall.cover = B.wallType;
-        S().dispatch({ type: 'wall.add', sceneId: sc.id, walls: [wall] });
-      } else if (!w.door) {
-        // Clique sem arrastar em cima de uma parede: aplica o tipo escolhido
+        if (w.window) Object.assign(wall, newWindow());
+        else if (w.door) { wall.door = true; wall.open = false; wall.locked = !!B.doorLocked; } else wall.cover = B.wallType;
+        if (w.magic && !(w.door && !w.window)) wall.magic = true;
+        // Desenhou em cima de uma parede (Plano 57): substitui só aquele trecho, num passo só (Alt desliga)
+        const cut = w.free ? null : replaceCut(sc, wall);
+        if (cut) {
+          Object.assign(wall, { x1: cut.a.x, y1: cut.a.y, x2: cut.b.x, y2: cut.b.y });
+          S().dispatch({ type: 'wall.replace', sceneId: sc.id, remove: cut.remove, walls: cut.pieces.concat([wall]) });
+        } else S().dispatch({ type: 'wall.add', sceneId: sc.id, walls: [wall] });
+      } else if (!w.door || w.window) {
+        // Clique sem arrastar em cima de uma parede: aplica o tipo escolhido (e a mágica)
         const hit = w.p0 && wallAt(sc, w.p0);
-        if (hit && !hit.door && CB().wallType(hit) !== B.wallType) {
-          S().dispatch({ type: 'wall.update', sceneId: sc.id, ids: wallGroup(sc, hit), patch: { cover: B.wallType } });
-          U.toast('Parede agora é: ' + CB().COVER_TYPES.find((x) => x[0] === B.wallType)[1]);
+        if (hit && !(hit.door && !hit.window)) {
+          const ids = wallGroup(sc, hit), patch = {};
+          const cur = hit.window ? 'window' : CB().wallType(hit);
+          if (cur !== B.wallType) patch.cover = B.wallType;
+          if (!!hit.magic !== !!B.wallMagic) patch.magic = !!B.wallMagic;
+          if (Object.keys(patch).length) {
+            S().dispatch({ type: 'wall.update', sceneId: sc.id, ids, patch });
+            U.toast('Parede agora é: ' + wallTypeLabel(B.wallType) + (B.wallMagic ? ' (mágica)' : ''));
+          }
         }
       }
     }

@@ -57,7 +57,8 @@
   C.snapCell = (sc, p) => { const b = cellBox(sc, p); return { x: b.x + b.s / 2, y: b.y + b.s / 2 }; };
 
   // eyeH = altura de quem olha/ataca: muros baixos da altura dele ou mais altos também tapam a visão
-  const wallBetween = (sc, a, b, eyeH) => !!(App.Light && (sc.walls || []).length && App.Light.blocked(sc, a.x, a.y, b.x, b.y, eyeH));
+  // Ataques e áreas: a janela fechada também segura (Plano 57: nada passa pela janela)
+  const wallBetween = (sc, a, b, eyeH) => !!(App.Light && (sc.walls || []).length && App.Light.blocked(sc, a.x, a.y, b.x, b.y, eyeH, false, true));
   C.blocked = (sc, a, b) => wallBetween(sc, C.center(sc, a), C.center(sc, b), C.sightH(C.topOf(a), b));
 
   // ---------- cobertura (muros baixos) ----------
@@ -83,6 +84,10 @@
       levels: Object.assign({}, D.levels, c.levels), bonus: Object.assign({}, D.bonus, c.bonus), show: c.show || D.show, lean: c.lean !== false };
   };
   C.wallType = (w) => (w.door ? 'full' : w.cover === 'full' || w.cover === 'three' || w.cover === 'half' ? w.cover : 'high');
+  // Plano 57: janela = porta que segura o movimento fechada, mas deixa ver (w.door + w.window);
+  // parede mágica desligada (w.magic + w.off) é como se não existisse
+  C.isWindow = (w) => !!(w && w.window);
+  C.wallOn = (w) => !(w && w.magic && w.off);
   // Altura do token em metros: a da ficha, ou pelo tamanho (1 quadrado = 1,8 m)
   C.heightOf = (t) => {
     const a = S().actorOf(t), hgt = Number((a && a.height) || t.height);
@@ -115,7 +120,7 @@
     if (Math.abs(den) < 1e-9) return 0;
     return ((w.x1 - ax) * sy - (w.y1 - ay) * sx) / den;
   }
-  const lowWalls = (sc) => (sc.walls || []).filter((w) => C.wallType(w) !== 'full');
+  const lowWalls = (sc) => (sc.walls || []).filter((w) => C.wallType(w) !== 'full' && C.wallOn(w));
   // Encostado no muro (o atacante se debruça e atira por cima)
   const leaning = (sc, tok, w) => {
     const c = C.center(sc, tok);

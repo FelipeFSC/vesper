@@ -8,6 +8,8 @@ export interface WallEntry {
   stopsLight?: boolean;
   height?: number | null;
   passable?: boolean;
+  /** Janela fechada (Plano 57): não tapa luz nem visão, só movimento e ataque. */
+  window?: boolean;
 }
 
 export function blocks(entry: WallEntry, eyeH: number): boolean {
