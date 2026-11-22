@@ -4,7 +4,13 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
 (function (App) {
   const { U } = App;
   const $ = (s) => document.querySelector(s);
-  const ROOM_KEY = 'mesarpg.room', ME_KEY = 'mesarpg.me';
+  const ROOM_KEY = 'mesarpg.room', ME_KEY = 'mesarpg.me', PASS_KEY = 'mesarpg.roompass';
+  // Senha da mesa do mestre: guardada só neste navegador, fora do estado da mesa e da exportação
+  function loadRoomPass() { try { return localStorage.getItem(PASS_KEY) || ''; } catch { return ''; } }
+  App.saveRoomPass = (pass) => {
+    App.Net.password = String(pass || '');
+    try { if (App.Net.password) localStorage.setItem(PASS_KEY, App.Net.password); else localStorage.removeItem(PASS_KEY); } catch { /* */ }
+  };
 
   function loadMe() {
     let me = null;
@@ -50,20 +56,24 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
     await hostWithRetry();
   }
 
+  // Plano 56: código novo a cada mesa aberta. Fica só na aba (sessionStorage), para recarregar a página
+  // sem derrubar os jogadores; fechar a aba ou abrir outra mesa gera outro.
   async function hostWithRetry() {
     let code = null;
-    try { code = localStorage.getItem(ROOM_KEY); } catch { /* */ }
-    code = code || App.Net.genCode();
+    try { localStorage.removeItem(ROOM_KEY); } catch { /* */ } // código antigo, fixo, de antes do Plano 56
+    try { code = sessionStorage.getItem(ROOM_KEY); } catch { /* */ }
+    if (!code || code.length !== 32) code = App.Net.genCode();
+    App.Net.password = loadRoomPass();
     for (let attempt = 0; attempt < 6; attempt++) {
       try {
         await App.Net.host(code);
-        try { localStorage.setItem(ROOM_KEY, code); } catch { /* */ }
-        U.toast('Mesa aberta! Código: ' + code, 'info', 5000);
+        try { sessionStorage.setItem(ROOM_KEY, code); } catch { /* */ }
+        U.toast('Mesa aberta. Copie o código ou o link no painel Mesa.', 'info', 5000);
         return;
       } catch (e) {
         if (e && e.type === 'unavailable-id') {
           // Código ainda preso da sessão anterior (recarregou a página): espera um pouco
-          if (attempt < 3) { App.UI.setNetStatus('connecting', 'Liberando código ' + code + '…'); await U.sleep(3000); continue; }
+          if (attempt < 3) { App.UI.setNetStatus('connecting', 'Liberando o código…'); await U.sleep(3000); continue; }
           code = App.Net.genCode();
           continue;
         }
@@ -78,8 +88,9 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
 
   function startPlayer() {
     if (!readName()) return;
-    const code = $('#lb-code').value.trim().toUpperCase();
+    const code = $('#lb-code').value.trim();
     if (!code) { U.toast('Digite o código da mesa.', 'error'); $('#lb-code').focus(); return; }
+    App.Net.pass = $('#lb-pass').value;
     App.Store.role = 'player';
     App.UI.start();
     lobbyUrls.clear();
@@ -477,6 +488,7 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
     $('#lb-cad').onclick = () => { location.href = 'cadastros.html'; };
     $('#lb-join').onclick = startPlayer;
     $('#lb-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
+    $('#lb-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
     $('#mn-bg-pick').onclick = pickBg;
     $('#mn-bg-clear').onclick = () => saveBg(null);
     for (const it of document.querySelectorAll('#lobby .mn-item')) {
@@ -489,7 +501,7 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
     if (code) {
       // Link de convite: já abre em Jogar → Entrar, com o código preenchido
       showList('mn-play', $('#lb-join-open'));
-      $('#lb-code').value = code.toUpperCase();
+      $('#lb-code').value = code;
       $('#mn-join').hidden = false;
       ($('#lb-name').value ? $('#lb-join') : $('#lb-name')).focus();
     } else {

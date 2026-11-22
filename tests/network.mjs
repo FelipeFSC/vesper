@@ -122,6 +122,41 @@ export async function verifyNetwork(browser, url, v1Url) {
     await players[0].waitForFunction(() => window.App.Net.everConnected && window.App.Net.hostConn?.open && window.App.Store.online.length === 3);
     const reconnectMs = performance.now() - reconnectStart;
     assert.equal(await players[0].evaluate(async (id) => (await window.App.Storage.campaignBundle()).assets[id], asset.id), asset.data);
+
+    // Plano 56: código de 32 caracteres e senha da mesa
+    const codes = await host.evaluate(() => [window.App.Net.genCode(), window.App.Net.genCode()]);
+    for (const code of codes) assert.match(code, /^[A-Za-z0-9]{32}$/);
+    assert.notEqual(codes[0], codes[1]);
+    await host.evaluate(() => { window.App.Net.password = 'Segredo 56'; });
+    const guest = await makePage('player-c');
+    const askedFor = (reason) => guest.waitForFunction((reason) =>
+      !!document.querySelector('#modal-root .pass-ask')?.textContent.includes(reason), reason);
+    const closeAsk = () => guest.evaluate(() => { for (const m of document.querySelectorAll('#modal-root .modal-back')) m.remove(); });
+    const noState = async () => {
+      const r = await guest.evaluate(() => ({ connected: window.App.Net.everConnected, state: !!window.App.Store.state }));
+      assert.deepEqual(r, { connected: false, state: false });
+      assert.equal(await host.evaluate(() => !!window.App.Store.state.players['player-c']), false);
+    };
+    await guest.evaluate(async (options) => {
+      const { Net, Store, UI } = window.App;
+      Store.role = 'player';
+      UI.start();
+      await Net.join('TEST55', options);
+    }, options);
+    await askedFor('Esta mesa tem senha');
+    await noState();
+    await closeAsk();
+    await guest.evaluate(() => window.App.Net.retryWithPass('segredo 56'));
+    await askedFor('Senha incorreta');
+    await noState();
+    await closeAsk();
+    await guest.evaluate(() => window.App.Net.retryWithPass('Segredo 56'));
+    await guest.waitForFunction(() => window.App.Net.everConnected && !!window.App.Store.state);
+    assert.equal(await host.evaluate(() => !!window.App.Store.state.players['player-c']), true);
+    // Trocar a senha não derruba quem já está dentro
+    await host.evaluate(() => { window.App.Net.password = 'outra'; });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(await players[0].evaluate(() => window.App.Net.hostConn?.open), true);
     return { joinMs, reconnectMs, uploadAndAudioMs, imageBytes: Buffer.byteLength(asset.data), audioBytes: 64_000,
       clients: players.length, legacyClient: !!v1Url };
   } finally {

@@ -269,6 +269,12 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 - "Remover da mesa" (coluna de jogadores e Mover jogadores): `player.remove` + `App.Net.kick`; fichas e tokens dele ficam com o mestre; pode entrar de novo com o código.
 - Jogador sem token visível que controla na cena dele (escondido não conta) não vê nada do mapa (tela escura com aviso), com ou sem iluminação.
 
+## Código e senha da mesa (Plano 56; ainda sem tutorial/wiki)
+- Código: 32 caracteres aleatórios (A-Z, a-z, 0-9, `crypto.getRandomValues`), novo a cada mesa aberta. Fica no `sessionStorage` (recarregar a página mantém); "Voltar ao menu" apaga. Diferencia maiúsculas de minúsculas.
+- Senha (`App.Net.password`): campo no painel Mesa do mestre, guardada em `localStorage['mesarpg.roompass']`, fora do estado e da exportação. Vale para as próximas entradas; quem já está dentro continua.
+- O mestre confere `hello.pass` antes de `player.upsert`/`welcome`; sem senha certa responde `auth` (`required`/`wrong`) e fecha. Sem limite de tentativas (decisão do usuário).
+- Jogador: campo "Senha (se tiver)" na tela de entrar; se pedida, modal de senha (`UI.askPassword` → `Net.retryWithPass`). A senha fica só na memória da página (reconexão). O link de convite não leva a senha.
+
 ## Menu das ferramentas (Plano 38)
 - No modo Editar, a ferramenta ativa abre um menu colado no botão dela, no estilo do Photoshop: uma linha por opção (ícone + nome), a escolhida destacada, separadores entre os grupos. Sem textos de ajuda: o título de cada linha explica (passar o mouse).
 - O que tem muitas escolhas abre um **sub-menu ao lado** (seta no fim da linha): cor, espessura e preenchimento do desenho; "Notas desta cena" (busca e lista); "Imagens da campanha" (grade, clicar ou arrastar para o mapa). Fecha ao escolher, ao clicar fora, com Esc, ao clicar de novo na linha ou ao trocar de ferramenta; só um aberto.

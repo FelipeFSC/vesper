@@ -54,9 +54,10 @@
       <nav class="mn-list" id="mn-play" aria-label="Jogar" hidden>
         <p class="mn-crumb">Jogar</p>
         <button class="mn-item" id="lb-host" data-desc="Você é o mestre. Escolha a história e a mesa gera um código para os jogadores."><span data-icon="crown"></span>Abrir mesa online</button>
-        <button class="mn-item" id="lb-join-open" data-desc="Digite o código de 6 letras que o mestre mandou."><span data-icon="users"></span>Entrar na mesa online</button>
+        <button class="mn-item" id="lb-join-open" data-desc="Cole o código que o mestre mandou e, se a mesa tiver, a senha."><span data-icon="users"></span>Entrar na mesa online</button>
         <div class="mn-join" id="mn-join" hidden>
-          <input id="lb-code" maxlength="12" placeholder="CÓDIGO" class="code-input" autocomplete="off">
+          <input id="lb-code" maxlength="40" placeholder="Código" class="code-input" autocomplete="off" spellcheck="false">
+          <input id="lb-pass" type="password" maxlength="64" placeholder="Senha (se tiver)" class="pass-input" autocomplete="off">
           <button id="lb-join" class="btn primary">Entrar</button>
         </div>
         <button class="mn-item mn-back" data-back data-desc="Volta ao menu principal."><span data-icon="undo-2"></span>Voltar</button>

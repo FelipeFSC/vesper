@@ -146,8 +146,10 @@ a.btn { text-decoration: none; color: inherit; }
 .mn-item.sel::after, .mn-item:focus-visible::after { opacity: 1; }
 .mn-item.sel .ico, .mn-item:focus-visible .ico { opacity: 1; color: var(--gold); }
 .mn-back { font-size: 18px; margin-top: 10px; }
-.mn-join { display: flex; gap: 8px; margin: 4px 0 6px 52px; animation: mn-in .25s both; }
-.mn-join .code-input { width: 170px; background: rgba(10, 8, 18, .7) !important; border-color: rgba(210, 162, 76, .5) !important; color: #fff; }
+.mn-join { display: flex; flex-wrap: wrap; gap: 8px; max-width: 380px; margin: 4px 0 6px 52px; animation: mn-in .25s both; }
+.mn-join .code-input, .mn-join .pass-input { background: rgba(10, 8, 18, .7) !important; border-color: rgba(210, 162, 76, .5) !important; color: #fff; }
+.mn-join .code-input { flex: 1 1 100%; }
+.mn-join .pass-input { flex: 1 1 0; min-width: 0; }
 .mn-join .btn { padding: 0 18px; }
 .mn-desc { min-height: 40px; max-width: 380px; margin: 26px 0 0 30px; padding-left: 14px; border-left: 2px solid rgba(210, 162, 76, .55);
   color: rgba(241, 236, 255, .72); font-size: 13.5px; line-height: 1.5; }
@@ -217,7 +219,9 @@ a.btn { text-decoration: none; color: inherit; }
   .mn-item, .mn-brand, .mn-tag, .mn-join { animation: none; }
   .mn-stage, .mn-img { transition: none; }
 }
-.code-input { font-size: 20px !important; letter-spacing: .3em; text-transform: uppercase; text-align: center; font-family: var(--mono) !important; }
+.code-input { font-size: 13px !important; text-align: center; font-family: var(--mono) !important; }
+/* Plano 56: código de 32 caracteres e senha da mesa */
+.room-code { display: block; padding: 6px 8px; border-radius: var(--r); background: rgba(0, 0, 0, .25); font-family: var(--mono); font-size: 12px; word-break: break-all; user-select: all; }
 
 /* ---------- Estrutura ---------- */
 #app { --lw: 236px; --rw: 256px; display: grid; grid-template-columns: var(--lw) minmax(0, 1fr) var(--rw); grid-template-rows: 54px minmax(0, 1fr); height: 100vh; }

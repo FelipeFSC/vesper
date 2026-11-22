@@ -131,12 +131,22 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
     refreshManifests();
   }
 
+  // Plano 56: 32 caracteres sorteados entre 62 (maiúsculas, minúsculas e números), cerca de 2^190 combinações.
+  // Bytes >= 248 são descartados para cada símbolo ter a mesma chance (248 = 62 × 4).
+  const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   N.genCode = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let s = '';
-    for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    while (s.length < 32) {
+      for (const b of crypto.getRandomValues(new Uint8Array(48))) {
+        if (b < 248 && s.length < 32) s += CODE_CHARS[b % 62];
+      }
+    }
     return s;
   };
+  // Senha da mesa (só o mestre). Vazia = sem senha. Nunca entra no estado da mesa.
+  N.password = '';
+  // Senha digitada pelo jogador: fica só na memória da página, para reconectar sozinho.
+  N.pass = '';
   N.inviteLink = () => {
     const u = new URL(location.href);
     u.search = '?mesa=' + N.code;
@@ -156,7 +166,7 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
       N.peer = peer;
       let opened = false;
 
-      peer.on('open', () => { opened = true; status('host', 'Mestre · ' + code); resolve(code); });
+      peer.on('open', () => { opened = true; status('host', 'Mestre · online'); resolve(code); });
       peer.on('connection', (conn) => {
         conn.on('open', () => { if (!N.conns.has(conn.peer)) N.conns.set(conn.peer, { conn, playerId: null }); });
         conn.on('data', (msg) => onHostData(conn, msg));
@@ -191,6 +201,12 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
       }
       const pid = String(msg.playerId || '').slice(0, 40);
       if (!pid) return;
+      // Plano 56: com senha, nada da mesa sai antes de a senha bater
+      if (N.password && msg.pass !== N.password) {
+        conn.send({ t: 'auth', reason: msg.pass ? 'wrong' : 'required' });
+        setTimeout(() => conn.close(), 250);
+        return;
+      }
       // Mesma pessoa reconectando: derruba a conexão antiga
       for (const [peerId, e] of N.conns) {
         if (e !== entry && e.playerId === pid) { try { e.conn.close(); } catch { /* */ } N.conns.delete(peerId); }
@@ -328,11 +344,11 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
 
   // ================= JOGADOR =================
   N.join = async function (code, options) {
-    if (N.code && N.code !== code.toUpperCase()) {
+    if (N.code && N.code !== code) {
       S().assets = Object.create(null);
       App.Images.retain(new Set());
     }
-    N.code = code.toUpperCase();
+    N.code = code;
     status('connecting', 'Conectando…');
     let Peer;
     try { ({ Peer } = await import('peerjs')); } catch (error) {
@@ -363,7 +379,7 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
     conn.on('open', () => {
       N.retry = 0;
       const me = S().me;
-      conn.send({ t: 'hello', v: PROTOCOL, playerId: me.id, name: me.name, color: me.color });
+      conn.send({ t: 'hello', v: PROTOCOL, playerId: me.id, name: me.name, color: me.color, pass: N.pass || undefined });
     });
     conn.on('data', (msg) => { if (N.hostConn === conn) onClientData(msg); });
     conn.on('close', () => {
@@ -390,7 +406,7 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
         clientVersion = msg.v ?? 1;
         if (clientVersion === PROTOCOL && !clientMedia) clientMedia = new AssetTransfer(N.hostConn, U.hash, storeClientMedia);
         N.everConnected = true;
-        status('player', 'Jogador · ' + N.code);
+        status('player', 'Jogador · online');
         if (App.Anim) App.Anim.setClock(msg.now);
         S().setState(S().migrate(msg.state), msg.assets || {});
         break;
@@ -423,6 +439,12 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
       case 'protocol-error':
         incompatible();
         break;
+      case 'auth':
+        // Plano 56: a mesa tem senha e a nossa faltou ou não bate. Para de reconectar e pede a senha.
+        N.kicked = true;
+        status('error', msg.reason === 'wrong' ? 'Senha incorreta' : 'Mesa com senha');
+        if (App.UI && App.UI.askPassword) App.UI.askPassword(msg.reason === 'wrong');
+        break;
       case 'presence':
         S().online = msg.online || [];
         S().emit('presence');
@@ -449,6 +471,16 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
         break;
     }
   }
+
+  // Tenta de novo com a senha que o jogador digitou
+  N.retryWithPass = (pass) => {
+    N.pass = String(pass || '');
+    N.kicked = false;
+    N.retry = 0;
+    status('connecting', 'Conectando…');
+    if (N.hostConn) { const old = N.hostConn; N.hostConn = null; try { old.close(); } catch { /* */ } }
+    connect();
+  };
 
   function incompatible() {
     N.kicked = true;

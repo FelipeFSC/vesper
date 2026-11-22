@@ -370,6 +370,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     if (S().isGM() && S().state) { try { await App.Storage.save(); } catch { /* */ } }
     // Mestre volta para a tela de Histórias (Plano 33); jogador e tutorial, para o menu
     const tut = new URLSearchParams(location.search).has('tutorial');
+    try { sessionStorage.removeItem('mesarpg.room'); } catch { /* */ } // Plano 56: a próxima mesa ganha outro código
     location.href = location.pathname + (role === 'player' || tut || !S().state ? '' : '?historias=' + (online ? 'online' : 'offline'));
   };
 
@@ -3783,6 +3784,44 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     return box;
   }
 
+  // Plano 56: senha da mesa (mestre). Vale para as próximas entradas; quem já está dentro continua.
+  function roomPassField() {
+    const N = App.Net;
+    const input = h('input', { type: 'password', value: N.password, placeholder: 'Sem senha', autocomplete: 'new-password', maxlength: 64, class: 'grow' });
+    const eye = h('button', { class: 'btn small icon', title: 'Mostrar a senha', onclick: () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eye.title = show ? 'Esconder a senha' : 'Mostrar a senha';
+      eye.replaceChildren(ic(show ? 'eye-off' : 'eye'));
+    } }, ic('eye'));
+    const save = () => {
+      if (input.value === N.password) return;
+      App.saveRoomPass(input.value);
+      U.toast(N.password ? 'Senha da mesa salva. Vale para quem entrar daqui em diante.' : 'Mesa sem senha.');
+    };
+    input.addEventListener('change', save);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); input.blur(); } });
+    return h('div', { class: 'col', style: { gap: '6px', marginTop: '10px' } },
+      h('span', { class: 'muted' }, 'Senha da mesa'),
+      h('div', { class: 'row' }, input, eye),
+      h('p', { class: 'hint', style: { margin: 0 } }, 'O link não leva a senha: mande-a para os jogadores à parte.'));
+  }
+
+  // Jogador: a mesa pediu senha (ou a digitada não bate)
+  UI.askPassword = function (wrong) {
+    if (document.querySelector('#modal-root .pass-ask')) return;
+    const input = h('input', { type: 'password', autocomplete: 'off', maxlength: 64, placeholder: 'Senha' });
+    const send = () => App.Net.retryWithPass(input.value);
+    const close = UI.modal('Senha da mesa', h('div', { class: 'col pass-ask' },
+      h('p', { class: wrong ? 'warn-box' : 'muted', style: { margin: 0 } }, wrong ? 'Senha incorreta. Tente de novo.' : 'Esta mesa tem senha. Peça ao mestre.'),
+      input), [
+      { label: 'Voltar ao menu', onclick: () => { location.href = location.pathname; } },
+      { label: 'Entrar', primary: true, onclick: send },
+    ]);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { close(); send(); } });
+    setTimeout(() => input.focus(), 30);
+  };
+
   let resolutionControl;
   function renderTable() {
     const p = $('#p-table');
@@ -3794,13 +3833,15 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
 
       p.append(h('h4', { style: { marginTop: 0 } }, 'Conexão'));
       if (S().role === 'gm' && N.isOnline()) {
-        p.append(h('div', { class: 'row wrap' },
-          h('span', { class: 'muted' }, 'Código'), h('b', { style: { fontSize: '18px', letterSpacing: '.2em', fontFamily: 'var(--mono)' } }, N.code),
-          h('span', { class: 'grow' }),
-          btnI('copy', 'Código', { class: 'btn small', onclick: () => U.copy(N.code) }),
-          btnI('link', 'Link', { class: 'btn small', onclick: () => U.copy(N.inviteLink()) })));
+        p.append(h('div', { class: 'col', style: { gap: '6px' } },
+          h('span', { class: 'muted' }, 'Código (novo a cada mesa aberta)'),
+          h('code', { class: 'room-code' }, N.code),
+          h('div', { class: 'row wrap' },
+            btnI('copy', 'Código', { class: 'btn small', onclick: () => U.copy(N.code) }),
+            btnI('link', 'Link', { class: 'btn small', onclick: () => U.copy(N.inviteLink()) }))));
+        p.append(roomPassField());
       } else if (S().role === 'player') {
-        p.append(h('p', { style: { margin: 0 } }, 'Conectado à mesa ', h('b', {}, N.code), ' como ', h('b', {}, S().me.name)));
+        p.append(h('p', { style: { margin: 0 } }, 'Conectado à mesa como ', h('b', {}, S().me.name)));
       } else {
         p.append(h('p', { class: 'muted', style: { margin: 0 } }, 'Mesa offline: só você vê. Recarregue a página e escolha "Abrir mesa online" para jogar com os amigos.'));
       }
