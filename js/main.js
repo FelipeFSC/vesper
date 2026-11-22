@@ -278,8 +278,12 @@ import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
     let list = [];
     try { list = await App.Storage.listStories(); } catch { return; }
     if (!list.length) return;
-    const b = $('#lb-offline'), n = list.length, last = list[0].name.replace(/[<&>"]/g, '');
-    b.dataset.desc = `Escolha uma das suas ${n === 1 ? 'histórias' : n + ' histórias'} (a última foi <b>${last}</b>) e monte cenas, mapas e fichas sem ninguém conectado.`;
+    const b = $('#lb-offline'), n = list.length;
+    let last = list[0].name.replace(/[<&>"]/g, '');
+    if (last.length > 26) last = last.slice(0, 25).trimEnd() + '…'; // nome longo não pode passar de 2 linhas
+    b.dataset.desc = n === 1
+      ? `Continue <b>${last}</b> ou crie uma nova história, tudo offline.`
+      : `Continue <b>${last}</b> ou escolha outra das suas ${n} histórias, tudo offline.`;
     if (b.classList.contains('sel')) select(b);
   }
 
