@@ -74,7 +74,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); await W(100);
     log.push('Delete: ' + sc().props.length + ' imagens');
     // 11) exportar a cena leva a imagem
-    const bundle = App.Storage.sceneBundle(sc().id);
+    const bundle = await App.Storage.sceneBundle(sc().id);
     log.push('exportar cena: imagem incluída=' + !!bundle.assets[p0.img] + ' · imagens na cena exportada=' + bundle.scene.props.length);
     // 12) token novo entra por cima de tudo
     S.dispatch({ type: 'order.move', sceneId: sc().id, kind: 'prop', id: p0.id, dir: 'front' });

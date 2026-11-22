@@ -1,4 +1,7 @@
 'use strict';
+import { flushSync, mount, unmount } from 'svelte';
+import SheetTabs from '../src/ui/SheetTabs.svelte';
+import InventoryItems from '../src/ui/InventoryItems.svelte';
 /*
  * Ficha de D&D 5e (Plano 51, parte A), no modelo da ficha do Roll20.
  * O mesmo desenho serve à página Criar ficha (ficha.js) e à janela da ficha na mesa (ui.js):
@@ -23,6 +26,20 @@
 
   const F5 = { tab: {}, open: new Set(), adj: null };
   App.Ficha5e = F5;
+  const components = new WeakMap();
+  function mountPart(sheet, component, target, props) {
+    const instance = flushSync(() => mount(component, { target, props }));
+    const active = components.get(sheet) || [];
+    active.push(instance);
+    components.set(sheet, active);
+  }
+  F5.release = (root) => {
+    for (const component of components.get(root) || []) void unmount(component);
+    components.delete(root);
+  };
+  const tabsPart = (root, tabs, selected, onselect) => mountPart(root, SheetTabs, root, {
+    tabs: tabs.map(([id, icon, label]) => ({ id, icon: App.Icons.svg(icon), label })), selected, onselect,
+  });
 
   const TABS = [
     ['principal', 'user-round', 'Principal'], ['acoes', 'swords', 'Ações'], ['magias', 'sparkles', 'Magias'],
@@ -119,13 +136,12 @@
 
     const root = h('div', { class: 'f5' + (ctx.wide ? ' wide' : '') });
     root.append(top(K));
-    root.append(h('div', { class: 'f5-tabs', role: 'tablist' }, TABS.map(([id, icon, label]) =>
-      h('button', { class: tab === id ? 'on' : '', role: 'tab', 'aria-selected': String(tab === id), 'data-tab5': id, onclick: () => go(id) }, ic(icon), h('span', {}, label)))));
+    tabsPart(root, TABS, tab, go);
     const pane = h('div', { class: 'f5-pane' });
     if (tab === 'principal') principal(K, pane);
     if (tab === 'acoes') acoes(K, pane);
     if (tab === 'magias') magias(K, pane);
-    if (tab === 'inventario') inventario(K, pane);
+    if (tab === 'inventario') inventario(K, pane, root);
     if (tab === 'caract') caract(K, pane);
     if (tab === 'bio') bio(K, pane);
     if (tab === 'config' && ctx.config) pane.append(ctx.config());
@@ -586,7 +602,7 @@
   }
 
   // ---------- Inventário ----------
-  function inventario(K, pane) {
+  function inventario(K, pane, root) {
     const { d, c, ro, upd } = K;
     const U2 = App.Units;
     const w = (kg) => (U2 ? U2.weight(kg) : kg + ' kg');
@@ -594,19 +610,21 @@
       field(sh, nin(d.moedas[k] || 0, (v) => upd((dd) => { dd.moedas[k] = Math.max(0, v); }), { disabled: ro, title: 'Peças de ' + nm, 'data-f': 'coin-' + k }))))));
     const rows = d.itens.map((it, i) => {
       const open = F5.open.has(it.id);
-      return h('div', { class: 'f5-item' + (open ? ' open' : ''), 'data-item': it.ref || it.id },
-        h('div', { class: 'f5-item-row' },
-          h('input', { type: 'checkbox', checked: !!it.equipped, disabled: ro, title: it.armor ? 'Vestido (conta na CA)' : 'Equipado', 'data-eq': i, onchange: (e) => upd((dd) => {
-            const x = dd.itens[i]; x.equipped = e.target.checked;
-            // Só uma armadura e um escudo vestidos
-            if (x.equipped && x.armor) for (const y of dd.itens) if (y !== x && y.equipped && y.armor && (y.armor.type === 'shield') === (x.armor.type === 'shield')) y.equipped = false;
-          }) }),
-          h('button', { class: 'f5-link f5-item-name grow', onclick: () => { toggle(it.id); K.ctx.rerender(); } }, it.name, it.armor ? h('small', { class: 'muted' }, ' CA ' + (it.armor.type === 'shield' ? '+' : '') + (num(it.armor.ac) + num(it.armor.bonusAc))) : null),
-          it.attune ? h('label', { class: 'check-row small-text', title: 'Sintonizado' }, chk(it.attuned, (v) => upd((dd) => { dd.itens[i].attuned = v; }), { disabled: ro }), 'Sint.') : null,
-          nin(it.qty, (v) => upd((dd) => { dd.itens[i].qty = Math.max(0, v); }), { disabled: ro, title: 'Quantidade', 'aria-label': 'Quantidade', 'data-f': 'it-qty-' + i }),
-          h('span', { class: 'muted small-text f5-item-w' }, it.weight ? w(Math.round(num(it.weight) * num(it.qty, 1) * 100) / 100) : '—'),
-          !ro ? iconBtn('x', 'Remover item', () => upd((dd) => { const x = dd.itens[i]; dd.attacks = dd.attacks.filter((a) => a.itemRow !== x.id); dd.itens.splice(i, 1); })) : null),
-        open ? h('div', { class: 'f5-item-body' },
+      return {
+        key: it.id, ref: it.ref || it.id, name: it.name, equipped: !!it.equipped,
+        armor: it.armor ? (it.armor.type === 'shield' ? '+' : '') + (num(it.armor.ac) + num(it.armor.bonusAc)) : null,
+        attuned: it.attune ? !!it.attuned : null, quantity: it.qty,
+        weight: it.weight ? w(Math.round(num(it.weight) * num(it.qty, 1) * 100) / 100) : '—',
+        changeEquipped: (checked) => upd((dd) => {
+          const x = dd.itens[i]; x.equipped = checked;
+          // Só uma armadura e um escudo vestidos.
+          if (x.equipped && x.armor) for (const y of dd.itens) if (y !== x && y.equipped && y.armor && (y.armor.type === 'shield') === (x.armor.type === 'shield')) y.equipped = false;
+        }),
+        toggle: () => { toggle(it.id); K.ctx.rerender(); },
+        changeAttuned: (checked) => upd((dd) => { dd.itens[i].attuned = checked; }),
+        changeQuantity: (value) => upd((dd) => { dd.itens[i].qty = Math.max(0, num(value)); }),
+        remove: () => upd((dd) => { const x = dd.itens[i]; dd.attacks = dd.attacks.filter((a) => a.itemRow !== x.id); dd.itens.splice(i, 1); }),
+        details: open ? h('div', { class: 'f5-item-body' },
           h('div', { class: 'f5-grid4' },
             field('Nome', tin(it.name, (v) => upd((dd) => { dd.itens[i].name = v.trim() || dd.itens[i].name; }), { disabled: ro, 'data-f': 'it-name-' + i })),
             field('Peso por unidade (kg)', nin(it.weight || 0, (v) => upd((dd) => { dd.itens[i].weight = v; }), { disabled: ro, 'data-f': 'it-w-' + i, step: 0.1 })),
@@ -618,8 +636,11 @@
             field('Bônus mágico', nin(it.armor.bonusAc || 0, (v) => upd((dd) => { dd.itens[i].armor.bonusAc = v; }), { disabled: ro, 'data-f': 'it-acb-' + i })),
             field('Limite de Des', tin(it.armor.dexMax == null ? '' : it.armor.dexMax, (v) => upd((dd) => { dd.itens[i].armor.dexMax = v === '' ? null : num(v); }), { disabled: ro, placeholder: 'sem limite', 'data-f': 'it-dex-' + i }))) : null,
           field('Anotações', area(it.notes || '', (v) => upd((dd) => { dd.itens[i].notes = v; }), { disabled: ro, rows: 2, 'data-f': 'it-notes-' + i })),
-          it.text ? textView(it.text) : null) : null);
+          it.text ? textView(it.text) : null) : null,
+      };
     });
+    const list = h('div');
+    if (rows.length) mountPart(root, InventoryItems, list, { rows, readonly: ro, removeIcon: App.Icons.svg('x') });
     pane.append(sec('backpack', 'Equipamento', !ro ? h('div', { class: 'row' },
       btnI('library', 'Item do cadastro', { class: 'btn small primary', 'data-act': 'item-add', onclick: () => F5.pick('items', { edition: d.edicao, filter: (r) => r.kind !== 'family' && r.kind !== 'group' }, (r) => upd((dd) => addItem(dd, r))) }),
       btnI('plus', 'Item livre', { 'data-act': 'item-new', onclick: () => upd((dd) => { const it = { id: U.uid('it_'), name: 'Novo item', qty: 1, weight: 0, category: '', equipped: false, attuned: false, attune: false, armor: null, text: '' }; dd.itens.push(it); F5.open.add(it.id); }) })) : null,
@@ -627,7 +648,7 @@
       h('div', { class: 'f5-box' + (c.weight > c.capacity ? ' warn' : ''), 'data-box': 'carry' }, h('small', {}, 'Carga'), h('b', {}, w(c.weight)), h('span', { class: 'f5-box-sub' }, 'de ' + w(c.capacity)), adjBtn(K, 'carry', c.score.str * 7.5, 'capacidade')),
       h('div', { class: 'f5-box' + (c.attuned > 3 ? ' warn' : '') }, h('small', {}, 'Sintonia'), h('b', {}, c.attuned + ' / 3'))),
     adjForm(K, 'carry', c.score.str * 7.5, 'Capacidade de carga (kg)'),
-    rows.length ? h('div', { class: 'f5-items' }, rows) : h('p', { class: 'empty' }, 'Nada no inventário. Armas do cadastro já criam o ataque; armaduras e escudos vestidos contam na CA.')));
+    rows.length ? list : h('p', { class: 'empty' }, 'Nada no inventário. Armas do cadastro já criam o ataque; armaduras e escudos vestidos contam na CA.')));
   }
   function addItem(dd, r) {
     const row = R.itemRow(r);
@@ -710,8 +731,7 @@
     const tab = NPC_TABS.some((t) => t[0] === F5.tab[a.id]) ? F5.tab[a.id] : 'bloco';
     const root = h('div', { class: 'f5 f5-npc' + (ctx.wide ? ' wide' : '') });
     root.append(npcTop(K));
-    root.append(h('div', { class: 'f5-tabs', role: 'tablist' }, NPC_TABS.map(([id, icon, label]) =>
-      h('button', { class: tab === id ? 'on' : '', role: 'tab', 'aria-selected': String(tab === id), 'data-tab5': id, onclick: () => { F5.tab[a.id] = id; ctx.rerender(); } }, ic(icon), h('span', {}, label)))));
+    tabsPart(root, NPC_TABS, tab, (id) => { F5.tab[a.id] = id; ctx.rerender(); });
     const pane = h('div', { class: 'f5-pane' });
     if (tab === 'bloco') (F5.npcEdit[a.id] ? npcEditor : npcBlock)(K, pane);
     if (tab === 'desc') npcDesc(K, pane);

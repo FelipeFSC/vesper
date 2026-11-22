@@ -1,0 +1,12 @@
+import '../../js/util.js';
+import '../../js/icons.js';
+import '../../js/dice.js';
+import '../../js/images.js';
+import '../../js/combat.js';
+import '../../js/units.js';
+import '../../js/bestiary.js';
+import '../../js/dados5e.js';
+import '../../js/regras5e.js';
+import '../../js/ficha5e.js';
+import './optional';
+import '../../js/ficha.js';

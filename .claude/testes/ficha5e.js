@@ -183,7 +183,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     noJunk('Configurar');
 
     // Exportar e importar
-    const bun = F.bundle(F.actors[w.id]);
+    const bun = await F.bundle(F.actors[w.id]);
     ok(bun.format === 'mesarpg-actor' && bun.actor.sistema === '5e' && bun.actor.dnd5e.magia.list.length === 3, 'exportar');
     const imp = F.importObj(JSON.parse(JSON.stringify(bun))); await W(60);
     ok(imp.sistema === '5e' && imp.id !== w.id && imp.actions.length === F.actors[w.id].actions.length, 'importar');

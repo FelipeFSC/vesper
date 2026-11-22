@@ -1,4 +1,5 @@
 'use strict';
+import { binaryAsset, ImageUrls } from '../src/services/image-assets.ts';
 /* Tela inicial: escolher entre abrir a mesa (mestre) ou entrar (jogador). */
 (function (App) {
   const { U } = App;
@@ -38,8 +39,12 @@
     const st = saved && saved.state ? S.migrate(saved.state) : S.newCampaign();
     $('#st-screen').hidden = true;
     st.gm = { id: S.me.id, name: S.me.name, color: S.me.color };
-    S.setState(st, (saved && saved.assets) || {});
+    S.setState(st, saved?.assets, true);
     App.UI.start();
+    lobbyUrls.clear();
+    cardUrls.clear();
+    Stories.list = [];
+    $('#st-grid').replaceChildren();
     if (saved) U.toast('Campanha "' + st.name + '" carregada.');
     if (!online) { S.role = 'offline'; App.UI.setNetStatus('', 'Offline (local)'); if (then) then(); return; }
     await hostWithRetry();
@@ -77,6 +82,7 @@
     if (!code) { U.toast('Digite o código da mesa.', 'error'); $('#lb-code').focus(); return; }
     App.Store.role = 'player';
     App.UI.start();
+    lobbyUrls.clear();
     App.Net.join(code);
   }
 
@@ -97,6 +103,8 @@
 
   // ================= Menu de jogo =================
   const BG_KEY = 'vespera.menu-bg';
+  const lobbyUrls = new ImageUrls(), cardUrls = new ImageUrls();
+  let backgroundRevision = 0, cardRevision = 0;
   let list = null; // a lista visível (#mn-root ou #mn-play)
 
   const items = () => [...list.querySelectorAll('.mn-item')];
@@ -222,21 +230,46 @@
     raf = requestAnimationFrame(frame);
   }
 
-  function applyBg(data) {
+  function applyBg(asset) {
     const img = $('#mn-img');
-    img.style.backgroundImage = data ? `url("${data}")` : '';
-    img.classList.toggle('on', !!data);
-    $('#lobby').classList.toggle('custom-bg', !!data);
-    $('#mn-bg-clear').hidden = !data;
+    const src = lobbyUrls.src(BG_KEY, asset);
+    img.style.backgroundImage = src ? 'url(' + JSON.stringify(src) + ')' : '';
+    img.classList.toggle('on', !!src);
+    $('#lobby').classList.toggle('custom-bg', !!src);
+    $('#mn-bg-clear').hidden = !src;
+  }
+  async function loadBg() {
+    const revision = backgroundRevision;
+    let legacy = null, asset;
+    try { legacy = localStorage.getItem(BG_KEY); } catch { /* sem armazenamento */ }
+    try { asset = await App.Storage.kv.get(BG_KEY); } catch { /* usa a preferência legada */ }
+    if (revision !== backgroundRevision || $('#lobby').hidden) return;
+    if (asset === undefined && legacy) {
+      asset = binaryAsset(legacy);
+      applyBg(asset);
+      try {
+        await App.Storage.kv.set(BG_KEY, asset);
+        if (backgroundRevision === revision) localStorage.removeItem(BG_KEY);
+      } catch { /* a cópia legada continua disponível */ }
+    } else applyBg(asset);
+  }
+  async function saveBg(asset) {
+    ++backgroundRevision;
+    applyBg(asset);
+    try {
+      await App.Storage.kv.set(BG_KEY, asset);
+      try { localStorage.removeItem(BG_KEY); } catch { /* sem armazenamento */ }
+      if (asset) U.toast('Fundo trocado. Fica salvo neste navegador.');
+    } catch {
+      U.toast('Não foi possível salvar o fundo. A alteração vale nesta página.', 'error');
+    }
   }
   async function pickBg() {
     const f = await U.pickFile('image/*');
     if (!f) return;
     try {
       const r = await App.Images.toWebP(f, 1920);
-      applyBg(r.data);
-      try { localStorage.setItem(BG_KEY, r.data); U.toast('Fundo trocado. Fica salvo neste navegador.'); }
-      catch { U.toast('A imagem é grande demais para guardar; vale só até fechar a página.', 'error'); }
+      await saveBg(r.blob);
     } catch (e) { U.toast(e.message, 'error'); }
   }
 
@@ -279,24 +312,35 @@
   function hideStories() {
     closeCardMenu();
     $('#st-screen').hidden = true;
+    ++cardRevision;
+    $('#st-grid').replaceChildren();
+    cardUrls.clear();
+    Stories.list = [];
     $('.mn-main').hidden = false;
     if (Stories.online) showList('mn-play', $('#lb-host')); else showList('mn-root', $('#lb-offline'));
   }
   Stories.onCards = () => { if (!$('#st-screen').hidden && !$('#st-grid .st-new.editing') && !$('#st-grid .st-name-edit')) renderStories(); };
   async function renderStories() {
     const grid = $('#st-grid');
-    try { Stories.list = await App.Storage.listStories(); } catch (e) { Stories.list = []; U.toast('Não consegui ler as histórias deste navegador: ' + e.message, 'error'); }
+    const revision = ++cardRevision;
+    let cards;
+    try { cards = await App.Storage.listStories(); } catch (e) { cards = []; U.toast('Não consegui ler as histórias deste navegador: ' + e.message, 'error'); }
+    if (revision !== cardRevision || $('#st-screen').hidden) return;
+    Stories.list = cards;
     grid.innerHTML = '';
+    cardUrls.clear();
     Stories.list.forEach((c, i) => {
-      const img = c.cover || c.thumb;
+      const asset = c.cover || c.thumb;
+      const img = asset ? cardUrls.src(c.id, binaryAsset(asset)) : null;
       const card = document.createElement('div');
       card.className = 'st-card';
       card.tabIndex = 0;
       card.dataset.id = c.id;
       card.style.animationDelay = Math.min(i, 8) * 0.04 + 's';
-      card.innerHTML = `<div class="st-img${img ? '' : ' empty'}"${img ? ` style="background-image:url('${img}')"` : ''}>${img ? '' : '<span>' + esc((c.name || '?').trim().charAt(0).toUpperCase()) + '</span>'}</div>
+      card.innerHTML = `<div class="st-img${img ? '' : ' empty'}">${img ? '' : '<span>' + esc((c.name || '?').trim().charAt(0).toUpperCase()) + '</span>'}</div>
         <div class="st-info"><b class="st-name">${esc(c.name)}</b><small>${ago(c.savedAt)} · ${c.scenes || 0} ${c.scenes === 1 ? 'cena' : 'cenas'}</small></div>
         <button class="st-more" title="Opções da história">${App.Icons.svg('ellipsis')}</button>`;
+      if (img) card.querySelector('.st-img').style.backgroundImage = 'url(' + JSON.stringify(img) + ')';
       card.onclick = (e) => { if (e.target.closest('.st-more, .st-name-edit')) return; openStory(c.id); };
       card.onkeydown = (e) => { if (e.key === 'Enter' && e.target === card) openStory(c.id); };
       card.querySelector('.st-more').onclick = (e) => { e.stopPropagation(); cardMenu(c, e.currentTarget); };
@@ -356,7 +400,7 @@
       const file = await U.pickFile('image/*');
       if (!file) return;
       const r = await App.Images.toWebP(file, 900);
-      await St.setCover(c.id, r.data);
+      await St.setCover(c.id, r.blob);
       await renderStories();
     });
     if (c.cover) item('map', 'Usar o mapa da cena', async () => { await St.setCover(c.id, null); await St.refreshThumb(c.id); await renderStories(); });
@@ -416,9 +460,7 @@
     if (new URLSearchParams(location.search).has('tutorial')) { startTutorial(); return; }
     $('#lb-name').value = App.Store.me.name || '';
 
-    let bg = null;
-    try { bg = localStorage.getItem(BG_KEY); } catch { /* */ }
-    applyBg(bg);
+    void loadBg();
     animateBg();
 
     $('[data-sub="mn-play"]').onclick = () => showList('mn-play');
@@ -432,7 +474,7 @@
     $('#lb-join').onclick = startPlayer;
     $('#lb-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startPlayer(); });
     $('#mn-bg-pick').onclick = pickBg;
-    $('#mn-bg-clear').onclick = () => { applyBg(null); try { localStorage.removeItem(BG_KEY); } catch { /* */ } };
+    $('#mn-bg-clear').onclick = () => saveBg(null);
     for (const it of document.querySelectorAll('#lobby .mn-item')) {
       it.addEventListener('pointerenter', () => select(it));
       it.addEventListener('focus', () => select(it));

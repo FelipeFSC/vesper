@@ -1,4 +1,7 @@
 'use strict';
+import { ASSET_ID, PROTOCOL } from '../src/domain/protocol.ts';
+import { AssetTransfer } from '../src/services/asset-transfer.ts';
+import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/image-assets.ts';
 /*
  * Rede P2P com PeerJS (WebRTC).
  * O mestre é o host: recebe as ações dos jogadores, valida, aplica e retransmite.
@@ -14,6 +17,119 @@
 
   const status = (kind, text) => App.UI && App.UI.setNetStatus(kind, text);
   const S = () => App.Store;
+  const hasMedia = (id) => Object.hasOwn(S().assets, id);
+  let manifestQueued = false;
+  let clientVersion = null, clientMedia = null;
+  let requested = null, requestTimer = null;
+  let waiting = [], missing = new Set();
+  const clearClientMedia = () => {
+    clientVersion = null;
+    clientMedia?.close();
+    clientMedia = null;
+    waiting = [];
+    missing = new Set();
+    requested = null;
+    clearTimeout(requestTimer);
+  };
+
+  function fetchNextMedia() {
+    if (requested || clientVersion !== PROTOCOL || !N.hostConn?.open) return;
+    while (waiting.length) {
+      const id = waiting.shift();
+      if (hasMedia(id) || missing.has(id)) continue;
+      requested = id;
+      N.hostConn.send({ t: 'asset-request', v: PROTOCOL, ids: [id] });
+      requestTimer = setTimeout(() => {
+        missing.add(id);
+        requested = null;
+        fetchNextMedia();
+      }, 65_000);
+      break;
+    }
+  }
+
+  function storeClientMedia(id, data) {
+    if (data) {
+      setAsset(S().assets, id, data);
+      App.Images.invalidate(id);
+      S().emit('asset');
+    } else missing.add(id);
+    if (requested === id) {
+      clearTimeout(requestTimer);
+      requested = null;
+      fetchNextMedia();
+    }
+  }
+
+  function manifest(entry, state) {
+    const scene = state.scenes[state.playerScenes[entry.playerId] || state.activeSceneId];
+    const local = scene ? [...assetIds(scene)] : [];
+    if (scene) for (const token of Object.values(scene.tokens)) {
+      const image = state.actors[token.actorId]?.img;
+      if (image) local.push(image);
+    }
+    const ids = [...new Set([...local, ...assetIds(state)])].filter(hasMedia);
+    const previous = entry.allowed;
+    entry.allowed = new Set(ids);
+    entry.media?.retainOutgoing(entry.allowed);
+    if (entry.version === PROTOCOL) entry.conn.send({ t: 'asset-manifest', v: PROTOCOL, ids });
+    else if (previous) for (const id of ids) if (!previous.has(id)) enqueueLegacy(entry, async () => {
+      if (!entry.allowed?.has(id) || !hasMedia(id)) return;
+      const asset = S().assets[id], data = await joinAsset(asset);
+      if (entry.conn.open && entry.allowed?.has(id) && S().assets[id] === asset) entry.conn.send({ t: 'asset', id, data });
+    });
+    return ids;
+  }
+
+  function enqueueLegacy(entry, send) {
+    const pending = (entry.sending || Promise.resolve()).then(() => {
+      if (entry.conn.open) return send();
+    }).catch((error) => console.warn('Sincronização com cliente legado', error));
+    entry.sending = pending;
+    void pending.then(() => { if (entry.sending === pending) entry.sending = null; });
+  }
+
+  function sendTo(entry, msg) {
+    if (!entry.sending) { entry.conn.send(msg); return; }
+    const snapshot = structuredClone(msg);
+    enqueueLegacy(entry, () => entry.conn.send(snapshot));
+  }
+
+  function refreshManifests() {
+    if (manifestQueued || S().role !== 'gm' || !N.conns.size) return;
+    manifestQueued = true;
+    queueMicrotask(() => {
+      manifestQueued = false;
+      const state = N.playerState();
+      if (!state) return;
+      for (const entry of N.conns.values()) if (entry.playerId && entry.conn.open) {
+        try { manifest(entry, state); } catch (error) { console.warn(error); }
+      }
+    });
+  }
+
+  function welcome(entry, state) {
+    if (entry.version === PROTOCOL) {
+      entry.conn.send({ t: 'welcome', v: PROTOCOL, you: entry.playerId, state, now: Date.now() });
+      manifest(entry, state);
+    } else {
+      entry.allowed = null;
+      const assets = Object.fromEntries(manifest(entry, state).map((id) => [id, S().assets[id]]));
+      const snapshot = structuredClone(state);
+      enqueueLegacy(entry, async () => {
+        const encoded = { ...(await encodeAssets(assets)) }; // BinaryPack exige objeto comum.
+        if (entry.conn.open) entry.conn.send({ t: 'welcome', you: entry.playerId, state: snapshot, assets: encoded, now: Date.now() });
+      });
+    }
+  }
+
+  function receiveUpload(id, data) {
+    if (!data || hasMedia(id) || 'img_' + U.hash(data) !== id) return;
+    setAsset(S().assets, id, data);
+    S().emit('asset');
+    App.Storage.autosave();
+    refreshManifests();
+  }
 
   N.genCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -30,13 +146,13 @@
   N.isOnline = () => !!(N.peer && !N.peer.destroyed && N.peer.open);
 
   // ================= MESTRE =================
-  N.host = function (code) {
+  N.host = async function (code, options) {
+    const { Peer } = await import('peerjs');
     return new Promise((resolve, reject) => {
-      if (typeof Peer === 'undefined') return reject(new Error('PeerJS não carregou (sem internet?)'));
       if (N.peer) { try { N.peer.destroy(); } catch { /* */ } }
       N.code = code;
       status('connecting', 'Abrindo mesa…');
-      const peer = new Peer(PREFIX + code);
+      const peer = new Peer(PREFIX + code, options);
       N.peer = peer;
       let opened = false;
 
@@ -66,6 +182,13 @@
     if (!entry) { entry = { conn, playerId: null }; N.conns.set(conn.peer, entry); }
 
     if (msg.t === 'hello') {
+      if (entry.playerId) return;
+      const version = msg.v ?? 1;
+      if (version !== 1 && version !== PROTOCOL) {
+        conn.send({ t: 'protocol-error', v: PROTOCOL });
+        setTimeout(() => conn.close(), 250);
+        return;
+      }
       const pid = String(msg.playerId || '').slice(0, 40);
       if (!pid) return;
       // Mesma pessoa reconectando: derruba a conexão antiga
@@ -73,9 +196,11 @@
         if (e !== entry && e.playerId === pid) { try { e.conn.close(); } catch { /* */ } N.conns.delete(peerId); }
       }
       entry.playerId = pid;
+      entry.version = version;
       entry.name = String(msg.name || 'Jogador').slice(0, 40);
+      if (version === PROTOCOL) entry.media = new AssetTransfer(conn, U.hash, receiveUpload);
       S().commit({ type: 'player.upsert', id: pid, name: entry.name, color: msg.color, by: S().me.id });
-      conn.send({ t: 'welcome', you: pid, state: N.playerState(), assets: S().assets, now: Date.now() });
+      welcome(entry, N.playerState());
       broadcastPresence();
       U.toast(entry.name + ' entrou na mesa');
       return;
@@ -87,12 +212,17 @@
         S().remoteAction(msg.a, entry.playerId);
         break;
       case 'asset':
-        if (/^img_[0-9a-f]{16}$/.test(msg.id) && typeof msg.data === 'string' && msg.data.startsWith('data:image/')) {
-          S().assets[msg.id] = msg.data;
-          N.broadcast({ t: 'asset', id: msg.id, data: msg.data }, conn.peer);
-          App.Board.requestRender();
-          App.Storage.autosave();
+        if (entry.version === 1 && ASSET_ID.test(msg.id) && typeof msg.data === 'string'
+          && msg.data.length <= 24 * 1024 * 1024 && msg.data.startsWith('data:image/')) receiveUpload(msg.id, msg.data);
+        break;
+      case 'asset-request':
+        if (entry.media && msg.v === PROTOCOL && Array.isArray(msg.ids)) for (const id of msg.ids.slice(0, 32)) {
+          if (typeof id === 'string' && entry.allowed?.has(id)) entry.media.queue(id, S().assets[id]);
         }
+        break;
+      case 'asset-chunk':
+      case 'asset-missing':
+        entry.media?.accept(msg);
         break;
       case 'ping':
         N.broadcast(msg);
@@ -116,7 +246,8 @@
 
   function dropConn(conn) {
     const e = N.conns.get(conn.peer);
-    if (!e) return;
+    if (!e || e.conn !== conn) return;
+    e.media?.close();
     N.conns.delete(conn.peer);
     if (e.playerId) { U.toast((e.name || 'Jogador') + ' saiu'); broadcastPresence(); }
   }
@@ -129,30 +260,43 @@
     S().emit('presence');
   }
 
-  // Notas do mestre (Plano 18) não saem daqui: os jogadores recebem o estado sem elas
+  const publicProp = (prop) => prop?.hurt ? { ...prop, hurt: null } : prop;
+  function publicScene(scene) {
+    let out = scene.notes?.length ? { ...scene, notes: [] } : scene;
+    if (scene.props?.some((prop) => prop.hurt)) out = { ...out, props: scene.props.map(publicProp) };
+    return out;
+  }
+
+  // Notas do mestre (Plano 18) não saem daqui: os jogadores recebem o estado sem elas.
   N.playerState = function () {
     const st = S().state;
     if (!st) return st;
     const scenes = {};
-    for (const [id, sc] of Object.entries(st.scenes)) {
-      let out = sc.notes && sc.notes.length ? Object.assign({}, sc, { notes: [] }) : sc;
-      if ((sc.props || []).some((p) => p.hurt)) out = Object.assign({}, out, { props: sc.props.map((p) => (p.hurt ? Object.assign({}, p, { hurt: null }) : p)) });
-      scenes[id] = out;
-    }
+    for (const [id, scene] of Object.entries(st.scenes)) scenes[id] = publicScene(scene);
     return Object.assign({}, st, { scenes });
   };
   function forPlayers(msg) {
     if (!msg || msg.t !== 'action' || !msg.a) return msg;
     const a = msg.a;
     if (/^note\./.test(a.type)) return null;
-    if (a.type === 'prop.add' && a.prop && a.prop.hurt) return { t: 'action', a: Object.assign({}, a, { prop: Object.assign({}, a.prop, { hurt: null }) }) };
+    if (a.type === 'scene.add' && a.scene) return { t: 'action', a: { ...a, scene: publicScene(a.scene) } };
+    if (a.type === 'scene.update' && a.patch) return { t: 'action', a: { ...a, patch: publicScene(a.patch) } };
+    if (a.type === 'prop.add' && a.prop) return { t: 'action', a: { ...a, prop: publicProp(a.prop) } };
     if (a.type === 'prop.update' && a.patch && 'hurt' in a.patch) {
       const patch = Object.assign({}, a.patch);
       delete patch.hurt;
       return Object.keys(patch).length ? { t: 'action', a: Object.assign({}, a, { patch }) } : null;
     }
-    if (a.type === 'undo.apply' && (a.ops || []).some((o) => o.key === 'notes')) {
-      const ops = a.ops.filter((o) => o.key !== 'notes');
+    if (a.type === 'undo.apply') {
+      const ops = (a.ops || []).filter((o) => o.key !== 'notes').map((op) => {
+        if (op.key !== 'props') return op;
+        if (op.keys && Object.hasOwn(op.keys, 'hurt')) {
+          const keys = { ...op.keys };
+          delete keys.hurt;
+          return { ...op, keys };
+        }
+        return { ...op, set: publicProp(op.set) };
+      });
       return ops.length ? { t: 'action', a: Object.assign({}, a, { ops }) } : null;
     }
     return msg;
@@ -161,26 +305,43 @@
     if (S().role !== 'gm') return;
     msg = forPlayers(msg);
     if (!msg) return;
+    if (msg.t === 'action' && /^(actor\.|scene\.|token\.(add|update)|prop\.|handout\.|undo\.)/.test(msg.a.type)) refreshManifests();
     for (const [peerId, e] of N.conns) {
       if (!e.playerId || peerId === exceptPeer || !e.conn.open) continue;
-      try { e.conn.send(msg); } catch (err) { console.warn(err); }
+      try { sendTo(e, msg); } catch (err) { console.warn(err); }
     }
   };
   N.broadcastFull = function () {
+    const state = N.playerState();
+    if (!state) return;
     for (const e of N.conns.values()) {
-      if (e.playerId && e.conn.open) e.conn.send({ t: 'welcome', you: e.playerId, state: N.playerState(), assets: S().assets, now: Date.now() });
+      if (e.playerId && e.conn.open) welcome(e, state);
     }
   };
   N.sendStateTo = function (pid) {
-    for (const e of N.conns.values()) if (e.playerId === pid && e.conn.open) e.conn.send({ t: 'state', state: N.playerState(), now: Date.now() });
+    for (const e of N.conns.values()) if (e.playerId === pid && e.conn.open) {
+      const state = N.playerState();
+      sendTo(e, { t: 'state', state, now: Date.now() });
+      manifest(e, state);
+    }
   };
 
   // ================= JOGADOR =================
-  N.join = function (code) {
+  N.join = async function (code, options) {
+    if (N.code && N.code !== code.toUpperCase()) {
+      S().assets = Object.create(null);
+      App.Images.retain(new Set());
+    }
     N.code = code.toUpperCase();
-    if (typeof Peer === 'undefined') { status('error', 'PeerJS não carregou'); U.toast('Sem internet? A biblioteca PeerJS não carregou.', 'error'); return; }
     status('connecting', 'Conectando…');
-    const peer = new Peer();
+    let Peer;
+    try { ({ Peer } = await import('peerjs')); } catch (error) {
+      status('error', 'Não foi possível carregar a conexão');
+      U.toast('Não foi possível carregar a conexão. Tente entrar novamente.', 'error');
+      return;
+    }
+    N.kicked = false;
+    const peer = new Peer(options);
     N.peer = peer;
     peer.on('open', () => connect());
     peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => peer.reconnect(), 2000); });
@@ -202,11 +363,15 @@
     conn.on('open', () => {
       N.retry = 0;
       const me = S().me;
-      conn.send({ t: 'hello', playerId: me.id, name: me.name, color: me.color });
-      status('player', 'Jogador · ' + N.code);
+      conn.send({ t: 'hello', v: PROTOCOL, playerId: me.id, name: me.name, color: me.color });
     });
-    conn.on('data', onClientData);
-    conn.on('close', () => { if (N.hostConn === conn) { N.hostConn = null; scheduleReconnect(); } });
+    conn.on('data', (msg) => { if (N.hostConn === conn) onClientData(msg); });
+    conn.on('close', () => {
+      if (N.hostConn !== conn) return;
+      N.hostConn = null;
+      clearClientMedia();
+      scheduleReconnect();
+    });
   }
 
   let reconnectTimer = null;
@@ -221,7 +386,11 @@
     if (!msg || typeof msg !== 'object') return;
     switch (msg.t) {
       case 'welcome':
+        if (msg.v != null && msg.v !== PROTOCOL && msg.v !== 1) { incompatible(); return; }
+        clientVersion = msg.v ?? 1;
+        if (clientVersion === PROTOCOL && !clientMedia) clientMedia = new AssetTransfer(N.hostConn, U.hash, storeClientMedia);
         N.everConnected = true;
+        status('player', 'Jogador · ' + N.code);
         if (App.Anim) App.Anim.setClock(msg.now);
         S().setState(S().migrate(msg.state), msg.assets || {});
         break;
@@ -233,10 +402,26 @@
         if (S().state) S().applyRemote(msg.a);
         break;
       case 'asset':
-        S().assets[msg.id] = msg.data;
-        App.Images.invalidate(msg.id);
-        App.Board.requestRender();
-        S().emit('asset');
+        if (clientVersion === 1 && ASSET_ID.test(msg.id) && typeof msg.data === 'string') storeClientMedia(msg.id, msg.data);
+        break;
+      case 'asset-manifest':
+        if (clientVersion === PROTOCOL && msg.v === PROTOCOL && Array.isArray(msg.ids)) {
+          const available = new Set(msg.ids.filter((id) => typeof id === 'string' && ASSET_ID.test(id)));
+          if (requested && !available.has(requested)) {
+            clientMedia?.discardIncoming(requested);
+            requested = null;
+            clearTimeout(requestTimer);
+          }
+          waiting = [...available];
+          fetchNextMedia();
+        }
+        break;
+      case 'asset-chunk':
+      case 'asset-missing':
+        if (msg.id === requested) clientMedia?.accept(msg);
+        break;
+      case 'protocol-error':
+        incompatible();
         break;
       case 'presence':
         S().online = msg.online || [];
@@ -265,6 +450,13 @@
     }
   }
 
+  function incompatible() {
+    N.kicked = true;
+    N.hostConn?.close();
+    status('error', 'Versão da mesa incompatível');
+    U.toast('A mesa usa outra versão do protocolo. Atualize o Vésper e tente novamente.', 'error', 8000);
+  }
+
   // ================= comum =================
   N.send = function (msg) {
     if (S().role !== 'player') return false;
@@ -277,8 +469,15 @@
     for (const e of N.conns.values()) if (e.playerId && e.conn.open) fn(e.conn, e.playerId);
   };
   N.sendAsset = function (id, data) {
-    if (S().role === 'player') N.send({ t: 'asset', id, data });
-    else N.broadcast({ t: 'asset', id, data });
+    if (S().role === 'player') {
+      if (clientVersion === PROTOCOL) clientMedia?.queue(id, data);
+      else {
+        const conn = N.hostConn;
+        void joinAsset(data).then((encoded) => {
+          if (conn && N.hostConn === conn) N.send({ t: 'asset', id, data: encoded });
+        }).catch((error) => console.warn('Não foi possível enviar a imagem', error));
+      }
+    } else refreshManifests();
   };
   N.ping = function (p) {
     if (S().role === 'player') N.send(p);
@@ -289,6 +488,7 @@
   N.kick = function (pid) {
     for (const [peerId, e] of N.conns) {
       if (e.playerId !== pid) continue;
+      e.media?.close();
       try { e.conn.send({ t: 'kicked' }); } catch { /* */ }
       setTimeout(() => { try { e.conn.close(); } catch { /* */ } }, 300);
       N.conns.delete(peerId);

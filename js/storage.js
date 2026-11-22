@@ -1,4 +1,6 @@
 'use strict';
+import { deleteStory, readStory, writeStory } from '../src/services/story-assets.ts';
+import { binaryAsset, binaryAssets, encodeAssets, referencedAssets, withImageUrl } from '../src/services/image-assets.ts';
 /*
  * Persistência: IndexedDB (automático) + exportar/importar arquivo .json ou código de texto.
  * Histórias (Plano 33): várias campanhas no mesmo navegador. 'story:<id>' = {state, assets, savedAt};
@@ -13,6 +15,7 @@
   const { U } = App;
   const DB = 'mesarpg', STORE = 'kv', CODE_PREFIX = 'MESARPG1.';
   let dbp = null;
+  let cardWrites = Promise.resolve();
 
   function db() {
     if (!dbp) {
@@ -27,8 +30,12 @@
   }
   // St.mem (Map) = guardar só na memória (testes: o IndexedDB não responde no Edge sem tela com tempo simulado)
   async function get(key) {
-    if (St.mem) return St.mem.get(key);
+    if (St.mem) {
+      const value = St.mem.get(key);
+      return key.startsWith('story:') && value ? { ...value, assets: binaryAssets(value.assets || {}) } : value;
+    }
     const d = await db();
+    if (key.startsWith('story:')) return readStory(d, STORE, key);
     return new Promise((res, rej) => {
       const rq = d.transaction(STORE, 'readonly').objectStore(STORE).get(key);
       rq.onsuccess = () => res(rq.result);
@@ -38,6 +45,7 @@
   async function del(key) {
     if (St.mem) { St.mem.delete(key); return; }
     const d = await db();
+    if (key.startsWith('story:')) return deleteStory(d, STORE, key);
     return new Promise((res, rej) => {
       const tx = d.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).delete(key);
@@ -46,8 +54,9 @@
     });
   }
   async function set(key, val) {
-    if (St.mem) { St.mem.set(key, JSON.parse(JSON.stringify(val === undefined ? null : val))); return; }
+    if (St.mem) { St.mem.set(key, structuredClone(val ?? null)); return; }
     const d = await db();
+    if (key.startsWith('story:') && val?.state) return writeStory(d, STORE, key, val);
     return new Promise((res, rej) => {
       const tx = d.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(val, key);
@@ -57,12 +66,7 @@
   }
 
   // Só as imagens realmente usadas (limpa as órfãs)
-  function usedAssets(obj) {
-    const all = App.Store.assets, out = {};
-    const ids = new Set(JSON.stringify(obj).match(/img_[0-9a-f]{16}/g) || []);
-    for (const id of ids) if (all[id]) out[id] = all[id];
-    return out;
-  }
+  const usedAssets = (obj) => referencedAssets(obj, App.Store.assets);
 
   function bytesToB64(bytes) {
     let s = '';
@@ -93,10 +97,11 @@
       const S = App.Store;
       if (!S.isGM() || !S.state) return;
       try {
-        const now = Date.now();
+        const now = Date.now(), state = S.state;
         if (!St.currentId) St.currentId = await St.newId();
-        await set('story:' + St.currentId, { state: S.state, assets: usedAssets(S.state), savedAt: now });
-        await St.touchCard(St.currentId, S.state, now);
+        const id = St.currentId;
+        await set('story:' + id, { state, assets: usedAssets(state), savedAt: now });
+        await St.touchCard(id, state, now);
         St.lastSaved = now;
         if (App.UI && App.UI.onSaved) App.UI.onSaved();
       } catch (e) {
@@ -131,10 +136,14 @@
       return { id, name: (state && state.name) || 'Sem nome', cover: null, thumb: null, thumbOf: null, savedAt: savedAt || Date.now(), scenes: state ? (state.sceneOrder || []).length : 0 };
     },
     async saveCards(fn) {
-      const list = (await get('stories')) || [];
-      const out = fn(list) || list;
-      await set('stories', out);
-      return out;
+      const next = cardWrites.then(async () => {
+        const list = (await get('stories')) || [];
+        const out = fn(list) || list;
+        await set('stories', out);
+        return out;
+      });
+      cardWrites = next.catch(() => {});
+      return next;
     },
     // Depois de salvar: nome, data, cenas e, se o mapa da cena do grupo mudou, a miniatura automática
     async touchCard(id, state, savedAt) {
@@ -159,18 +168,18 @@
       } catch (e) { console.warn('miniatura', e); }
     },
     // Recorta para caber (cover) em w×h e devolve WebP pequeno
-    shrink(src, w, h) {
-      return new Promise((res) => {
+    shrink(asset, w, h) {
+      return withImageUrl(binaryAsset(asset), (src) => new Promise((res, rej) => {
         const im = new Image();
         im.onload = () => {
           const c = document.createElement('canvas'); c.width = w; c.height = h;
           const k = Math.max(w / im.width, h / im.height), dw = im.width * k, dh = im.height * k;
           c.getContext('2d').drawImage(im, (w - dw) / 2, (h - dh) / 2, dw, dh);
-          res(c.toDataURL('image/webp', 0.72));
+          App.Images.canvasImage(c, 0.72).then(res, rej);
         };
         im.onerror = () => res(null);
         im.src = src;
-      });
+      }));
     },
     async createStory(name, state, assets) {
       const id = await St.newId(), st = state || App.Store.newCampaign();
@@ -189,8 +198,8 @@
       await St.saveCards((list) => { const c = list.find((x) => x.id === id); if (c) c.name = name; return list; });
     },
     // Imagem do cartão escolhida pelo mestre (null = volta para o mapa da cena)
-    async setCover(id, dataUrl) {
-      const cover = dataUrl ? await St.shrink(dataUrl, 360, 220) : null;
+    async setCover(id, asset) {
+      const cover = asset ? await St.shrink(asset, 360, 220) : null;
       await St.saveCards((list) => { const c = list.find((x) => x.id === id); if (c) c.cover = cover; return list; });
     },
     async duplicateStory(id) {
@@ -208,7 +217,7 @@
     },
     async storyBundle(id) {
       const d = await get('story:' + id);
-      return d ? { format: 'mesarpg', version: 1, exportedAt: new Date().toISOString(), state: d.state, assets: d.assets || {} } : null;
+      return d ? { format: 'mesarpg', version: 1, exportedAt: new Date().toISOString(), state: d.state, assets: await encodeAssets(d.assets || {}) } : null;
     },
     // Com tempo limite: se o IndexedDB travar/estiver bloqueado, a mesa abre mesmo assim
     async load() {
@@ -225,31 +234,31 @@
       }
     },
 
-    campaignBundle(includeAssets = true) {
-      const st = App.Store.state;
-      return { format: 'mesarpg', version: 1, exportedAt: new Date().toISOString(), state: st, assets: includeAssets ? usedAssets(st) : {} };
+    async campaignBundle(includeAssets = true) {
+      const st = structuredClone(App.Store.state);
+      return { format: 'mesarpg', version: 1, exportedAt: new Date().toISOString(), state: st, assets: includeAssets ? await encodeAssets(usedAssets(st)) : {} };
     },
-    sceneBundle(sceneId) {
+    async sceneBundle(sceneId) {
       const st = App.Store.state, sc = st.scenes[sceneId];
       // Plano 31: a cena principal leva as sub-cenas junto (e os portais entre elas)
       const subs = sc.parent ? [] : st.sceneOrder.filter((id) => st.scenes[id] && st.scenes[id].parent === sceneId).map((id) => st.scenes[id]);
       const actors = {};
       for (const s of [sc].concat(subs)) for (const t of Object.values(s.tokens)) if (t.actorId && st.actors[t.actorId]) actors[t.actorId] = st.actors[t.actorId];
-      const obj = { format: 'mesarpg-scene', version: 1, scene: sc, actors };
-      if (subs.length) obj.subs = subs;
-      obj.assets = usedAssets(obj);
+      const obj = structuredClone({ format: 'mesarpg-scene', version: 1, scene: sc, actors, ...(subs.length ? { subs } : {}) });
+      obj.assets = await encodeAssets(usedAssets(obj));
       return obj;
     },
-    actorBundle(actorId) {
-      const obj = { format: 'mesarpg-actor', version: 1, actor: App.Store.state.actors[actorId] };
-      obj.assets = usedAssets(obj);
+    async actorBundle(actorId) {
+      const obj = { format: 'mesarpg-actor', version: 1, actor: structuredClone(App.Store.state.actors[actorId]) };
+      obj.assets = await encodeAssets(usedAssets(obj));
       return obj;
     },
 
-    downloadJSON(obj, baseName) {
+    async downloadJSON(obj, baseName) {
       const d = new Date();
       const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      U.download(`${U.slug(baseName) || 'mesa'}_${stamp}.json`, JSON.stringify(obj));
+      try { U.download(`${U.slug(baseName) || 'mesa'}_${stamp}.json`, JSON.stringify(await obj)); }
+      catch (e) { U.toast('Não consegui exportar: ' + e.message, 'error'); }
     },
     async toCode(obj) { return CODE_PREFIX + (await pack(JSON.stringify(obj))); },
 

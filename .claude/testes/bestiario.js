@@ -119,6 +119,7 @@ window.addEventListener('load', () => setTimeout(async () => {
       App.UI.closeWindow('bestiary'); await W(50);
       Object.assign(BS.filter, { sel: 'adult red dragon|xmm', q: 'dragon', tab: 'ficha' }); BS.open(); await W(2500);
     }
+    log.push('fim do bestiário');
   } catch (e) { log.push('EXC ' + e.stack); }
   flush();
 }, 1500));

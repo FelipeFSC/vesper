@@ -1,4 +1,12 @@
 /* Vésper — tema escuro: grafite neutro, violeta como cor de ação, serifa para nomes e títulos do mundo do jogo */
+@import '@fontsource/eb-garamond/latin-500.css';
+@import '@fontsource/eb-garamond/latin-600.css';
+@import '@fontsource/eb-garamond/latin-700.css';
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+
 :root {
   --bg: #111114; --board: #0d0d10; --panel: #16161a; --panel2: #1c1c21; --panel3: #24242a;
   --line: #26262d; --line2: #34343c;

@@ -32,7 +32,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok(got.id !== actor.id && got.owner === 'all', 'id novo e dono do mestre: ' + got.owner);
     const strip = (a) => JSON.stringify(Object.assign({}, a, { id: 0, owner: 0 }));
     ok(strip(got) === strip(actor), 'tudo igual ao arquivo');
-    ok(S.assets[img] === data && App.Images.src(got.img), 'imagem chegou');
+    ok((await App.Storage.actorBundle(got.id)).assets[img] === data && App.Images.src(got.img), 'imagem chegou');
     log.push('importada: ' + got.name + ' · dono ' + got.owner + ' · ações ' + got.actions.map((x) => x.mode).join('/') + ' · imagem ' + !!S.assets[img]);
     // Abre a janela da ficha normal do jogo
     const win = [...document.querySelectorAll('.win')].find((w) => /Lyra da página/.test(w.textContent));

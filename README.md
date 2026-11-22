@@ -1,16 +1,26 @@
 # Vésper · mesa virtual de RPG
 
 Mesa de RPG que roda direto no navegador, para jogar com os amigos em qualquer sistema (D&D, Tormenta, Ordem Paranormal, o seu próprio…).
-Sem conta, sem servidor e sem instalar nada: o computador do mestre faz o papel de servidor, e os jogadores entram com um código.
+Os jogadores entram com um código, sem conta. O navegador do mestre mantém o estado da mesa e se comunica com os jogadores por WebRTC.
 
 ![Menu inicial do Vésper](wiki/img/lobby.jpg)
 
 ## Como abrir
 
-1. Baixe o projeto (botão **Code → Download ZIP**, ou `git clone`).
-2. Abra o `index.html` no **Chrome** ou no **Edge**.
+Se você recebeu um link do Vésper hospedado, abra-o no **Chrome** ou no **Edge**. Para rodar o projeto localmente, instale o Node.js 22.12 ou posterior e execute os comandos abaixo.
 
-> Recomendado: rodar um servidor local na pasta (`npx serve .` ou a extensão *Live Server* do VS Code). Funciona melhor que abrir o arquivo direto.
+```sh
+npm ci
+npm run dev
+```
+
+Abra o endereço HTTP mostrado no terminal. Use HTTP ou HTTPS para carregar as páginas, módulos e workers. Abrir o HTML por duplo clique (`file://`) deixou de ser uma forma suportada de iniciar a mesa.
+
+No PowerShell com execução de scripts bloqueada, use `npm.cmd` nos mesmos comandos.
+
+O navegador guarda histórias na origem em que elas foram criadas. Antes de trocar protocolo, endereço ou porta, exporte as campanhas pela versão e endereço anteriores. Importe os backups na nova origem em **Histórias → Importar**. Para reutilizar o mesmo armazenamento, sirva o build no mesmo endereço e porta. Antes de voltar para uma versão anterior do Vésper, exporte as histórias abertas na versão atual e importe os pacotes na versão anterior.
+
+O Vésper guarda as imagens de histórias e fichas em formato binário no IndexedDB. Os backups JSON continuam autocontidos e aceitam as imagens gravadas pelas versões antigas.
 
 ## Como jogar
 
@@ -57,10 +67,25 @@ Na mesa, abra **Som** (embaixo) → **Escolher pasta** e escolha a pasta `Sons`.
 
 ## Para quem quer mexer no código
 
-HTML, CSS e JavaScript puro, sem build. A conexão entre jogadores usa [PeerJS](https://peerjs.com) (WebRTC).
+Vite compila a mesa, a ficha e os cadastros. Os módulos legados compartilham `window.App` durante a transição para TypeScript e Svelte. A conexão entre jogadores usa [PeerJS](https://peerjs.com) empacotado no build.
+
+```sh
+npm run build        # gera dist/
+npm run preview      # testa o build localmente
+npm run typecheck
+npm test
+npm run test:browser # usa o Chrome instalado
+```
+
+Os comandos e resultados de performance estão no [relatório do Plano 55](benchmarks/README.md).
+
+Publique `dist/` em uma hospedagem estática. Os caminhos relativos permitem hospedar na raiz ou em um subdiretório. Os importadores continuam em `tools/`; execute-os antes do build para incluir o conteúdo gerado. O build copia `data/`, `imagens/`, `Sons/` e `wiki/`, incluindo os recursos locais presentes nessas pastas. Revise esses arquivos antes de publicar.
+
+As sessões negociam a versão do protocolo. A versão 2 envia imagens em blocos mediante pedido do jogador. Sessões com a versão 1 usam o formato de imagens anterior.
 
 ```
 index.html     menu inicial e layout da mesa
+src/           entradas Vite, componentes Svelte, geometria e serviços TypeScript
 css/style.css  visual
 js/store.js    estado da mesa e regras de permissão (o coração do sistema)
 js/ui.js       painéis, fichas, combate, cenas

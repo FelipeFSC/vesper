@@ -137,7 +137,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     F.select(a.id); await W(20);
 
     // Exportar: mesmo formato da mesa, com a imagem
-    const bun = F.bundle(a);
+    const bun = await F.bundle(a);
     ok(bun.format === 'mesarpg-actor' && bun.version === 1 && bun.assets[a.img], 'formato do arquivo');
     log.push('arquivo: ' + bun.format + ' · imagens ' + Object.keys(bun.assets).length + ' · ' + JSON.stringify(bun).length + ' bytes');
     // Importar de volta: ficha nova, igual

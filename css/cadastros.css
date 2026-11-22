@@ -24,6 +24,9 @@
 .cd-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 6px 9px; color: inherit; cursor: pointer; }
 .cd-item:hover { background: var(--panel2); }
 .cd-item.on { background: var(--accent-soft); border-color: var(--accent); }
+.cd-list:focus-visible .cd-item.cd-active { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+.cd-virtual { flex: none; position: relative; }
+.cd-virtual .cd-item { position: absolute; top: 0; left: 0; height: 49px; overflow: hidden; }
 .cd-item-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .cd-item-top b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .cd-src { margin-left: auto; font: 10.5px var(--mono); color: var(--faint); white-space: nowrap; }
