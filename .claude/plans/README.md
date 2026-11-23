@@ -85,3 +85,5 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 59 | [Hífen no título do assistente D&D](59-hifen-no-passo-a-passo.md) | Concluído |
 | 60 | [Filtro de fonte por edição](60-filtro-fonte-por-edicao.md) | Concluído |
 | 61 | [Edição das subclasses na etapa Classe](61-filtro-edicao-subclasses.md) | Concluído |
+| 62 | [Nomes das fontes importadas do 5etools](62-nomes-das-fontes-5etools.md) | Concluído |
+| 63 | [Datas e edições das fontes do 5etools](63-datas-e-edicoes-das-fontes.md) | Proposto |

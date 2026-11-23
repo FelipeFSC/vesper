@@ -1,17 +1,17 @@
 /* Gerado por tools/importar-cadastros.mjs (Plano 42). Mesmo conteúdo de attacks.json. */
 (window.VesperCadastros = window.VesperCadastros || {})["attacks"] = {
  "from": "5etools",
- "generatedAt": "2026-11-20",
+ "generatedAt": "2026-11-23",
  "sources": {
   "DMG": "Dungeon Master's Guide (2014)",
-  "EEPC": "EEPC",
+  "EEPC": "Elemental Evil Player's Companion",
   "EFA": "Eberron: Forge of the Artificer",
   "FTD": "Fizban's Treasury of Dragons",
   "GGR": "Guildmasters' Guide to Ravnica",
   "MOT": "Mythic Odysseys of Theros",
   "MPMM": "Mordenkainen Presents: Monsters of the Multiverse",
   "PHB": "Player's Handbook (2014)",
-  "PSA": "PSA",
+  "PSA": "Plane Shift: Amonkhet",
   "RHW": "Ravenloft: The Horrors Within",
   "TTP": "The Tortle Package",
   "VGM": "Volo's Guide to Monsters",
