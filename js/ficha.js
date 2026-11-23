@@ -101,8 +101,8 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       h('div', { class: 'win-head' }, ic('scroll-text'), h('span', { class: 'win-title' }, 'Nova ficha: ' + KIND[kind]), iconBtn('x', 'Fechar', close)),
       h('div', { class: 'win-body' }, h('div', { class: 'f5-kind' },
         h('button', { 'data-sys': 'generic', onclick: () => pickIt('generic') }, ic('list-ordered'), h('b', {}, 'Genérica'), h('small', {}, 'Atributos, barras e ações livres. Serve para qualquer sistema.')),
-        h('button', { 'data-sys': '5e', onclick: () => pickIt('5e') }, ic('shield'), h('b', {}, 'D&D 5e'), h('small', {}, 'Ficha completa: atributos, perícias, ataques, magias, inventário, ligada aos cadastros. Você preenche.')),
-        h('button', { 'data-sys': '5e-assist', onclick: () => { close(); App.Assist5e.open({ onDone: (res) => { const a = newActor(kind, '5e'); edit((x) => { x.dnd5e = res.d; if (res.name) x.name = res.name; App.Regras5e.apply(x); }); void a; } }); } }, ic('wand'), h('b', {}, 'D&D 5e passo a passo'), h('small', {}, 'O assistente pergunta classe, espécie, antecedente, atributos e escolhas, e monta a ficha.'))))));
+        h('button', { 'data-sys': '5e', onclick: () => pickIt('5e') }, ic('shield'), h('b', {}, 'D&D 5ª Edição'), h('small', {}, 'Ficha completa: atributos, perícias, ataques, magias, inventário, ligada aos cadastros. Você preenche.')),
+        h('button', { 'data-sys': '5e-assist', onclick: () => { close(); App.Assist5e.open({ onDone: (res) => { const a = newActor(kind, '5e'); edit((x) => { x.dnd5e = res.d; if (res.name) x.name = res.name; App.Regras5e.apply(x); }); void a; } }); } }, ic('wand'), h('b', {}, 'D&D 5ª Edição - Passo a Passo'), h('small', {}, 'O assistente pergunta classe, espécie, antecedente, atributos e escolhas, e monta a ficha.'))))));
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
     document.body.append(back);
   }
