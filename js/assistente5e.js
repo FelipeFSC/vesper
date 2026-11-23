@@ -628,7 +628,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     };
     const editionControl = () => h('label', { class: 'check-row small-text', 'data-edition-filter': tab },
       h('input', { type: 'checkbox', checked: edOnly, onchange: (e) => changeEdition(e.target.checked) }), 'Só da edição ' + editionName(st.edicao));
-    const sources = D5.sourceControl(candidates, (A5.sourceFilters || {})[tab], (value) => { (A5.sourceFilters = A5.sourceFilters || {})[tab] = value; fill(); }, tab === 'classes' ? { top: editionControl } : {});
+    const sources = D5.sourceControl(candidates, (A5.sourceFilters || {})[tab], (value) => { (A5.sourceFilters = A5.sourceFilters || {})[tab] = value; fill(); }, { top: editionControl });
     const fill = () => {
       list.innerHTML = '';
       const words = U.slug(q).split(/[_-]+/).filter(Boolean);
@@ -637,8 +637,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       for (const r of L.slice(0, 300)) list.append(h('button', { class: 'a5-item' + (r.id === current ? ' on' : ''), 'data-id': r.id, onclick: () => onPick(r) }, h('b', {}, r.name), h('small', {}, sub ? sub(r) : [editionName(r.edition), D5.srcName(r.source)].filter(Boolean).join(' · '))));
       if (!L.length) list.append(h('p', { class: 'empty' }, 'Nada encontrado.'));
     };
-    put(wrap, h('div', { class: 'a5-search-row' }, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-q-' + tab, oninput: (e) => { q = e.target.value; (A5.q = A5.q || {})[tab] = q; fill(); } })), sources.element),
-      tab === 'classes' ? null : h('label', { class: 'check-row small-text muted' }, h('input', { type: 'checkbox', checked: edOnly, onchange: (e) => changeEdition(e.target.checked) }), 'Só da edição ' + editionName(st.edicao)), list);
+    put(wrap, h('div', { class: 'a5-search-row' }, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-q-' + tab, oninput: (e) => { q = e.target.value; (A5.q = A5.q || {})[tab] = q; fill(); } })), sources.element), list);
     fill();
     setTimeout(() => { const on = list.querySelector('.a5-item.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' }); }, 0);
     return wrap;

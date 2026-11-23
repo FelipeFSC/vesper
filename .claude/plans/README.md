@@ -87,3 +87,4 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 61 | [Edição das subclasses na etapa Classe](61-filtro-edicao-subclasses.md) | Concluído |
 | 62 | [Nomes das fontes importadas do 5etools](62-nomes-das-fontes-5etools.md) | Concluído |
 | 63 | [Datas e edições das fontes do 5etools](63-datas-e-edicoes-das-fontes.md) | Proposto |
+| 64 | [Filtro de edição dentro de Fonte no assistente](64-filtro-edicao-no-menu-fonte-do-assistente.md) | Concluído |

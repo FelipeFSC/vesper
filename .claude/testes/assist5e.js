@@ -30,6 +30,15 @@ window.addEventListener('load', () => setTimeout(async () => {
     for (let i = 0; i < 200 && !$('.a5-steps'); i++) await W(50);
     ok($('.a5') && $$('.a5-steps button').length >= 8, 'assistente aberto com as etapas');
     ok($('[data-f="a5-ed"]')?.selectedOptions[0].textContent === '5.5e (2024)', 'rótulo da edição 2024');
+    await change($('[data-f="a5-ed"]'), '2014', 'edição 2014');
+    for (const [tab, stepId] of [['species', 'especie'], ['backgrounds', 'antecedente']]) {
+      await step(stepId);
+      ok(!$('.a5-list > label'), 'sem checkbox externo em ' + stepId);
+      await click('.a5-search-row .f5-source-filter > button', 'Fonte em ' + stepId);
+      ok($(`[data-edition-filter="${tab}"]`)?.textContent.includes('Só da edição 5e (2014)'), 'edição 2014 dentro de Fonte em ' + stepId);
+    }
+    await step('regras');
+    await change($('[data-f="a5-ed"]'), '2024', 'edição 2024');
     await change($('[data-f="a5-name"]'), 'Lia Folhaverde');
     await change($('[data-f="a5-level"]'), '5');
     await step('classe');
@@ -53,9 +62,35 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok(A5.st.classId === 'wizard-xphb' && A5.st.subId === 'wizard-xphb--evoker-xphb', 'classe e subclasse');
     if (shot === 'shotclasse') { await W(300); return; }
     await step('especie');
+    ok(!$('.a5-list > label'), 'sem checkbox externo em Espécie');
+    await click('.a5-search-row .f5-source-filter > button', 'Fonte em Espécie');
+    ok($('[data-edition-filter="species"]')?.textContent.includes('Só da edição 5.5e (2024)'), 'edição 2024 dentro de Fonte em Espécie');
+    await click('[data-edition-filter="species"] input', 'mostrar espécies das duas edições');
+    ok($('.a5-item[data-id="elf-phb"]'), 'espécie de 2014 aparece ao mostrar as duas edições');
+    await click('[data-edition-filter="species"] input', 'voltar às espécies de 2024');
+    ok(!$('.a5-item[data-id="elf-phb"]') && $('.a5-item[data-id="elf-xphb"]'), 'lista de espécies volta a 2024');
+    const spSourcesBefore = JSON.stringify(A5.sourceFilters?.species || null);
+    const spXphb = [...$$('.a5-search-row .f5-source-menu label')].find((x) => /Player.s Handbook \(2024\)/.test(x.textContent));
+    ok(spXphb, 'fonte XPHB em Espécie');
+    if (spXphb) {
+      spXphb.querySelector('input').click(); await W(40);
+      const picked = JSON.stringify(A5.sourceFilters?.species || null);
+      ok(picked !== spSourcesBefore, 'filtro de fonte muda em Espécie');
+      await click('[data-edition-filter="species"] input', 'mostrar edições com fonte escolhida');
+      ok(JSON.stringify(A5.sourceFilters?.species || null) === picked, 'filtro de fonte permanece após mudar edição');
+      await click('.a5-search-row .f5-source-reset', 'limpar fonte em Espécie');
+      await click('[data-edition-filter="species"] input', 'voltar à edição 2024');
+    }
     await click('.a5-item[data-id="elf-xphb"]', 'Elf 2024');
     await change($('[data-f="a5-spopt"]'), 'High Elf Lineage', 'linhagem');
     await step('antecedente');
+    ok(!$('.a5-list > label'), 'sem checkbox externo em Antecedente');
+    await click('.a5-search-row .f5-source-filter > button', 'Fonte em Antecedente');
+    ok($('[data-edition-filter="backgrounds"]')?.textContent.includes('Só da edição 5.5e (2024)'), 'edição 2024 dentro de Fonte em Antecedente');
+    await click('[data-edition-filter="backgrounds"] input', 'mostrar antecedentes das duas edições');
+    ok($('.a5-item[data-id="sage-phb"]'), 'antecedente de 2014 aparece ao mostrar as duas edições');
+    await click('[data-edition-filter="backgrounds"] input', 'voltar aos antecedentes de 2024');
+    ok(!$('.a5-item[data-id="sage-phb"]') && $('.a5-item[data-id="sage-xphb"]'), 'lista de antecedentes volta a 2024');
     await click('.a5-item[data-id="sage-xphb"]', 'Sage 2024');
     ok($('.a5-detail details[open]')?.textContent.includes('Texto do antecedente'), 'texto 2024 aberto');
     await click('[data-f="a5-bg-free-ability"]', 'atributos livres');
