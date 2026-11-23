@@ -11,6 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL, fileURLToPath } from 'url';
+import { sourceNames } from './fontes-5etools.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, '..', 'data', '5etools');
@@ -38,13 +39,18 @@ const fluffBy = new Map(fluffs.map((f) => [key(f.name, f.source), f]));
 
 // Nomes dos livros e aventuras
 const books = {};
+const allBooks = [];
 const addBooks = (file, prop, group) => {
   try {
-    for (const b of JSON.parse(fs.readFileSync(path.join(SRC, 'data', file), 'utf8'))[prop] || []) books[b.source || b.id] = { name: b.name, group, date: b.published || '' };
+    for (const b of JSON.parse(fs.readFileSync(path.join(SRC, 'data', file), 'utf8'))[prop] || []) {
+      allBooks.push(b);
+      if ((b.source || b.id) && !books[b.source || b.id]) books[b.source || b.id] = { name: b.name, group, date: b.published || '' };
+    }
   } catch { /* sem o arquivo: fica só a sigla */ }
 };
 addBooks('books.json', 'book', 'livro');
 addBooks('adventures.json', 'adventure', 'aventura');
+const sourceName = sourceNames(allBooks);
 
 const mediaUrl = (href) => {
   if (!href) return null;
@@ -95,7 +101,7 @@ fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 const head = "'use strict';\n/* Gerado por tools/importar-5etools.mjs a partir do 5etools-src do usuário. Não edite à mão; não vai para o git. */\nwindow.App = window.App || {};\n";
 const usedBooks = {};
-for (const s of Object.keys(byBook)) usedBooks[s] = books[s] || { name: s, group: 'outro', date: '' };
+for (const s of Object.keys(byBook)) usedBooks[s] = books[s] ? { ...books[s], name: sourceName(s) } : { name: sourceName(s), group: 'outro', date: '' };
 fs.writeFileSync(path.join(OUT, 'indice.js'), head + 'window.App.BESTIARY5E_INDEX = ' + JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), imgBase: IMG_BASE, books: usedBooks, list: index }) + ';\n');
 let total = 0;
 for (const [s, list] of Object.entries(byBook)) {

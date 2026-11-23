@@ -141,12 +141,67 @@ window.addEventListener('load', () => setTimeout(async () => {
     await pick('pick-sub', 'evoker', 'wizard-xphb--evoker-xphb');
     ok(F.actors[w.id].dnd5e.classes[0].sub && F.actors[w.id].dnd5e.classes[0].sub.name === 'Evoker', 'subclasse');
     await tab('magias');
+    $('[data-act="spell-add"]').click();
+    const modalSearch = $('.f5-pick input[data-f="f5-pick-q"]');
+    modalSearch.value = 'fireball'; modalSearch.dispatchEvent(new Event('input'));
+    for (let i = 0; i < 100 && !$('.f5-pick-item[data-id="fireball-xphb"]'); i++) await W(50);
+    const modalBook = $('.f5-pick-spell:has([data-id="fireball-xphb"]) .f5-spell-book-btn');
+    ok(modalBook && !modalBook.parentElement.closest('button'), 'livro separado da escolha no cadastro');
+    modalBook?.click();
+    ok($('#f5-spell-book')?.textContent.includes(App.Dados5e.byId.spells.get('fireball-xphb').higher.text), 'janela de escolha mostra níveis superiores');
+    const afterText = (node, earlier) => !!(earlier.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const fireballPanel = $('#f5-spell-book');
+    const fireballOrigins = fireballPanel?.querySelector('.f5-spell-book-origins');
+    ok(fireballOrigins && afterText(fireballOrigins, fireballPanel.querySelector('.f5-text')) && afterText(fireballOrigins, fireballPanel.querySelector('.f5-spell-book-facts:not(.f5-spell-book-origins)')), 'origens após a descrição e os dados');
+    ok(fireballPanel?.lastElementChild === fireballOrigins, 'origens no fim do tooltip, após nível superior');
+    const bookLabel = (name) => [...$$('#f5-spell-book .f5-spell-book-facts small')].find((el) => el.textContent === name);
+    ok(getComputedStyle(bookLabel('Área')).color === 'rgb(95, 94, 106)', 'Área conserva cor padrão');
+    ok(F.actors[w.id].dnd5e.magia.list.length === 0, 'livro não adiciona magia');
+    modalSearch.value = 'disguise self'; modalSearch.dispatchEvent(new Event('input'));
+    const disguise = $('.f5-pick-spell:has([data-id="disguise-self-xphb"]) .f5-spell-book-btn');
+    ok(disguise, 'Disguise Self na lista');
+    disguise?.click();
+    const disguiseText = $('#f5-spell-book')?.textContent || '';
+    for (const value of ['Disguise Self', '1º nível', 'Illusion', 'Conjuração', 'Alcance', 'Componentes', 'Duração', 'Player\'s Handbook (2024)', 'p. 262', 'Classes', 'Wizard']) ok(disguiseText.includes(value), 'Disguise Self mostra ' + value);
+    ok(!/\bnull\b/.test(disguiseText), 'Disguise Self sem null');
+    const colors = [
+      [['Nível', 'Escola', 'Edição', 'Conjuração', 'Alcance', 'Componentes', 'Duração', 'Ritual', 'Concentração'], 'rgb(180, 163, 255)'],
+      [['Espécies'], 'rgb(79, 178, 122)'], [['Subclasses'], 'rgb(91, 139, 224)'],
+      [['Talentos'], 'rgb(217, 87, 79)'], [['Classes', 'Opções de classe'], 'rgb(217, 164, 65)'],
+      [['Antecedentes'], 'rgb(184, 135, 99)'],
+    ];
+    for (const [labels, color] of colors) for (const label of labels) {
+      const title = bookLabel(label);
+      ok(title && getComputedStyle(title).color === color, 'cor do título ' + label);
+      ok(title && getComputedStyle(title.parentElement).color === getComputedStyle($('#f5-spell-book')).color, 'valor sem cor do título ' + label);
+    }
+    const disguisePanel = $('#f5-spell-book'), disguiseOrigins = disguisePanel?.querySelector('.f5-spell-book-origins');
+    ok(disguiseOrigins && disguiseOrigins.querySelectorAll('small').length === 5, 'cinco grupos de origem de Disguise Self');
+    ok(disguisePanel?.lastElementChild === disguiseOrigins && afterText(disguiseOrigins, disguisePanel.querySelector('.f5-text')), 'grupos de origem abaixo da descrição');
+    [...$$('.f5-pick-opts label')].find((label) => /Só das listas/.test(label.textContent))?.querySelector('input')?.click();
+    modalSearch.value = 'glibness'; modalSearch.dispatchEvent(new Event('input'));
+    const glibnessBook = $('.f5-pick-spell:has([data-id="glibness-xphb"]) .f5-spell-book-btn');
+    ok(glibnessBook, 'Glibness sem grupos na lista');
+    glibnessBook?.click();
+    ok($('#f5-spell-book') && !$('#f5-spell-book .f5-spell-book-origins'), 'bloco inferior omitido quando não há grupos');
+    $('.f5-pick-back').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    ok(!$('#f5-spell-book'), 'fechar janela fecha livro');
     await pick('spell-add', 'fire bolt', 'fire-bolt-xphb');
     await pick('spell-add', 'fireball', 'fireball-xphb');
     await pick('spell-add', 'magic missile', 'magic-missile-xphb');
     await pick('spell-add', 'shield', 'shield-xphb');
     let x = F.actors[w.id];
     ok(x.dnd5e.magia.list.length === 4 && x.dnd5e.attacks.length === 3, 'magias e ataques delas (' + x.dnd5e.magia.list.length + ', ' + x.dnd5e.attacks.length + ')');
+    const fireballRow = [...$$('.f5-spell')].find((row) => row.querySelector('.f5-spell-name')?.textContent === 'Fireball');
+    fireballRow.querySelector('.f5-spell-book-btn').click();
+    for (let i = 0; i < 100 && !$('#f5-spell-book')?.textContent.includes('Componentes'); i++) await W(50);
+    const whole = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const saved = x.dnd5e.magia.list.find((s) => s.name === 'Fireball').text;
+    ok(saved.split(/\n{2,}/).filter(Boolean).every((part) => whole($('#f5-spell-book')?.textContent).includes(whole(part))), 'ficha mostra todo o texto salvo');
+    ok($('#f5-spell-book')?.textContent.includes('Componentes') && $('#f5-spell-book')?.textContent.includes('Salvaguarda'), 'ficha consulta os dados completos da magia');
+    const panelRect = $('#f5-spell-book').getBoundingClientRect();
+    ok(panelRect.right <= innerWidth && panelRect.bottom <= innerHeight, 'livro cabe na tela');
+    App.Ficha5e.closeSpellBook();
     ok(box('spellDc') === '14' && box('spellAtk') === '+6', 'CD 14 e ataque +6');
     ok(x.bars.map((b) => b.name + ' ' + b.max).join('|') === 'PV 22|Espaços 1º 4|Espaços 2º 3|Espaços 3º 2', 'barras de espaços (' + x.bars.map((b) => b.name + ' ' + b.max).join('|') + ')');
     $('[data-prep]').click(); await W(40);

@@ -636,7 +636,7 @@ div.hud-name { padding: 1px 0 !important; margin: 0; }
 .hud-section { display: flex; flex-direction: column; gap: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { font-size: 11px; background: rgba(210, 162, 76, .12); color: var(--gold); border: 1px solid rgba(210, 162, 76, .3); border-radius: 99px; padding: 2px 9px; cursor: pointer; }
-.chip:hover { text-decoration: line-through; }
+.chip:hover { text-decoration: none; background: var(--panel3); border-color: var(--accent); }
 .hud-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 #props-slot .hud-acts { grid-template-columns: 1fr; }
 #token-hud.floating .act-btn small { display: none; }

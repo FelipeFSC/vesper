@@ -79,3 +79,15 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 53 | [Ficha de criatura 5e (bestiário fiel ao livro)](53-ficha-de-criatura-5e.md) | Implementado (testes do usuário) |
 | 54 | [Etapa de atributos do assistente no modelo do Roll20](54-etapa-de-atributos-modelo-roll20.md) | Implementado (testes do usuário) |
 | 55 | [Migração do frontend e performance do VTT](55-migracao-frontend-e-performance.md) | Em andamento |
+| 56 | [Código e senha da mesa online](56-codigo-e-senha-da-mesa.md) | Implementado |
+| 57 | [Janela, parede mágica, desenhar por cima e pontas conectadas](57-janela-parede-magica-e-substituir.md) | Implementado |
+| 58 | [Ajustes na criação de personagem D&D 5e](58-ajustes-criacao-personagem-5e.md) | Concluído |
+| 59 | [Hífen no título do assistente D&D](59-hifen-no-passo-a-passo.md) | Concluído |
+| 60 | [Filtro de fonte por edição](60-filtro-fonte-por-edicao.md) | Concluído |
+| 61 | [Edição das subclasses na etapa Classe](61-filtro-edicao-subclasses.md) | Concluído |
+| 62 | [Nomes das fontes importadas do 5etools](62-nomes-das-fontes-5etools.md) | Concluído |
+| 63 | [Datas e edições das fontes do 5etools](63-datas-e-edicoes-das-fontes.md) | Proposto |
+| 64 | [Filtro de edição dentro de Fonte no assistente](64-filtro-edicao-no-menu-fonte-do-assistente.md) | Concluído |
+| 65 | [Descrição das magias e cores no assistente](65-descricao-das-magias-e-cores-no-assistente.md) | Concluído |
+| 66 | [Cores dos títulos do tooltip de magias](66-cores-dos-titulos-do-tooltip-de-magias.md) | Concluído |
+| 67 | [Origens das magias abaixo da descrição](67-origem-das-magias-abaixo-da-descricao.md) | Concluído |

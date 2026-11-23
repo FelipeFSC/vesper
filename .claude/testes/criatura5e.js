@@ -67,6 +67,11 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok($('.f5-sb-cast') && /CD 20/.test($('.f5-sb-cast').textContent) && /\+12 ataque/.test($('.f5-sb-cast').textContent), 'conjuração do Lich: CD 20, +12');
     const fbBtn = $$('.f5-sb-spell').find((x) => /^fireball/i.test(x.textContent));
     ok(fbBtn, 'Fireball na lista');
+    fbBtn.closest('.f5-sb-spell-entry').querySelector('.f5-spell-book-btn').click();
+    for (let i = 0; i < 100 && !/streak|explodes/i.test($('#f5-spell-book')?.textContent || ''); i++) await W(50);
+    ok(/streak|explodes/i.test($('#f5-spell-book')?.textContent || '') && /higher|level/i.test($('#f5-spell-book')?.textContent || ''), 'livro da criatura mostra descrição e níveis superiores');
+    ok(!$('.f5-sb-sptext'), 'livro não expande o nome da magia');
+    App.Ficha5e.closeSpellBook();
     fbBtn.click();
     for (let i = 0; i < 100 && !(($('.f5-sb-sptext') || {}).textContent || '').match(/streak|explodes/i); i++) await W(50);
     ok(/streak|explodes/i.test(($('.f5-sb-sptext') || {}).textContent || ''), 'texto da Fireball do cadastro');

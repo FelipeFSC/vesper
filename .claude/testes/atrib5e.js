@@ -54,6 +54,8 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok(/27 \/ 27/.test($('.a5-pb-count').textContent), '27 / 27 com tudo em 8');
     for (const k of ['str', 'dex', 'con']) await change($('[data-f="a5-pb-' + k + '"]'), '15', k + ' 15');
     ok(/0 \/ 27/.test($('.a5-pb-count').textContent), '15/15/15 gasta tudo');
+    const P = A5.preview();
+    ok(P.d.abil.int === 10 && P.d.abil.con === 16 && /8 \+ 2 = 10/.test(card('int').textContent) && /27 pontos/.test($('.a5-attr-left').textContent), 'bônus do antecedente separado dos 27 pontos');
     await change($('[data-f="a5-pb-int"]'), '9', 'Int 9');
     ok(/-1 \/ 27/.test($('.a5-pb-count').textContent) && $('.a5-pb-num.bad') && /Compra de pontos: 28/.test((A5.warnings().atributos || []).join(' ')), 'passou: −1 e aviso');
     if (shot === 'shotpb') { await W(300); return; }

@@ -16,6 +16,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
   const { U } = App;
   const h = U.h;
   const R = App.Regras5e;
+  const editionName = App.Dados5e.editionName;
   const ic = (n, cls) => { const t = document.createElement('template'); t.innerHTML = App.Icons.svg(n, cls); return t.content.firstChild; };
   const btnI = (icon, label, attrs = {}) => h('button', Object.assign({ class: 'btn small' }, attrs), ic(icon), label);
   const iconBtn = (icon, title, onclick, attrs = {}) => h('button', Object.assign({ class: 'icon-btn', title, 'aria-label': title, onclick }, attrs), ic(icon));
@@ -75,52 +76,166 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     return box;
   }
 
+  // Painel único para todas as listagens de magias da ficha e do assistente.
+  let spellBook = null;
+  F5.closeSpellBook = (restoreFocus = false) => {
+    if (!spellBook) return;
+    const { panel, button, outside, escape, reposition } = spellBook;
+    spellBook = null;
+    panel.remove();
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', outside, true);
+    document.removeEventListener('keydown', escape, true);
+    window.removeEventListener('scroll', reposition, true);
+    window.removeEventListener('resize', reposition);
+    if (restoreFocus && button.isConnected) button.focus();
+  };
+  const spellBookLabelColors = Object.assign(Object.fromEntries([
+    'Nível', 'Escola', 'Edição', 'Conjuração', 'Alcance', 'Componentes', 'Duração', 'Ritual', 'Concentração', 'Classes adicionais',
+  ].map((label) => [label, 'purple'])), {
+    Classes: 'yellow', Espécies: 'green', Subclasses: 'blue', Talentos: 'red', 'Opções de classe': 'yellow', Antecedentes: 'brown',
+  });
+  function spellBookContent(panel, spell) {
+    const s = spell || {}, source = s.source ? App.Dados5e.srcName(s.source) : '';
+    const distance = (value) => App.Units ? App.Units.dist(Number(value)) : value + ' m';
+    const time = typeof s.time === 'object' && s.time ? [s.time.number, ({ action: 'ação', bonus: 'ação bônus', reaction: 'reação', minute: 'minuto', hour: 'hora', round: 'rodada', day: 'dia', special: 'especial' })[s.time.unit] || s.time.unit, s.time.condition].filter(Boolean).join(' · ') : s.time;
+    const range = typeof s.range === 'object' && s.range ? (s.range.kind === 'distance' && s.range.distance != null ? distance(s.range.distance) : ({ self: 'Pessoal', touch: 'Toque', sight: 'Visão', unlimited: 'Ilimitado', special: 'Especial' })[s.range.kind] || s.range.kind) : s.range;
+    const area = s.area?.shape ? [s.area.shape, s.area.size != null ? distance(s.area.size) : '', s.area.width != null ? 'largura ' + distance(s.area.width) : ''].filter(Boolean).join(' · ') : '';
+    const c = s.components;
+    const components = c && typeof c === 'object' ? [c.v && 'V', c.s && 'S', c.m && 'M'].filter(Boolean).join(', ') + (c.material ? ' · ' + c.material : '') + (c.cost != null ? ' · ' + (c.cost / 100).toLocaleString('pt-BR') + ' gp' : '') + (c.consume ? ' · consumido' : '') : s.comp;
+    const d = s.duration;
+    const duration = d && typeof d === 'object' ? [d.concentration && 'Concentração', d.type === 'timed' ? [d.amount, ({ round: 'rodada', minute: 'minuto', hour: 'hora', day: 'dia' })[d.unit] || d.unit].filter(Boolean).join(' ') : ({ instant: 'Instantânea', permanent: 'Permanente', special: 'Especial' })[d.type] || d.type, d.ends].filter(Boolean).join(' · ') : s.dur;
+    const rows = [], origins = [];
+    const row = (label, value, target = rows) => { if (value != null && value !== '') target.push(h('span', {}, h('small', { class: spellBookLabelColors[label] ? 'f5-book-' + spellBookLabelColors[label] : '' }, label), String(value))); };
+    row('Nível', s.level === 0 ? 'Truque' : s.level != null ? s.level + 'º nível' : '');
+    row('Escola', s.school);
+    row('Edição', App.Dados5e.editionName(s.edition));
+    row('Conjuração', time);
+    row('Alcance', range);
+    row('Área', area);
+    row('Componentes', components);
+    row('Duração', duration);
+    row('Ritual', s.ritual != null ? s.ritual ? 'Sim' : 'Não' : '');
+    row('Concentração', d && typeof d === 'object' ? d.concentration ? 'Sim' : 'Não' : s.conc != null ? s.conc ? 'Sim' : 'Não' : '');
+    row('Ataque', s.attack ? s.attack === 'melee' ? 'Corpo a corpo' : s.attack === 'ranged' ? 'À distância' : s.attack : '');
+    row('Salvaguarda', [s.save, ...(s.saveAlso || [])].filter(Boolean).map((x) => R.AB_PT[x] || x).join(', '));
+    row('Se passar', s.save ? s.onSuccess === 'half' ? 'Metade do dano' : 'Sem efeito' : '');
+    row('Dano', (s.damage || []).filter((x) => x?.dice).map((x) => x.dice + (x.type ? ' ' + x.type : '')).join(' + '));
+    row('Cura', s.heal);
+    row('Condições', (s.conditions || []).join(', '));
+    row('Dano por nível superior', s.higher?.perSlot);
+    row('Cura por nível superior', s.higher?.perSlotHeal);
+    row('Aumento do truque', s.higher?.cantrip ? Object.entries(s.higher.cantrip).map(([lv, value]) => 'nível ' + lv + ': ' + value).join(' · ') : '');
+    row('Classes', (s.classes || []).join(', '));
+    row('Classes adicionais', (s.classesExpanded || []).join(', '));
+    row('Subclasses', (s.subclasses || []).join(', '), origins);
+    for (const [key, label] of [['species', 'Espécies'], ['feats', 'Talentos'], ['backgrounds', 'Antecedentes'], ['options', 'Opções de classe']]) row(label, (s.grantedBy?.[key] || []).join(', '), origins);
+    const description = s.text || s.description || '';
+    const higher = s.higher?.text || '';
+    const parts = [h('b', { class: 'f5-spell-book-title' }, s.name || 'Magia'),
+      source ? h('small', { class: 'muted' }, 'Fonte: ' + source + (s.page ? ', p. ' + s.page : '')) : null,
+      rows.length ? h('div', { class: 'f5-kv f5-spell-book-facts' }, rows) : null,
+      description ? textView(description) : h('p', { class: 'muted' }, 'Descrição não disponível no cadastro.'),
+      higher && !description.includes(higher) ? h('div', {}, h('b', {}, 'Em níveis superiores'), textView(higher)) : null,
+      origins.length ? h('div', { class: 'f5-kv f5-spell-book-facts f5-spell-book-origins' }, origins) : null];
+    panel.replaceChildren(...parts.filter((part) => part != null));
+  }
+  const fullSpell = (s) => s.ref ? () => App.Dados5e.get('spells', s.ref).then((record) => {
+    if (!record) return s;
+    const catalogText = [record.description, record.higher?.text].filter(Boolean).join('\n\n');
+    return s.text && s.text !== catalogText ? Object.assign({}, record, { text: s.text }) : record;
+  }).catch(() => s) : s;
+  F5.spellBookButton = (spell, attrs = {}) => iconBtn('book-open', 'Ler descrição completa da magia', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const button = event.currentTarget;
+    if (spellBook && spellBook.button === button) { F5.closeSpellBook(); return; }
+    F5.closeSpellBook();
+    const panel = h('div', { class: 'f5-spell-book', id: 'f5-spell-book', role: 'dialog', 'aria-label': 'Descrição da magia', tabindex: '-1' });
+    const outside = (e) => { if (!panel.contains(e.target) && !button.contains(e.target)) F5.closeSpellBook(); };
+    const escape = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); F5.closeSpellBook(true); } };
+    const reposition = () => {
+      if (!button.isConnected) { F5.closeSpellBook(); return; }
+      const rect = button.getBoundingClientRect();
+      const width = panel.offsetWidth, height = panel.offsetHeight;
+      panel.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
+      const wantedTop = rect.bottom + 6 + height <= window.innerHeight - 8 ? rect.bottom + 6 : rect.top - height - 6;
+      panel.style.top = Math.max(8, Math.min(wantedTop, window.innerHeight - height - 8)) + 'px';
+    };
+    document.body.append(panel);
+    button.setAttribute('aria-expanded', 'true');
+    spellBook = { panel, button, outside, escape, reposition };
+    if (typeof spell === 'function') panel.append(h('p', { class: 'muted' }, 'Abrindo o cadastro…'));
+    else spellBookContent(panel, spell);
+    reposition();
+    panel.focus();
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', escape, true);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    if (typeof spell === 'function') Promise.resolve().then(spell).then((record) => {
+      if (spellBook?.panel !== panel) return;
+      spellBookContent(panel, record || { name: button.dataset.spellName });
+      reposition();
+    }).catch(() => {
+      if (spellBook?.panel === panel) spellBookContent(panel, { name: button.dataset.spellName });
+    });
+  }, Object.assign({ class: 'icon-btn f5-spell-book-btn', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'f5-spell-book', 'data-spell-name': typeof spell === 'function' ? '' : spell.name }, attrs));
+
   // ---------- Escolher de um cadastro ----------
   const SUB = {
-    classes: (r) => [r.edition, 'd' + r.hd, r.source].filter(Boolean).join(' · '),
-    subclasses: (r) => [r.className, r.edition, r.source].filter(Boolean).join(' · '),
-    species: (r) => [r.edition, r.source].filter(Boolean).join(' · '),
-    backgrounds: (r) => [r.edition, r.source].filter(Boolean).join(' · '),
-    feats: (r) => [r.category, r.edition, r.source].filter(Boolean).join(' · '),
-    spells: (r) => [r.level ? r.level + 'º nível' : 'Truque', r.school, (r.classes || []).join(', '), r.source].filter(Boolean).join(' · '),
-    items: (r) => [r.category, r.rarity && r.rarity !== 'None' ? r.rarity : '', r.weapon && r.weapon.damage ? r.weapon.damage.dice + ' ' + r.weapon.damage.type : '', r.armor ? 'CA ' + r.armor.ac : '', r.source].filter(Boolean).join(' · '),
-    attacks: (r) => [ATK_TYPES[r.type] || r.type, r.edition, r.source].filter(Boolean).join(' · '),
+    classes: (r) => [editionName(r.edition), 'd' + r.hd, r.source].filter(Boolean).join(' · '),
+    subclasses: (r) => [r.className, editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    species: (r) => [editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    backgrounds: (r) => [editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    feats: (r) => [r.category, editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    spells: (r) => [r.level ? r.level + 'º nível' : 'Truque', r.school, (r.classes || []).join(', '), editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    items: (r) => [r.category, r.rarity && r.rarity !== 'None' ? r.rarity : '', r.weapon && r.weapon.damage ? r.weapon.damage.dice + ' ' + r.weapon.damage.type : '', r.armor ? 'CA ' + r.armor.ac : '', editionName(r.edition), r.source].filter(Boolean).join(' · '),
+    attacks: (r) => [ATK_TYPES[r.type] || r.type, editionName(r.edition), r.source].filter(Boolean).join(' · '),
   };
   const TITLES = { classes: 'Escolher a classe', subclasses: 'Escolher a subclasse', species: 'Escolher a espécie', backgrounds: 'Escolher o antecedente', feats: 'Adicionar talento', spells: 'Adicionar magia', items: 'Adicionar item', attacks: 'Adicionar ataque' };
   F5.pick = function (tab, opts, onPick) {
     opts = opts || {};
     const back = h('div', { class: 'modal-back f5-pick-back' });
-    const close = () => back.remove();
+    const close = () => { F5.closeSpellBook(); back.remove(); };
     const list = h('div', { class: 'f5-pick-list' }, h('p', { class: 'muted' }, 'Abrindo o cadastro…'));
     let q = '', all = [], edOnly = !!opts.edition, extra = opts.extraOn !== false;
+    const candidates = () => all.filter((r) => (!edOnly || !r.edition || r.edition === opts.edition) && (!opts.filter || opts.filter(r)) && (!opts.extra || !extra || opts.extra.test(r)));
+    const sources = App.Dados5e.sourceControl(candidates, null, () => fill());
     const fill = () => {
+      F5.closeSpellBook();
       list.innerHTML = '';
       const words = U.slug(q).split(/[_-]+/).filter(Boolean);
-      const L = all.filter((r) => (!edOnly || !r.edition || r.edition === opts.edition) && (!opts.filter || opts.filter(r)) && (!opts.extra || !extra || opts.extra.test(r))
+      const L = candidates().filter((r) => sources.matches(r)
         && (!words.length || words.every((w) => U.slug(r.name + ' ' + (r.className || '') + ' ' + (r.source || '')).includes(w))));
       L.sort((x, y) => x.name.localeCompare(y.name));
       if (!L.length) { list.append(h('p', { class: 'empty' }, all.length ? 'Nada encontrado.' : 'Cadastro vazio.')); return; }
-      for (const r of L.slice(0, 200)) list.append(h('button', { class: 'f5-pick-item', 'data-id': r.id, onclick: () => { close(); onPick(r); } },
-        h('b', {}, r.name), h('small', {}, (SUB[tab] || (() => r.source))(r))));
+      for (const r of L.slice(0, 200)) {
+        const duplicate = tab === 'subclasses' && all.some((other) => other !== r && other.classId === r.classId && other.name === r.name && other.edition !== r.edition);
+        const item = h('button', { class: 'f5-pick-item', 'data-id': r.id, onclick: () => { close(); onPick(r); } },
+          h('b', {}, r.name + (duplicate ? ' (' + App.Dados5e.editionShort(r.edition) + ')' : '')), h('small', {}, (SUB[tab] || (() => r.source))(r)));
+        list.append(tab === 'spells' ? h('div', { class: 'f5-pick-spell' }, item, F5.spellBookButton(r)) : item);
+      }
       if (L.length > 200) list.append(h('p', { class: 'hint' }, 'Mostrando 200 de ' + L.length + '. Digite mais para filtrar.'));
     };
     const box = h('div', { class: 'modal f5-pick' },
       h('div', { class: 'win-head' }, ic('library'), h('span', { class: 'win-title' }, opts.title || TITLES[tab] || 'Escolher'), iconBtn('x', 'Fechar', close)),
       h('div', { class: 'win-body' },
-        h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', 'data-f': 'f5-pick-q', oninput: (e) => { q = e.target.value; fill(); } })),
+        h('div', { class: 'a5-search-row' }, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', 'data-f': 'f5-pick-q', oninput: (e) => { q = e.target.value; fill(); } })), sources.element),
         h('div', { class: 'row wrap f5-pick-opts' },
-          opts.edition ? h('label', { class: 'check-row' }, chk(edOnly, (v) => { edOnly = v; fill(); }), 'Só da edição ' + opts.edition) : null,
-          opts.extra ? h('label', { class: 'check-row' }, chk(extra, (v) => { extra = v; fill(); }), opts.extra.label) : null),
+          opts.edition ? h('label', { class: 'check-row' }, chk(edOnly, (v) => { edOnly = v; sources.refresh(); fill(); }), 'Só da edição ' + editionName(opts.edition)) : null,
+          opts.extra ? h('label', { class: 'check-row' }, chk(extra, (v) => { extra = v; sources.refresh(); fill(); }), opts.extra.label) : null),
         list));
     back.append(box);
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
     document.body.append(back);
-    App.Dados5e.load(tab).then((L) => { all = L; fill(); const s = box.querySelector('input'); if (s) s.focus(); })
+    App.Dados5e.load(tab).then((L) => { all = L; sources.refresh(); fill(); const s = box.querySelector('input[data-f="f5-pick-q"]'); if (s) s.focus(); })
       .catch((e) => { list.textContent = 'Não consegui abrir o cadastro: ' + e.message; });
   };
 
   // ---------- Desenho ----------
   F5.render = function (a, ctx) {
+    F5.closeSpellBook();
     const d = R.norm(U.clone(a.dnd5e || {}));
     const c = R.calc(Object.assign({}, a, { dnd5e: d }));
     const ro = !!ctx.ro;
@@ -203,7 +318,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
       h('div', { class: 'f5-who' }, av,
         h('div', { class: 'grow f5-who-txt' },
           h('input', { class: 'f5-name sheet-name', value: a.name, disabled: ro, 'data-f': 'f5-nome', 'aria-label': 'Nome', onchange: (e) => K.ctx.edit((x) => { x.name = e.target.value.trim() || x.name; }) }),
-          h('div', { class: 'f5-cls' }, h('b', {}, cls), ' · nível ', String(c.level), d.edicao ? h('span', { class: 'badge' }, d.edicao) : null),
+          h('div', { class: 'f5-cls' }, h('b', {}, cls), ' · nível ', String(c.level), d.edicao ? h('span', { class: 'badge' }, editionName(d.edicao)) : null),
           origin ? h('div', { class: 'f5-origin muted' }, origin) : null),
         !ro && App.Assist5e ? (d.classes[0] && d.classes[0].ref
           ? (c.level < 20 ? btnI('trending-up', 'Subir de nível', { class: 'btn small primary', 'data-act': 'level-up', onclick: () => App.Assist5e.open({ actor: a, onDone: (res) => K.ctx.edit((x) => { x.dnd5e = res.d; R.apply(x); }) }) }) : null)
@@ -318,7 +433,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     });
     return sec('scroll-text', 'Classe e origem', multi ? h('span', { class: 'muted small-text' }, 'nível ' + c.level + ' · dados de vida ' + c.hdTxt) : null,
       h('div', { class: 'f5-grid4' },
-        field('Edição', sel(ed, { 2024: '2024', 2014: '2014' }, (v) => upd((dd) => { dd.edicao = v; }), { disabled: ro, 'data-f': 'edicao' })),
+        field('Edição', sel(ed, { 2024: editionName('2024'), 2014: editionName('2014') }, (v) => upd((dd) => { dd.edicao = v; }), { disabled: ro, 'data-f': 'edicao' })),
         field('Espécie', pickBtn('Escolher…', d.especie && d.especie.name, () => F5.pick('species', { edition: ed }, (r) => upd((dd) => applySpecies(dd, r))), 'pick-species')),
         d.especie && d.especie.options && d.especie.options.length ? field(d.edicao === '2014' ? 'Sub-raça' : 'Linhagem', sel(d.especie.option || '', Object.assign({ '': 'Nenhuma' }, Object.fromEntries(d.especie.options.map((o) => [o, o]))),
           (v) => upd((dd) => { dd.especie.option = v; applySpeciesOption(dd, v); }), { disabled: ro, 'data-f': 'sp-opt' })) : null,
@@ -463,7 +578,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
       spendBtns,
       btnI('coffee', 'Descanso curto', { disabled: ro, 'data-act': 'short-rest', onclick: () => { upd((dd, x) => R.shortRest(x)); U.toast('Descanso curto: recursos de descanso curto e espaços de pacto recuperados.'); } }),
       btnI('moon', 'Descanso longo', { disabled: ro, 'data-act': 'long-rest', onclick: () => { upd((dd, x) => R.longRest(x)); U.toast('Descanso longo: PV, espaços, recursos e dados de vida recuperados.'); } })),
-    h('p', { class: 'hint' }, 'Dados de vida restantes: ' + left + ' de ' + c.hdTotal + (c.hdLeft.length > 1 ? ' (' + c.hdLeft.map((x) => x.left + 'd' + x.die).join(' + ') + ')' : '') + '. No descanso longo voltam ' + (d.edicao === '2014' ? 'metade' : 'todos') + ' (regra de ' + d.edicao + ').')));
+    h('p', { class: 'hint' }, 'Dados de vida restantes: ' + left + ' de ' + c.hdTotal + (c.hdLeft.length > 1 ? ' (' + c.hdLeft.map((x) => x.left + 'd' + x.die).join(' + ') + ')' : '') + '. No descanso longo voltam ' + (d.edicao === '2014' ? 'metade' : 'todos') + ' (regra de ' + editionName(d.edicao) + ').')));
   }
   function toggle(id) { if (F5.open.has(id)) F5.open.delete(id); else F5.open.add(id); }
 
@@ -581,6 +696,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
         s.level ? (s.always ? h('span', { class: 'f5-dot on ex', title: 'Sempre preparada' + (s.from ? ': ' + s.from : '') }) :
           h('button', { class: 'f5-dot' + (s.prepared ? ' on' : ''), disabled: ro, title: 'Preparada', 'data-prep': i, onclick: () => upd((dd) => { dd.magia.list[i].prepared = !dd.magia.list[i].prepared; }) })) : h('span', { class: 'f5-dot-sp' }),
         h('button', { class: 'f5-link f5-spell-name', onclick: () => { toggle(s.id); K.ctx.rerender(); } }, s.name),
+        F5.spellBookButton(fullSpell(s), { 'data-spell-name': s.name }),
         s.conc ? h('span', { class: 'tag', title: 'Concentração' }, 'C') : null,
         s.ritual ? h('span', { class: 'tag', title: 'Ritual' }, 'R') : null,
         s.from ? h('span', { class: 'muted small-text' }, s.from) : null,
@@ -885,12 +1001,12 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
           onclick: () => setG(gi, (gg) => { const p = gg.slots || gg.uses; p.cur = j < num(p.cur) ? j : j + 1; }) })), ' ') : null,
         (g.spells || []).map((sp, si) => {
           const key = 'npcsp:' + (sp.ref || sp.name);
-          return h('button', { class: 'f5-sb-spell' + (F5.open.has(key) ? ' on' : ''), title: sp.ref ? 'Ver o texto da magia (cadastro)' : 'Magia sem ligação no cadastro', 'data-spell5': sp.ref || sp.name,
+          return h('span', { class: 'f5-sb-spell-entry' }, h('button', { class: 'f5-sb-spell' + (F5.open.has(key) ? ' on' : ''), title: sp.ref ? 'Ver o texto da magia (cadastro)' : 'Magia sem ligação no cadastro', 'data-spell5': sp.ref || sp.name,
             onclick: () => {
               toggle(key);
               if (sp.ref && F5.open.has(key) && !F5.spellText[sp.ref]) App.Dados5e.get('spells', sp.ref).then((r) => { F5.spellText[sp.ref] = r || { name: sp.name, description: 'Não achei esta magia no cadastro.' }; K.ctx.rerender(); });
               K.ctx.rerender();
-            } }, sp.name + (si < g.spells.length - 1 ? ',' : ''));
+            } }, sp.name), F5.spellBookButton(() => sp.ref ? App.Dados5e.get('spells', sp.ref) : { name: sp.name }, { 'data-spell-name': sp.name }), si < g.spells.length - 1 ? ', ' : '');
         })));
       for (const sp of g.spells || []) {
         const key = 'npcsp:' + (sp.ref || sp.name);

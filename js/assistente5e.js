@@ -16,6 +16,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
   const { U } = App;
   const h = U.h;
   const R = App.Regras5e, D5 = App.Dados5e;
+  const editionName = D5.editionName;
   const ic = (n, cls) => { const t = document.createElement('template'); t.innerHTML = App.Icons.svg(n, cls); return t.content.firstChild; };
   const btnI = (icon, label, attrs = {}) => h('button', Object.assign({ class: 'btn small' }, attrs), ic(icon), label);
   const iconBtn = (icon, title, onclick, attrs = {}) => h('button', Object.assign({ class: 'icon-btn', title, 'aria-label': title, onclick }, attrs), ic(icon));
@@ -185,14 +186,28 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       });
     }
     if (isNew && bg) {
-      benefitChoices(out, bg.benefits, { key: 'bg', level: 0, source: bg.name });
-      (bg.feats || []).forEach((f, i) => { if (f.feat) featChoices(out, f.feat, { key: 'bgft:' + i, level: 0, groupPre: f.choice }); });
+      const benefits = clone(bg.benefits || {});
+      if (st.bgFreeAbility) for (const block of benefits.ability || []) {
+        if (block.weighted) block.weighted.from = R.AB;
+        if (block.choose) block.choose.from = R.AB;
+      }
+      benefitChoices(out, benefits, { key: 'bg', level: 0, source: bg.name });
+      (bg.feats || []).forEach((f, i) => {
+        const id = st.bgFreeFeat ? st.ch['bgft:' + i] : f.feat;
+        if (id) featChoices(out, id, { key: 'bgft:' + i, level: 0, groupPre: st.bgFreeFeat ? '' : f.choice });
+      });
     }
     // Aumentos de atributo da origem ficam na aba Atributos
     for (const c of out) c.tab = c.type === 'ability' && c.level === 0 ? 'atributos' : 'escolhas';
     return out;
   }
   const picks = (key) => [].concat(A5.st.ch[key] || []).filter((x) => x != null && x !== '');
+  const featMatches = (category, feat) => {
+    if (!category) return true;
+    if (category === 'Fighting Style/FS:P') return feat.category === 'Fighting Style' || feat.category === 'Fighting Style (Paladin)';
+    if (category === 'Fighting Style/FS:R') return feat.category === 'Fighting Style' || feat.category === 'Fighting Style (Ranger)';
+    return feat.category === category;
+  };
   function done(c) {
     const v = A5.st.ch[c.key];
     if (c.type === 'ability') { const blk = c.blocks[(v && v.alt) || 0] || {}; return !blk.choose && !blk.weighted || ((v && v.picks) || []).filter(Boolean).length >= (blk.weighted ? blk.weighted.weights.length : blk.choose.count); }
@@ -275,7 +290,18 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     if (st.mode === 'new' && bg) { F5.applyBackground(d, bg); fixedBenefits(bg.benefits, bg.name); }
     // Talentos (fixos do antecedente e da espécie, e os escolhidos)
     const featIds = [];
-    if (st.mode === 'new' && bg) (bg.feats || []).forEach((f, i) => { if (f.feat) featIds.push({ id: f.feat, key: 'bgft:' + i, pre: f.choice, name: f.name + (f.choice ? ' (' + f.choice + ')' : '') }); });
+    if (st.mode === 'new' && bg) {
+      d.antecedente.feats = [];
+      (bg.feats || []).forEach((f, i) => {
+        const id = st.bgFreeFeat ? st.ch['bgft:' + i] : f.feat;
+        const rec = byId('feats', id);
+        if (!id || !rec) return;
+        const pre = st.bgFreeFeat ? '' : f.choice;
+        const name = rec.name + (pre ? ' (' + pre + ')' : '');
+        d.antecedente.feats.push({ ref: id, name });
+        featIds.push({ id, key: 'bgft:' + i, pre, name });
+      });
+    }
     if (st.mode === 'new' && sp) (sp.feats || []).forEach((f, i) => { if (f.feat) featIds.push({ id: f.feat, key: 'spft:' + i }); });
     // Escolhas
     const all = needs();
@@ -399,7 +425,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       hpMethod: 'avg', hpRolls: {},
       classId: up ? c0.ref : null, subId: up && c0.sub ? c0.sub.ref : null,
       speciesId: d && d.especie ? d.especie.ref : null, speciesOpt: d && d.especie ? d.especie.option || '' : '', size: '',
-      bgId: d && d.antecedente ? d.antecedente.ref : null,
+      bgId: d && d.antecedente ? d.antecedente.ref : null, bgFreeAbility: false, bgFreeFeat: false,
       ch: {}, spells: { cantrips: [], list: [] }, equip: {}, base0: d, tab: up ? 'classe' : 'regras', ci: 0,
     };
   }
@@ -447,6 +473,8 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     if (st.mode === 'new') {
       if (!st.speciesId) add('especie', 'Escolha a espécie.');
       if (!st.bgId) add('antecedente', 'Escolha o antecedente.');
+      const bg = byId('backgrounds', st.bgId);
+      if (bg && st.bgFreeFeat) (bg.feats || []).forEach((f, i) => { if (f.feat && !st.ch['bgft:' + i]) add('antecedente', 'Escolha o Talento de Origem livre.'); });
       if (st.method === 'pointbuy' && pbSpent(st) > 27) add('atributos', 'Compra de pontos: ' + pbSpent(st) + ' de 27 pontos.');
       const empty = R.AB.filter((k) => chosen(k) == null);
       if (st.method === 'roll' && st.rolls.some((r) => !r)) add('atributos', 'Role os atributos (Rolar tudo).');
@@ -498,6 +526,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     document.body.append(back);
     let cancelled = false;
     function close() {
+      App.Ficha5e.closeSpellBook();
       cancelled = true;
       if (A5.cur?.back === back) {
         if (A5.cur.steps) void unmount(A5.cur.steps);
@@ -509,6 +538,8 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     if (cancelled) return;
     A5.actor = opts.actor || null;
     A5.st = fresh(opts.actor);
+    A5.sourceFilters = {};
+    A5.spellSources = {};
     A5.onDone = opts.onDone;
     A5.cur = { back, box, close };
     render();
@@ -519,6 +550,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
 
   function render(keepScroll) {
     if (!A5.cur) return;
+    App.Ficha5e.closeSpellBook();
     const st = A5.st, box = A5.cur.box;
     const old = box.querySelector('.a5-pane'), scroll = keepScroll && old ? old.scrollTop : 0;
     const act = document.activeElement, fkey = act && act.dataset && act.dataset.f;
@@ -585,16 +617,29 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     const wrap = h('div', { class: 'a5-list' });
     let q = (A5.q && A5.q[tab]) || '', edOnly = !(A5.edAll && A5.edAll[tab]);
     const list = h('div', { class: 'a5-list-items' });
+    const candidates = () => X[tab].filter((r) => (!edOnly || !r.edition || r.edition === st.edicao) && (!filter || filter(r)));
+    const changeEdition = (checked) => {
+      edOnly = checked;
+      (A5.edAll = A5.edAll || {})[tab] = !edOnly;
+      if (tab === 'classes') {
+        const selected = byId('subclasses', st.subId);
+        if (edOnly && selected?.edition && selected.edition !== st.edicao) st.subId = null;
+        render(true);
+        A5.cur?.box.querySelector('.a5-list .f5-source-filter > button')?.click();
+      } else { sources.refresh(); fill(); }
+    };
+    const editionControl = () => h('label', { class: 'check-row small-text', 'data-edition-filter': tab },
+      h('input', { type: 'checkbox', checked: edOnly, onchange: (e) => changeEdition(e.target.checked) }), 'Só da edição ' + editionName(st.edicao));
+    const sources = D5.sourceControl(candidates, (A5.sourceFilters || {})[tab], (value) => { (A5.sourceFilters = A5.sourceFilters || {})[tab] = value; fill(); }, { top: editionControl });
     const fill = () => {
       list.innerHTML = '';
       const words = U.slug(q).split(/[_-]+/).filter(Boolean);
-      const L = X[tab].filter((r) => (!edOnly || !r.edition || r.edition === st.edicao) && (!filter || filter(r)) && (!words.length || words.every((w) => U.slug(r.name + ' ' + (r.source || '')).includes(w))))
+      const L = candidates().filter((r) => sources.matches(r) && (!words.length || words.every((w) => U.slug(r.name + ' ' + (r.source || '')).includes(w))))
         .sort((a, b) => a.name.localeCompare(b.name));
-      for (const r of L.slice(0, 300)) list.append(h('button', { class: 'a5-item' + (r.id === current ? ' on' : ''), 'data-id': r.id, onclick: () => onPick(r) }, h('b', {}, r.name), h('small', {}, sub ? sub(r) : [r.edition, D5.srcName(r.source)].filter(Boolean).join(' · '))));
+      for (const r of L.slice(0, 300)) list.append(h('button', { class: 'a5-item' + (r.id === current ? ' on' : ''), 'data-id': r.id, onclick: () => onPick(r) }, h('b', {}, r.name), h('small', {}, sub ? sub(r) : [editionName(r.edition), D5.srcName(r.source)].filter(Boolean).join(' · '))));
       if (!L.length) list.append(h('p', { class: 'empty' }, 'Nada encontrado.'));
     };
-    put(wrap, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-q-' + tab, oninput: (e) => { q = e.target.value; (A5.q = A5.q || {})[tab] = q; fill(); } })),
-      h('label', { class: 'check-row small-text muted' }, h('input', { type: 'checkbox', checked: edOnly, onchange: (e) => { edOnly = e.target.checked; (A5.edAll = A5.edAll || {})[tab] = !edOnly; fill(); } }), 'Só da edição ' + st.edicao), list);
+    put(wrap, h('div', { class: 'a5-search-row' }, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-q-' + tab, oninput: (e) => { q = e.target.value; (A5.q = A5.q || {})[tab] = q; fill(); } })), sources.element), list);
     fill();
     setTimeout(() => { const on = list.querySelector('.a5-item.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' }); }, 0);
     return wrap;
@@ -609,10 +654,9 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       up ? h('p', { class: 'hint' }, 'A ficha está no nível ' + st.fromLevel + '. Os níveis novos vão para a classe escolhida na etapa Classe (uma das que a ficha tem, ou uma nova). O assistente mostra só o que eles pedem; o resto da ficha (PV atual, itens, moedas, biografia) fica como está.') : null,
       h('div', { class: 'f5-grid3' },
         !up ? field('Nome do personagem', h('input', { value: st.name, 'data-f': 'a5-name', placeholder: 'Novo personagem', onchange: (e) => set((s) => { s.name = e.target.value.trim(); }) })) : null,
-        field('Edição', sel(st.edicao, { 2024: '2024 (PHB 2024)', 2014: '2014 (PHB 2014)' }, (v) => set((s) => { s.edicao = v; if (!up) { s.classId = s.subId = s.speciesId = s.bgId = null; s.ch = {}; s.spells = { cantrips: [], list: [] }; } }), { disabled: up, 'data-f': 'a5-ed' })),
+        field('Edição', sel(st.edicao, { 2024: editionName('2024'), 2014: editionName('2014') }, (v) => set((s) => { s.edicao = v; if (!up) { s.classId = s.subId = s.speciesId = s.bgId = null; s.bgFreeAbility = s.bgFreeFeat = false; s.ch = {}; s.spells = { cantrips: [], list: [] }; } }), { disabled: up, 'data-f': 'a5-ed' })),
         field(up ? 'Subir até o nível' : 'Nível', sel(st.level, lvOpts, (v) => set((s) => { s.level = num(v, 1); }), { 'data-f': 'a5-level' })),
-        field('Pontos de vida', sel(st.hpMethod, { avg: 'Média (arredondada para cima)', roll: 'Rolar o dado de vida' }, (v) => set((s) => { s.hpMethod = v; }), { 'data-f': 'a5-hp' }))),
-      st.hpMethod === 'roll' ? hpRolls() : null));
+        field('Pontos de vida', sel(st.hpMethod, { avg: 'Média (arredondada para cima)', roll: 'Rolar o dado de vida' }, (v) => set((s) => { s.hpMethod = v; }), { 'data-f': 'a5-hp' })))));
   }
   function hpRolls() {
     const st = A5.st, cls = byId('classes', st.classId);
@@ -638,26 +682,38 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
           h('b', {}, x.name), h('small', {}, 'nível ' + x.level + ' → ' + (num(x.level) + n) + (x.sub ? ' · ' + (x.sub.shortName || x.sub.name) : '')))),
         h('button', { class: 'a5-item' + (st.ci === nNew ? ' on' : ''), 'data-up': 'nova', onclick: () => pickTarget(nNew, null, null) }, h('b', {}, '+ Classe nova (multiclasse)'), h('small', {}, 'nível 1' + (n > 1 ? ' → ' + n : '')))),
       st.ci === nNew ? recordList('classes', st.classId, (r) => !(st.base0.classes || []).some((x) => x.ref === r.id), (r) => set((s2) => { s2.classId = r.id; s2.subId = null; s2.ch = {}; s2.spells = { cantrips: [], list: [] }; }),
-        (r) => [reqOk(r, st.base0.abil || {}) ? '' : 'pede ' + reqTxt(r), 'd' + r.hd, r.edition].filter(Boolean).join(' · ')) : null) :
-      recordList('classes', st.classId, null, (r) => set((s) => { s.classId = r.id; s.subId = null; s.ch = {}; s.spells = { cantrips: [], list: [] }; s.equip = {}; }), (r) => ['d' + r.hd, r.edition, D5.srcName(r.source)].filter(Boolean).join(' · '));
+        (r) => [reqOk(r, st.base0.abil || {}) ? '' : 'pede ' + reqTxt(r), 'd' + r.hd, editionName(r.edition)].filter(Boolean).join(' · ')) : null) :
+      recordList('classes', st.classId, null, (r) => set((s) => { s.classId = r.id; s.subId = null; s.ch = {}; s.spells = { cantrips: [], list: [] }; s.equip = {}; }), (r) => ['d' + r.hd, editionName(r.edition), D5.srcName(r.source)].filter(Boolean).join(' · '));
     const right = h('div', { class: 'a5-detail' });
     if (cls) {
       const subAt = (cls.subclassLevels || [])[0];
-      put(right, h('h3', { class: 'a5-title' }, cls.name, h('small', { class: 'muted' }, ' ' + cls.edition + ' · ' + D5.srcName(cls.source))),
-        h('div', { class: 'f5-kv' }, h('span', {}, h('small', {}, 'Dado de vida'), 'd' + cls.hd), h('span', {}, h('small', {}, 'Salvaguardas'), (cls.saves || []).map((k) => R.AB_PT[k]).join(', ')),
+      put(right, h('h3', { class: 'a5-title' }, cls.name, h('small', { class: 'muted' }, ' ' + editionName(cls.edition) + ' · ' + D5.srcName(cls.source))),
+        h('div', { class: 'f5-kv' }, h('span', {}, h('small', { class: 'a5-hit-die' }, 'Dado de vida'), 'd' + cls.hd), h('span', {}, h('small', { class: 'a5-saves' }, 'Salvaguardas'), (cls.saves || []).map((k) => R.AB_PT[k]).join(', ')),
           cls.spellcasting ? h('span', {}, h('small', {}, 'Conjuração'), R.AB_PT[cls.spellcasting.ability] + ' · ' + cls.spellcasting.progression) : null),
         up && !target() ? h('div', { class: 'a5-profs' }, h('div', {}, 'Multiclasse: ' + (reqTxt(cls) ? 'pede ' + reqTxt(cls) : 'sem requisito') + '.'), profTxt((cls.multiclass || {}).proficiencies).map((t) => h('div', {}, 'Ganha · ' + t)), h('div', {}, 'Sem salvaguardas nem equipamento inicial.'))
           : h('div', { class: 'a5-profs' }, profTxt(cls.proficiencies).map((t) => h('div', {}, t))));
       if (subAt) {
         const subs = X.subclasses.filter((s) => s.classId === cls.id);
-        put(right, h('h4', {}, (cls.subclassTitle || 'Subclasse') + ' (nível ' + subAt + ')'),
+        const visibleSubs = () => subs.filter((s) => A5.edAll?.classes || !s.edition || s.edition === st.edicao);
+        const subName = (s) => visibleSubs().some((other) => other !== s && other.name === s.name && other.edition !== s.edition)
+          ? s.name + ' (' + D5.editionShort(s.edition) + ')' : s.name;
+        const subList = h('div', { class: 'a5-subs' });
+        const fillSubs = () => {
+          subList.replaceChildren(...visibleSubs().sort((a, b) => a.name.localeCompare(b.name)).map((s) => h('button', {
+            class: 'chip' + (st.subId === s.id ? ' on' : ''), 'data-sub': s.id,
+            title: D5.srcName(s.source) + (s.copyOf ? ' · do livro de ' + editionName('2014') : ''),
+            onclick: () => set((x) => { x.subId = s.id; }),
+          }, subName(s))));
+        };
+        fillSubs();
+        put(right, h('h4', { class: 'a5-subtitle' }, (cls.subclassTitle || 'Subclasse') + ' (nível ' + subAt + ')'),
           CL < subAt ? h('p', { class: 'hint' }, 'Escolhida no nível ' + subAt + ' de ' + cls.name + '.') :
             up && st.subId && CF >= subAt ? h('p', {}, h('b', {}, (byId('subclasses', st.subId) || {}).name || '')) :
-              h('div', { class: 'a5-subs' }, subs.sort((a, b) => a.name.localeCompare(b.name)).map((s) => h('button', { class: 'chip' + (st.subId === s.id ? ' on' : ''), 'data-sub': s.id, title: D5.srcName(s.source) + (s.copyOf ? ' · do livro de 2014' : ''), onclick: () => set((x) => { x.subId = s.id; }) }, s.name, s.copyOf ? h('small', { class: 'muted' }, ' 2014') : null))));
+              subList);
         const sub = byId('subclasses', st.subId);
         if (sub) put(right, h('div', { class: 'a5-feats' }, (sub.features || []).filter((f) => num(f.level) <= CL).map((f) => h('details', {}, h('summary', {}, f.name + ' · nível ' + f.level), textView(f.text, 1500)))));
       }
-      put(right, h('h4', {}, 'Características de ' + cls.name + ' até o nível ' + CL),
+      put(right, h('h4', { class: 'a5-features-title' }, 'Características de ' + cls.name + ' até o nível ' + CL),
         h('div', { class: 'a5-feats' }, (cls.features || []).filter((f) => num(f.level) <= CL).map((f) => h('details', { class: num(f.level) > CF && up ? 'new' : '' }, h('summary', {}, f.name + ' · nível ' + f.level + (num(f.level) > CF && up ? ' · novo' : '')), textView(f.text, 1500)))));
     } else put(right, h('p', { class: 'empty' }, 'Escolha uma classe na lista.'));
     put(pane, h('div', { class: 'a5-split' }, left, right));
@@ -667,7 +723,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     const right = h('div', { class: 'a5-detail' });
     if (sp) {
       const sizes = sp.size || [];
-      put(right, h('h3', { class: 'a5-title' }, sp.name, h('small', { class: 'muted' }, ' ' + (sp.edition || '') + ' · ' + D5.srcName(sp.source))),
+      put(right, h('h3', { class: 'a5-title' }, sp.name, h('small', { class: 'muted' }, ' ' + editionName(sp.edition) + ' · ' + D5.srcName(sp.source))),
         (sp.options || []).length ? field(st.edicao === '2014' ? 'Sub-raça' : 'Linhagem', sel(st.speciesOpt, [{ v: '', label: 'Nenhuma' }].concat(sp.options.map((o) => ({ v: o.name, label: o.name }))), (v) => set((s) => { s.speciesOpt = v; for (const k of Object.keys(s.ch)) if (/^sp(:|ft)/.test(k)) delete s.ch[k]; }), { 'data-f': 'a5-spopt' })) : null,
         sizes.length > 1 ? field('Tamanho', sel(st.size || sizes[sizes.length - 1], sizes.map((x) => ({ v: x, label: R.SIZES[x] || x })), (v) => set((s) => { s.size = v; }), { 'data-f': 'a5-size' })) : null,
         h('div', { class: 'f5-kv' }, h('span', {}, h('small', {}, 'Tamanho'), sizes.map((x) => R.SIZES[x] || x).join(' ou ')),
@@ -680,14 +736,30 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     const st = A5.st, bg = byId('backgrounds', st.bgId);
     const right = h('div', { class: 'a5-detail' });
     if (bg) {
-      put(right, h('h3', { class: 'a5-title' }, bg.name, h('small', { class: 'muted' }, ' ' + (bg.edition || '') + ' · ' + D5.srcName(bg.source))),
+      put(right, h('h3', { class: 'a5-title' }, bg.name, h('small', { class: 'muted' }, ' ' + editionName(bg.edition) + ' · ' + D5.srcName(bg.source))),
         h('div', { class: 'a5-profs' }, profTxt((bg.benefits || {}).proficiencies).map((t) => h('div', {}, t)),
-          (bg.feats || []).length ? h('div', {}, 'Talento: ' + bg.feats.map((f) => f.name + (f.choice ? ' (' + f.choice + ')' : '')).join(', ')) : null,
-          (bg.benefits && bg.benefits.ability || []).length ? h('div', {}, 'Atributos: ' + ((bg.benefits.ability[0].weighted || {}).from || []).map((k) => R.AB_PT[k]).join(', ') + ' (escolha na aba Atributos)') : null),
-        bg.feature ? h('details', { open: true }, h('summary', {}, bg.feature.name), textView(bg.feature.text, 1500)) : null,
-        bg.description ? h('details', {}, h('summary', {}, 'Texto do antecedente'), textView(bg.description, 3000)) : null);
+          (bg.feats || []).length ? h('div', {}, 'Talento: ' + bg.feats.map((f, i) => {
+            if (!st.bgFreeFeat) return f.name + (f.choice ? ' (' + f.choice + ')' : '');
+            const chosen = byId('feats', st.ch['bgft:' + i]);
+            return chosen ? chosen.name : 'pendente';
+          }).join(', ')) : null,
+          (bg.benefits && bg.benefits.ability || []).length ? h('div', {}, 'Atributos: ' + (st.bgFreeAbility ? R.AB : ((bg.benefits.ability[0].weighted || {}).from || [])).map((k) => R.AB_PT[k]).join(', ') + ' (escolha na aba Atributos)') : null),
+        bg.feature ? h('details', { open: true }, h('summary', {}, bg.feature.name), textView(bg.feature.text, 1500)) : null);
+      if (bg.edition === '2024') put(right, h('div', { class: 'a5-bg-free' },
+        (bg.benefits?.ability || []).length ? h('label', { class: 'check-row' }, h('input', { type: 'checkbox', checked: st.bgFreeAbility, 'data-f': 'a5-bg-free-ability', onchange: (e) => set((s) => { s.bgFreeAbility = e.target.checked; delete s.ch['bg:ab']; }) }), 'Atributos livres para os bônus do antecedente') : null,
+        (bg.feats || []).some((f) => f.feat) ? h('label', { class: 'check-row' }, h('input', { type: 'checkbox', checked: st.bgFreeFeat, 'data-f': 'a5-bg-free-feat', onchange: (e) => set((s) => { s.bgFreeFeat = e.target.checked; for (const k of Object.keys(s.ch)) if (/^(bgft:|ft:bgft:)/.test(k)) delete s.ch[k]; }) }), 'Talento de Origem livre') : null,
+        st.bgFreeFeat ? (bg.feats || []).map((f, i) => {
+          if (!f.feat) return null;
+          const chosen = byId('feats', st.ch['bgft:' + i]);
+          return h('div', { class: 'row wrap' }, h('span', {}, chosen ? chosen.name : 'Escolha um Talento de Origem'),
+            btnI('library', chosen ? 'Trocar talento' : 'Escolher talento', { 'data-bg-feat': i, onclick: () => App.Ficha5e.pick('feats', { edition: '2024', filter: (r) => r.category === 'Origin', title: 'Talento de Origem' }, (r) => set((s) => {
+              s.ch['bgft:' + i] = r.id;
+              for (const k of Object.keys(s.ch)) if (k.startsWith('ft:bgft:' + i)) delete s.ch[k];
+            })) }));
+        }) : null));
+      if (bg.description) put(right, h('details', { open: bg.edition === '2024' }, h('summary', {}, 'Texto do antecedente'), textView(bg.description, 3000)));
     } else put(right, h('p', { class: 'empty' }, 'Escolha um antecedente na lista.'));
-    put(pane, h('div', { class: 'a5-split' }, recordList('backgrounds', st.bgId, (r) => !r.variantOf || true, (r) => set((s) => { s.bgId = r.id; s.equip = Object.fromEntries(Object.entries(s.equip).filter(([k]) => !/^bg/.test(k))); for (const k of Object.keys(s.ch)) if (/^(bg|ft:bgft)/.test(k)) delete s.ch[k]; })), right));
+    put(pane, h('div', { class: 'a5-split' }, recordList('backgrounds', st.bgId, (r) => !r.variantOf || true, (r) => set((s) => { s.bgId = r.id; s.bgFreeAbility = s.bgFreeFeat = false; s.equip = Object.fromEntries(Object.entries(s.equip).filter(([k]) => !/^bg/.test(k))); for (const k of Object.keys(s.ch)) if (/^(bg|ft:bgft)/.test(k)) delete s.ch[k]; })), right));
   }
   // ---------- Atributos (Plano 54: modelo do Roll20) ----------
   const METHOD_TABS = [['standard', 'Conjunto padrão'], ['pointbuy', 'Compra de pontos'], ['roll', 'Rolar'], ['manual', 'Digitar']];
@@ -721,6 +793,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     if (m === 'pointbuy') {
       const left27 = 27 - pbSpent(st);
       put(left, h('div', { class: 'a5-attr-box a5-pb-count' }, h('b', {}, 'Compra de pontos'), h('div', { class: 'a5-pb-num' + (left27 < 0 ? ' bad' : '') }, left27 + ' / 27'), h('small', { class: 'muted' }, left27 < 0 ? 'Passou de 27 pontos.' : 'pontos sobrando')));
+      if (st.edicao === '2024') put(left, h('p', { class: 'hint' }, 'Os bônus do antecedente são distribuídos abaixo e não gastam os 27 pontos.'));
     }
     if (m === 'roll') {
       put(left, h('div', { class: 'a5-attr-box a5-rolls' },
@@ -797,7 +870,8 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
   }
   function tabEscolhas(pane) {
     const list = needs().filter((c) => c.tab === 'escolhas');
-    if (!list.length) { put(pane, h('p', { class: 'empty' }, A5.st.mode === 'up' ? 'Os níveis novos não pedem escolhas além das magias.' : 'Nada a escolher ainda. Escolha a classe, a espécie e o antecedente.')); return; }
+    if (!list.length && A5.st.hpMethod !== 'roll') { put(pane, h('p', { class: 'empty' }, A5.st.mode === 'up' ? 'Os níveis novos não pedem escolhas além das magias.' : 'Nada a escolher ainda. Escolha a classe, a espécie e o antecedente.')); return; }
+    if (A5.st.hpMethod === 'roll') put(pane, sec('Dados de vida', hpRolls()));
     const byLevel = {};
     for (const c of list) (byLevel[c.level] = byLevel[c.level] || []).push(c);
     for (const L of Object.keys(byLevel).map(Number).sort((a, b) => a - b)) put(pane, sec(L ? 'Nível ' + L : 'Origem', byLevel[L].map(choiceView)));
@@ -834,7 +908,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       let blocks = c.blocks, val = v || {};
       if (c.type === 'asi') {
         put(body, h('div', { class: 'f5-chips' },
-          h('button', { class: 'chip' + ((val.mode || 'asi') === 'asi' ? ' on' : ''), 'data-asi': c.key + '=asi', onclick: () => set((s) => { s.ch[c.key] = { mode: 'asi', alt: 0, picks: [] }; }) }, 'Aumento de atributo'),
+          h('button', { class: 'chip' + (val.mode === 'asi' ? ' on' : ''), 'data-asi': c.key + '=asi', onclick: () => set((s) => { s.ch[c.key] = { mode: 'asi', alt: 0, picks: [] }; }) }, 'Aumento de atributo'),
           h('button', { class: 'chip' + (val.mode === 'feat' ? ' on' : ''), 'data-asi': c.key + '=feat', onclick: () => set((s) => { s.ch[c.key] = { mode: 'feat', feat: null }; }) }, 'Talento')));
         if (val.mode === 'feat') {
           const f = byId('feats', val.feat);
@@ -844,6 +918,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
           if (f) put(body, h('details', {}, h('summary', {}, 'Texto do talento'), textView(f.description, 2000)));
           return h('div', { class: 'a5-ch' + (ok ? ' ok' : ''), 'data-choice': c.key }, head, body);
         }
+        if (val.mode !== 'asi') return h('div', { class: 'a5-ch' + (ok ? ' ok' : ''), 'data-choice': c.key }, head, body);
         blocks = ASI_BLOCKS;
       }
       const alt = val.alt || 0;
@@ -861,7 +936,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       const chosen = picks(c.key);
       put(body, h('div', { class: 'a5-picked' }, chosen.map((id) => { const r = byId(tab, id); return h('span', { class: 'chip on' }, r ? r.name : id, iconBtn('x', 'Tirar', () => toggle(id))); })),
         chosen.length < c.count ? btnI('library', c.type === 'feat' ? 'Escolher talento' : c.type === 'option' ? 'Escolher opção' : 'Escolher magia', { 'data-pick': c.key, onclick: () => {
-          const filter = c.type === 'feat' ? (r) => !c.category || r.category === c.category || (c.category === 'Fighting Style' && /^Fighting Style/.test(r.category))
+          const filter = c.type === 'feat' ? (r) => featMatches(c.category, r)
             : c.type === 'option' ? (r) => (r.types || []).some((t) => c.types.includes(t)) && !chosen.includes(r.id)
               : spellFilter(c.filter);
           App.Ficha5e.pick(tab, { edition: st.edicao, filter, title: c.label + ' (' + c.source + ')' }, (r) => set((s) => { const cur = [].concat(s.ch[c.key] || []); if (!cur.includes(r.id)) cur.push(r.id); s.ch[c.key] = cur; }));
@@ -876,7 +951,15 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     const always = P.d.magia.list.filter((s) => s.always);
     const extra = needs().filter((c) => c.type === 'spell');
     if (extra.length) put(pane, sec('Magias de talentos e espécie', extra.map(choiceView)));
-    if (always.length) put(pane, sec('Sempre preparadas', h('div', { class: 'f5-chips' }, always.map((s) => h('span', { class: 'chip' }, s.name + ' · ' + (s.level ? s.level + 'º' : 'truque'), h('small', { class: 'muted' }, ' ' + s.from))))));
+    if (always.length) {
+      const groups = [...new Set(always.map((s) => s.level))].sort((a, b) => a - b);
+      const sections = groups.map((level) => {
+        const cards = always.filter((s) => s.level === level).map((s) => h('div', { class: 'a5-spell on' },
+          h('span', { class: 'a5-spell-text' }, h('b', {}, s.name), h('small', { class: 'muted' }, s.from || D5.srcName(s.source))), App.Ficha5e.spellBookButton(s.ref ? () => D5.get('spells', s.ref).then((record) => record || s).catch(() => s) : s, { 'data-spell-name': s.name })));
+        return h('div', { class: 'a5-spell-level' }, h('h4', {}, level ? level + 'º nível' : 'Truques'), h('div', { class: 'a5-spell-grid' }, cards));
+      });
+      put(pane, sec('Sempre preparadas', sections));
+    }
     if (!ci) { if (!extra.length) put(pane, h('p', { class: 'empty' }, 'Esta classe não conjura magias neste nível.')); return; }
     const up = st.mode === 'up';
     const have = up ? haveSpells() : [];
@@ -888,19 +971,26 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
         && !have.some((s) => s.ref === sp.id) && !always.some((s) => s.ref === sp.id));
       let q = (A5.sq && A5.sq[key]) || '';
       const items = h('div', { class: 'a5-spell-list' });
+      const sources = D5.sourceControl(() => list, (A5.spellSources || {})[key], (value) => { (A5.spellSources = A5.spellSources || {})[key] = value; fill(); });
       const fill = () => {
-        items.innerHTML = '';
+        items.replaceChildren();
         const words = U.slug(q).split(/[_-]+/).filter(Boolean);
-        const L = list.filter((sp) => !words.length || words.every((w) => U.slug(sp.name + ' ' + sp.school).includes(w))).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-        for (const sp of L) put(items, h('label', { class: 'a5-spell' + (chosen.includes(sp.id) ? ' on' : ''), 'data-spell': sp.id },
-          h('input', { type: 'checkbox', checked: chosen.includes(sp.id), onchange: () => set((s) => { const arr = s.spells[key]; const i = arr.indexOf(sp.id); if (i >= 0) arr.splice(i, 1); else arr.push(sp.id); }) }),
-          h('b', {}, sp.name), h('small', { class: 'muted' }, (sp.level ? sp.level + 'º · ' : '') + sp.school + (sp.duration && sp.duration.concentration ? ' · C' : '') + (sp.ritual ? ' · R' : ''))));
+        const L = list.filter((sp) => sources.matches(sp) && (!words.length || words.every((w) => U.slug(sp.name + ' ' + sp.school + ' ' + D5.srcName(sp.source)).includes(w)))).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+        for (const level of [...new Set(L.map((sp) => sp.level))]) {
+          const group = h('div', { class: 'a5-spell-level' });
+          if (!lvl0) put(group, h('h4', {}, level + 'º nível'));
+          const cards = L.filter((sp) => sp.level === level).map((sp) => h('div', { class: 'a5-spell' + (chosen.includes(sp.id) ? ' on' : ''), 'data-spell': sp.id },
+            h('label', { class: 'a5-spell-select' }, h('input', { type: 'checkbox', checked: chosen.includes(sp.id), onchange: () => set((s) => { const arr = s.spells[key]; const i = arr.indexOf(sp.id); if (i >= 0) arr.splice(i, 1); else arr.push(sp.id); }) }),
+              h('span', { class: 'a5-spell-text' }, h('b', {}, sp.name), h('small', { class: 'muted' }, sp.school + ' · ' + D5.srcName(sp.source) + (sp.duration && sp.duration.concentration ? ' · Concentração' : '') + (sp.ritual ? ' · Ritual' : '')))), App.Ficha5e.spellBookButton(sp)));
+          put(group, h('div', { class: 'a5-spell-grid' }, cards));
+          put(items, group);
+        }
         if (!L.length) put(items, h('p', { class: 'empty' }, 'Nada encontrado.'));
       };
       fill();
       return sec((lvl0 ? 'Truques' : ci.mode === 'known' ? 'Magias conhecidas' : ci.mode === 'spellbook' ? 'Magias preparadas (do grimório)' : 'Magias preparadas') + ' · ' + total + ' de ' + limit,
         up && haveN ? h('p', { class: 'hint' }, 'Já na ficha: ' + haveN + '. No nível ' + st.level + ' o limite é ' + limit + (before ? ' (antes ' + before + ')' : '') + '.') : null,
-        h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-sq-' + key, oninput: (e) => { q = e.target.value; (A5.sq = A5.sq || {})[key] = q; fill(); } })), items);
+        h('div', { class: 'a5-search-row' }, h('div', { class: 'search-box' }, ic('search'), h('input', { placeholder: 'Buscar…', value: q, 'data-f': 'a5-sq-' + key, oninput: (e) => { q = e.target.value; (A5.sq = A5.sq || {})[key] = q; fill(); } })), sources.element), items);
     };
     put(pane, h('p', { class: 'hint' }, ci.name + ': conjura com ' + R.AB_PT[ci.ability] + ', magias até o ' + ci.max + 'º nível. ' + (ci.mode === 'known' ? 'Magias conhecidas.' : 'Prepara as magias da lista' + (ci.mode === 'spellbook' ? ' (Wizard: as preparadas saem do grimório).' : '.'))));
     if (ci.cantrips) put(pane, pickBox(true, 'cantrips', ci.cantrips, ci.cantripsBefore));

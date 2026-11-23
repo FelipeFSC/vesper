@@ -19,7 +19,8 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { sourceNames } from './fontes-5etools.mjs';
 import { buildItems, strip as stripX, text as textX } from './cadastros-itens.mjs';
 import { buildSpells } from './cadastros-magias.mjs';
 import { buildFeats } from './cadastros-talentos.mjs';
@@ -37,12 +38,14 @@ if (!fs.existsSync(path.join(DATA, 'items-base.json'))) {
   console.error('Não achei ' + path.join(DATA, 'items-base.json') + '. Passe a pasta do 5etools-src: node tools/importar-cadastros.mjs <pasta>');
   process.exit(1);
 }
+await import(pathToFileURL(path.join(SRC, 'js', 'parser.js')).href);
 const load = (f) => JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8'));
 const base = load('items-base.json');
 const races = load('races.json');
 const vrules = load('variantrules.json').variantrule;
 const books = load('books.json').book;
 const advs = load('adventures.json').adventure;
+const sourceName = sourceNames(books.concat(advs));
 
 const FT = 0.3, LB = 0.5;
 const m = (ft) => Math.round(ft * FT * 100) / 100;
@@ -57,7 +60,10 @@ const strip = stripX, text = textX;
 
 // ---------- Fontes ----------
 const sources = {};
-for (const b of books.concat(advs)) sources[b.id] = b.name;
+for (const b of books.concat(advs)) {
+  if (b.source && !sources[b.source]) sources[b.source] = sourceName(b.source);
+  if (b.id && !sources[b.id]) sources[b.id] = sourceName(b.id);
+}
 const usedSources = new Set();
 
 // ---------- Ataques ----------
@@ -220,7 +226,7 @@ for (const [race, shape, types] of [['Dragonborn (Chromatic)', 'line', ['acid', 
 
 // ---------- Gravar ----------
 const srcOut = {};
-for (const s of [...usedSources].sort()) srcOut[s] = sources[s] || s;
+for (const s of [...usedSources].sort()) srcOut[s] = sourceName(s);
 fs.mkdirSync(OUT, { recursive: true });
 const write = (name, key, list) => {
   const data = { from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: srcOut, [key]: list };
@@ -237,7 +243,7 @@ const bookDates = {};
 for (const b of books.concat(advs)) bookDates[b.id] = b.published || '';
 const { items, usedSources: itemSources, stats } = await buildItems(SRC, { sources, bookDate: (s) => bookDates[s] || '' });
 const itemSrc = {};
-for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
+for (const s of [...itemSources].sort()) itemSrc[s] = sourceName(s);
 {
   const data = { from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: itemSrc, items };
   const json = JSON.stringify(data);
@@ -251,7 +257,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
 {
   const { spells, usedSources: spSources, stats: sst } = await buildSpells(SRC, { bookDate: (s) => bookDates[s] || '' });
   const spSrc = {};
-  for (const s of [...spSources].sort()) spSrc[s] = sources[s] || s;
+  for (const s of [...spSources].sort()) spSrc[s] = sourceName(s);
   const data = { from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: spSrc, spells };
   const json = JSON.stringify(data);
   fs.writeFileSync(path.join(OUT, 'spells.json'), json);
@@ -261,7 +267,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
   // ---------- Talentos (Plano 44): as magias concedidas apontam para as magias acima ----------
   const { feats, usedSources: ftSources } = await buildFeats(SRC, { bookDate: (s) => bookDates[s] || '', spellIds: new Map(spells.map((s) => [s.id, s.name])) });
   const ftSrc = {};
-  for (const s of [...ftSources].sort()) ftSrc[s] = sources[s] || s;
+  for (const s of [...ftSources].sort()) ftSrc[s] = sourceName(s);
   const fdata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: ftSrc, feats });
   fs.writeFileSync(path.join(OUT, 'feats.json'), fdata);
   fs.writeFileSync(path.join(OUT, 'feats.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 44). Mesmo conteúdo de feats.json. */\n(window.VesperCadastros = window.VesperCadastros || {}).feats = ' + fdata + ';\n');
@@ -274,7 +280,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
     itemIds: new Set(itemById.keys()), itemName: (id) => (itemById.get(id) || {}).name || id,
   });
   const bgSrc = {};
-  for (const s of [...bgSources].sort()) bgSrc[s] = sources[s] || s;
+  for (const s of [...bgSources].sort()) bgSrc[s] = sourceName(s);
   const bdata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: bgSrc, backgrounds });
   fs.writeFileSync(path.join(OUT, 'backgrounds.json'), bdata);
   fs.writeFileSync(path.join(OUT, 'backgrounds.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 46). Mesmo conteúdo de backgrounds.json. */\n(window.VesperCadastros = window.VesperCadastros || {}).backgrounds = ' + bdata + ';\n');
@@ -284,7 +290,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
   // ---------- Espécies (Plano 47): sub-raças e linhagens dentro da espécie; magias e talentos ligados ----------
   const { species, usedSources: spcSources, stats: sps } = await buildSpecies(SRC, { bookDate: (s) => bookDates[s] || '', spellIds: new Map(spells.map((s) => [s.id, s.name])), featIds: new Set(feats.map((x) => x.id)) });
   const spcSrc = {};
-  for (const s of [...spcSources].sort()) spcSrc[s] = sources[s] || s;
+  for (const s of [...spcSources].sort()) spcSrc[s] = sourceName(s);
   const sdata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: spcSrc, species });
   fs.writeFileSync(path.join(OUT, 'species.json'), sdata);
   fs.writeFileSync(path.join(OUT, 'species.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 47). Mesmo conteúdo de species.json. */\n(window.VesperCadastros = window.VesperCadastros || {}).species = ' + sdata + ';\n');
@@ -292,7 +298,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
   // ---------- Opções de classe (Plano 48): invocações, manobras, metamagia… ----------
   const { options, types: optTypes, usedSources: opSources } = await buildOptions(SRC, { bookDate: (s) => bookDates[s] || '', spellIds: new Map(spells.map((s) => [s.id, s.name])), featIds: new Set(feats.map((x) => x.id)) });
   const opSrc = {};
-  for (const s of [...opSources].sort()) opSrc[s] = sources[s] || s;
+  for (const s of [...opSources].sort()) opSrc[s] = sourceName(s);
   const odata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: opSrc, types: optTypes, options });
   fs.writeFileSync(path.join(OUT, 'options.json'), odata);
   fs.writeFileSync(path.join(OUT, 'options.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 48). Mesmo conteúdo de options.json. */\n(window.VesperCadastros = window.VesperCadastros || {}).options = ' + odata + ';\n');
@@ -300,7 +306,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
   // ---------- Classes (Plano 49): as 26 classes base ----------
   const { classes, usedSources: clSources, stats: cst } = await buildClasses(SRC, { bookDate: (s) => bookDates[s] || '', itemIds: new Set(itemById.keys()), itemName: (id) => (itemById.get(id) || {}).name || id });
   const clSrc = {};
-  for (const s of [...clSources].sort()) clSrc[s] = sources[s] || s;
+  for (const s of [...clSources].sort()) clSrc[s] = sourceName(s);
   const cdata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: clSrc, classes });
   fs.writeFileSync(path.join(OUT, 'classes.json'), cdata);
   fs.writeFileSync(path.join(OUT, 'classes.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 49). Mesmo conteúdo de classes.json. */' + String.fromCharCode(10) + '(window.VesperCadastros = window.VesperCadastros || {}).classes = ' + cdata + ';' + String.fromCharCode(10));
@@ -308,7 +314,7 @@ for (const s of [...itemSources].sort()) itemSrc[s] = sources[s] || s;
   // ---------- Subclasses (Plano 50): das 26 classes base; as de 2014 também ligadas à classe de 2024, como no 5etools ----------
   const { subclasses, usedSources: scSources } = await buildSubclasses(SRC, { bookDate: (s) => bookDates[s] || '', spellIds: new Map(spells.map((s) => [s.id, s.name])), classIds: new Set(classes.map((c) => c.id)) });
   const scSrc = {};
-  for (const s of [...scSources].sort()) scSrc[s] = sources[s] || s;
+  for (const s of [...scSources].sort()) scSrc[s] = sourceName(s);
   const scdata = JSON.stringify({ from: '5etools', generatedAt: new Date().toISOString().slice(0, 10), sources: scSrc, subclasses });
   fs.writeFileSync(path.join(OUT, 'subclasses.json'), scdata);
   fs.writeFileSync(path.join(OUT, 'subclasses.js'), '/* Gerado por tools/importar-cadastros.mjs (Plano 50). Mesmo conteúdo de subclasses.json. */' + String.fromCharCode(10) + '(window.VesperCadastros = window.VesperCadastros || {}).subclasses = ' + scdata + ';' + String.fromCharCode(10));
