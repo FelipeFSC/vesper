@@ -88,3 +88,6 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 62 | [Nomes das fontes importadas do 5etools](62-nomes-das-fontes-5etools.md) | Concluído |
 | 63 | [Datas e edições das fontes do 5etools](63-datas-e-edicoes-das-fontes.md) | Proposto |
 | 64 | [Filtro de edição dentro de Fonte no assistente](64-filtro-edicao-no-menu-fonte-do-assistente.md) | Concluído |
+| 65 | [Descrição das magias e cores no assistente](65-descricao-das-magias-e-cores-no-assistente.md) | Concluído |
+| 66 | [Cores dos títulos do tooltip de magias](66-cores-dos-titulos-do-tooltip-de-magias.md) | Concluído |
+| 67 | [Origens das magias abaixo da descrição](67-origem-das-magias-abaixo-da-descricao.md) | Concluído |

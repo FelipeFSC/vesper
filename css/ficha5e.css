@@ -173,6 +173,22 @@
 .f5-pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 7px 10px; border-radius: 8px; background: none; border: 1px solid transparent; color: inherit; font: inherit; cursor: pointer; }
 .f5-pick-item:hover, .f5-pick-item:focus-visible { background: var(--panel2); border-color: var(--line2); }
 .f5-pick-item small { color: var(--muted); font-size: 11.5px; }
+.f5-pick-spell { display: flex; align-items: center; gap: 4px; }
+.f5-pick-spell .f5-pick-item { flex: 1; min-width: 0; }
+.f5-spell-book-btn { flex: 0 0 auto; color: var(--gold); }
+.f5-spell-book-btn:hover, .f5-spell-book-btn[aria-expanded="true"] { color: var(--text); background: var(--panel3); }
+.f5-spell-book { position: fixed; z-index: 300; width: min(360px, calc(100vw - 16px)); max-height: min(430px, calc(100vh - 16px)); overflow: auto; display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--line2); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); font-size: 13px; line-height: 1.5; }
+.f5-spell-book-title { font: 600 18px var(--serif); }
+.f5-spell-book-facts { gap: 7px 14px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.f5-spell-book-facts > span { min-width: min(130px, 100%); max-width: 100%; overflow-wrap: anywhere; }
+.f5-spell-book-origins { margin-top: 3px; border-bottom: 0; }
+.f5-spell-book-facts small.f5-book-purple { color: var(--accent-text); }
+.f5-spell-book-facts small.f5-book-green { color: var(--ok); }
+.f5-spell-book-facts small.f5-book-blue { color: var(--mana); }
+.f5-spell-book-facts small.f5-book-red { color: var(--danger); }
+.f5-spell-book-facts small.f5-book-yellow { color: var(--warn); }
+.f5-spell-book-facts small.f5-book-brown { color: #b88763; }
+.f5-spell-book .f5-text p:last-child { margin-bottom: 0; }
 
 /* Escolha do tipo de ficha nova */
 .f5-kind { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
@@ -222,7 +238,10 @@
 .a5-item small { color: var(--muted); font-size: 11.5px; }
 .a5-detail { display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow-y: auto; max-height: calc(min(820px, 100vh - 24px) - 160px); padding-right: 4px; }
 .a5-detail h4 { margin: 8px 0 0; font: 600 15px var(--serif); }
-.a5-detail h4.a5-subtitle { color: var(--gold); }
+.a5-detail h4.a5-subtitle { color: var(--mana); }
+.a5-detail h4.a5-features-title { color: var(--warn); }
+.a5-detail .f5-kv small.a5-hit-die { color: var(--danger); }
+.a5-detail .f5-kv small.a5-saves { color: #e89142; }
 .a5-title { margin: 0; font: 600 22px var(--serif); }
 .a5-profs { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
 .a5-subs { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -256,14 +275,15 @@
 .a5-spell-level h4 { margin: 0; font: 600 15px var(--serif); }
 .a5-spell-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .a5-spell { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel2); cursor: pointer; font-size: 13px; min-width: 0; }
+.a5-spell-select { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
 .a5-spell input { margin-top: 2px; flex: 0 0 auto; }
-.a5-spell-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.a5-spell-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .a5-spell b { font-weight: 600; overflow-wrap: anywhere; }
 .a5-spell small { line-height: 1.35; overflow-wrap: anywhere; }
 .a5-spell.on { background: var(--accent-soft); border-color: var(--accent); }
 .a5-spell:hover { background: var(--panel3); border-color: var(--accent-hi); }
 .a5-spell.on:hover { background: var(--accent-soft); }
-.a5-spell:not(label) { cursor: default; }
+.a5-spell.on:not(:has(.a5-spell-select)) { cursor: default; }
 .a5-bg-free { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel2); }
 @media (max-width: 650px) { .a5-spell-grid { grid-template-columns: 1fr; } }
 .a5-eq { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -330,6 +350,9 @@
 .f5-sb-spg { margin: 3px 0 0 10px; }
 .f5-sb-spell { background: none; border: 0; padding: 0 2px; color: var(--accent-text); font: italic 14px var(--serif); cursor: pointer; }
 .f5-sb-spell:hover, .f5-sb-spell.on { text-decoration: underline; }
+.f5-sb-spell-entry { display: inline-flex; align-items: center; gap: 1px; }
+.f5-sb-spell-entry .f5-spell-book-btn { padding: 1px; }
+.f5-sb-spell-entry .f5-spell-book-btn .ico { width: 14px; height: 14px; }
 .f5-sb-sptext { margin: 4px 0 6px 10px; padding: 8px 10px; border-left: 2px solid var(--accent); background: var(--panel2); border-radius: 0 8px 8px 0; }
 .f5-npc-edit { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .f5-npc-ab { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

@@ -526,6 +526,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     document.body.append(back);
     let cancelled = false;
     function close() {
+      App.Ficha5e.closeSpellBook();
       cancelled = true;
       if (A5.cur?.back === back) {
         if (A5.cur.steps) void unmount(A5.cur.steps);
@@ -549,6 +550,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
 
   function render(keepScroll) {
     if (!A5.cur) return;
+    App.Ficha5e.closeSpellBook();
     const st = A5.st, box = A5.cur.box;
     const old = box.querySelector('.a5-pane'), scroll = keepScroll && old ? old.scrollTop : 0;
     const act = document.activeElement, fkey = act && act.dataset && act.dataset.f;
@@ -686,7 +688,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
     if (cls) {
       const subAt = (cls.subclassLevels || [])[0];
       put(right, h('h3', { class: 'a5-title' }, cls.name, h('small', { class: 'muted' }, ' ' + editionName(cls.edition) + ' · ' + D5.srcName(cls.source))),
-        h('div', { class: 'f5-kv' }, h('span', {}, h('small', {}, 'Dado de vida'), 'd' + cls.hd), h('span', {}, h('small', {}, 'Salvaguardas'), (cls.saves || []).map((k) => R.AB_PT[k]).join(', ')),
+        h('div', { class: 'f5-kv' }, h('span', {}, h('small', { class: 'a5-hit-die' }, 'Dado de vida'), 'd' + cls.hd), h('span', {}, h('small', { class: 'a5-saves' }, 'Salvaguardas'), (cls.saves || []).map((k) => R.AB_PT[k]).join(', ')),
           cls.spellcasting ? h('span', {}, h('small', {}, 'Conjuração'), R.AB_PT[cls.spellcasting.ability] + ' · ' + cls.spellcasting.progression) : null),
         up && !target() ? h('div', { class: 'a5-profs' }, h('div', {}, 'Multiclasse: ' + (reqTxt(cls) ? 'pede ' + reqTxt(cls) : 'sem requisito') + '.'), profTxt((cls.multiclass || {}).proficiencies).map((t) => h('div', {}, 'Ganha · ' + t)), h('div', {}, 'Sem salvaguardas nem equipamento inicial.'))
           : h('div', { class: 'a5-profs' }, profTxt(cls.proficiencies).map((t) => h('div', {}, t))));
@@ -711,7 +713,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
         const sub = byId('subclasses', st.subId);
         if (sub) put(right, h('div', { class: 'a5-feats' }, (sub.features || []).filter((f) => num(f.level) <= CL).map((f) => h('details', {}, h('summary', {}, f.name + ' · nível ' + f.level), textView(f.text, 1500)))));
       }
-      put(right, h('h4', {}, 'Características de ' + cls.name + ' até o nível ' + CL),
+      put(right, h('h4', { class: 'a5-features-title' }, 'Características de ' + cls.name + ' até o nível ' + CL),
         h('div', { class: 'a5-feats' }, (cls.features || []).filter((f) => num(f.level) <= CL).map((f) => h('details', { class: num(f.level) > CF && up ? 'new' : '' }, h('summary', {}, f.name + ' · nível ' + f.level + (num(f.level) > CF && up ? ' · novo' : '')), textView(f.text, 1500)))));
     } else put(right, h('p', { class: 'empty' }, 'Escolha uma classe na lista.'));
     put(pane, h('div', { class: 'a5-split' }, left, right));
@@ -953,7 +955,7 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
       const groups = [...new Set(always.map((s) => s.level))].sort((a, b) => a - b);
       const sections = groups.map((level) => {
         const cards = always.filter((s) => s.level === level).map((s) => h('div', { class: 'a5-spell on' },
-          h('b', {}, s.name), h('small', { class: 'muted' }, s.from || D5.srcName(s.source))));
+          h('span', { class: 'a5-spell-text' }, h('b', {}, s.name), h('small', { class: 'muted' }, s.from || D5.srcName(s.source))), App.Ficha5e.spellBookButton(s.ref ? () => D5.get('spells', s.ref).then((record) => record || s).catch(() => s) : s, { 'data-spell-name': s.name })));
         return h('div', { class: 'a5-spell-level' }, h('h4', {}, level ? level + 'º nível' : 'Truques'), h('div', { class: 'a5-spell-grid' }, cards));
       });
       put(pane, sec('Sempre preparadas', sections));
@@ -977,9 +979,9 @@ import AssistantSteps from '../src/ui/AssistantSteps.svelte';
         for (const level of [...new Set(L.map((sp) => sp.level))]) {
           const group = h('div', { class: 'a5-spell-level' });
           if (!lvl0) put(group, h('h4', {}, level + 'º nível'));
-          const cards = L.filter((sp) => sp.level === level).map((sp) => h('label', { class: 'a5-spell' + (chosen.includes(sp.id) ? ' on' : ''), 'data-spell': sp.id },
-            h('input', { type: 'checkbox', checked: chosen.includes(sp.id), onchange: () => set((s) => { const arr = s.spells[key]; const i = arr.indexOf(sp.id); if (i >= 0) arr.splice(i, 1); else arr.push(sp.id); }) }),
-            h('span', { class: 'a5-spell-text' }, h('b', {}, sp.name), h('small', { class: 'muted' }, sp.school + ' · ' + D5.srcName(sp.source) + (sp.duration && sp.duration.concentration ? ' · Concentração' : '') + (sp.ritual ? ' · Ritual' : '')))));
+          const cards = L.filter((sp) => sp.level === level).map((sp) => h('div', { class: 'a5-spell' + (chosen.includes(sp.id) ? ' on' : ''), 'data-spell': sp.id },
+            h('label', { class: 'a5-spell-select' }, h('input', { type: 'checkbox', checked: chosen.includes(sp.id), onchange: () => set((s) => { const arr = s.spells[key]; const i = arr.indexOf(sp.id); if (i >= 0) arr.splice(i, 1); else arr.push(sp.id); }) }),
+              h('span', { class: 'a5-spell-text' }, h('b', {}, sp.name), h('small', { class: 'muted' }, sp.school + ' · ' + D5.srcName(sp.source) + (sp.duration && sp.duration.concentration ? ' · Concentração' : '') + (sp.ritual ? ' · Ritual' : '')))), App.Ficha5e.spellBookButton(sp)));
           put(group, h('div', { class: 'a5-spell-grid' }, cards));
           put(items, group);
         }

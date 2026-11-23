@@ -408,6 +408,8 @@
       spot: () => el('.scene-item .btn', 'Mover jogadores')() || el('#left-tabs')(),
       enter: () => { App.UI.setViewAs(null); if (App.UI.mode !== 'edit') App.UI.setMode('edit'); App.UI.leftTab = 'scenes'; App.UI.refresh(); } },
 
+    { ch: 'Fim', title: 'Leia o texto das magias',
+      body: `Ao criar uma ficha de D&D 5e pelo passo a passo, ou ao abrir uma ficha 5e, clique no botão com ícone de <b>livro</b> ao lado da magia. Ele mostra a descrição completa, inclusive o uso em níveis superiores quando houver. Clique fora do painel ou aperte <b>Esc</b> para fechá-lo. O botão não escolhe nem prepara a magia.` },
     { ch: 'Fim', title: 'Pronto',
       body: `Você já sabe usar:
         <ul><li>Tokens, painel e PV rápido</li><li>Ataque com alcance, alvo e dano automático</li><li>Magia em área com resistência e custo</li>

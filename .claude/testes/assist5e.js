@@ -42,6 +42,14 @@ window.addEventListener('load', () => setTimeout(async () => {
     await change($('[data-f="a5-name"]'), 'Lia Folhaverde');
     await change($('[data-f="a5-level"]'), '5');
     await step('classe');
+    await click('.a5-item[data-id="barbarian-xphb"]', 'Barbarian 2024');
+    const color = (sel) => getComputedStyle($(sel)).color;
+    ok($('.a5-features-title')?.textContent === 'Características de Barbarian até o nível 5', 'título dinâmico das características');
+    ok($('.a5-subtitle')?.textContent === 'Barbarian Subclass (nível 3)', 'título da subclasse');
+    ok(color('.a5-features-title') === 'rgb(217, 164, 65)', 'características amarelas');
+    ok(color('.a5-subtitle') === 'rgb(91, 139, 224)', 'subclasse azul');
+    ok(color('.a5-hit-die') === 'rgb(217, 87, 79)', 'dado de vida vermelho');
+    ok(color('.a5-saves') === 'rgb(232, 145, 66)', 'salvaguardas laranja');
     ok($('.a5-source-filter') || $('.f5-source-filter'), 'filtro de fonte na lista de classes');
     const sourceButton = $('.a5-search-row .f5-source-filter > button');
     const searchInput = $('.a5-search-row .search-box input');
@@ -137,6 +145,12 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('pendentes: ' + JSON.stringify(Object.values(A5.warnings()).flat()));
     // Magias da classe: 4 truques, 9 preparadas
     await step('magias');
+    const alwaysCard = $$('.a5-pane .f5-sec').find((sec) => /Sempre preparadas/.test(sec.querySelector('h3')?.textContent || ''))?.querySelector('.a5-spell');
+    ok(alwaysCard?.querySelector('.f5-spell-book-btn'), 'livro nas magias sempre preparadas');
+    alwaysCard?.querySelector('.f5-spell-book-btn')?.click();
+    await W(30);
+    ok($('#f5-spell-book')?.textContent.includes(alwaysCard?.querySelector('b')?.textContent), 'livro da magia sempre preparada');
+    App.Ficha5e.closeSpellBook();
     const secs = $$('.a5-pane .f5-sec').filter((s) => s.querySelector('.a5-spell-list'));
     ok(secs.length === 2, 'truques e preparadas');
     ok(secs[1].querySelector('.a5-spell-level h4') && secs[1].querySelector('.a5-spell-grid .a5-spell') && secs[1].querySelector('.f5-source-filter'), 'magias em seções e cards com filtro');
@@ -144,6 +158,16 @@ window.addEventListener('load', () => setTimeout(async () => {
     const spellSearch = secs[1].querySelector('.a5-search-row input');
     spellSearch.value = 'shield'; spellSearch.dispatchEvent(new Event('input')); await W(20);
     ok(secs[1].querySelector('.a5-spell[data-spell="shield-xphb"]'), 'busca de magias');
+    const shield = secs[1].querySelector('.a5-spell[data-spell="shield-xphb"]');
+    const beforeBook = JSON.stringify(A5.st.spells);
+    shield.querySelector('.f5-spell-book-btn').click();
+    ok($('#f5-spell-book')?.textContent.includes(App.Dados5e.byId.spells.get('shield-xphb').description), 'descrição completa no livro do assistente');
+    ok(JSON.stringify(A5.st.spells) === beforeBook && !shield.querySelector('input').checked, 'livro não escolhe magia');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    ok(!$('#f5-spell-book'), 'Esc fecha livro');
+    shield.querySelector('.f5-spell-book-btn').click();
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    ok(!$('#f5-spell-book'), 'clique fora fecha livro');
     secs[1].querySelector('.f5-source-filter > button').click();
     const spellSource = [...secs[1].querySelectorAll('.f5-source-menu label')].find((x) => /Player.s Handbook \(2024\)/.test(x.textContent));
     ok(spellSource, 'fonte disponível para magias');
