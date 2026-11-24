@@ -1364,18 +1364,36 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
   const seenName = (name, masked) => (masked && !S().gmView() ? 'Vulto' : name);
   UI.seenName = seenName;
 
+  /*
+   * Plano 83: a cor da ficha no chat (opção E do protótipo, "Degradê"): faixa à esquerda e a cor sumindo da esquerda
+   * para a direita, nome na cor. A cor é a do token (ou da ficha), clareada (U.chatColor). Sem ficha: a cor do jogador,
+   * sem degradê. Token com o nome escondido: cinza para quem não é o mestre.
+   */
+  const GREY = '#8f8d9a';
+  function tokenColor(sceneId, tokenId, actorId, masked) {
+    if (masked && !S().gmView()) return GREY;
+    const st = S().state, sc = sceneId && st.scenes[sceneId], t = sc && tokenId ? sc.tokens[tokenId] : null;
+    const a = (t && t.actorId && st.actors[t.actorId]) || (actorId && st.actors[actorId]) || null;
+    if (t && t.masked && !S().gmView()) return GREY;
+    return U.chatColor((t && t.color) || (a && a.color));
+  }
+  const msgColor = (m) => (m.kind === 'action' || m.kind === 'roll' ? tokenColor(m.sceneId, m.srcId, m.actorId, m.fromMasked) : null);
+  UI.msgColor = msgColor;
+  const tintAttr = (c) => (c ? ` style="--c:${c}"` : '');
+
   function msgHtml(m) {
     if (m.kind === 'system') return `<div class="msg sys${m.secret ? ' secret' : ''}">${U.esc(m.text)}</div>`;
-    const head = `<div class="msg-head"><b style="color:${S().playerColor(m.playerId)}">${U.esc(seenName(m.from, m.fromMasked))}</b>${m.secret ? icHtml('lock') + '<span>secreta</span>' : ''}<span class="time">${U.fmtTime(m.ts)}</span></div>`;
+    const mc = msgColor(m);
+    const head = `<div class="msg-head"><b style="color:${mc || S().playerColor(m.playerId)}">${U.esc(seenName(m.from, m.fromMasked))}</b>${m.secret ? icHtml('lock') + '<span>secreta</span>' : ''}<span class="time">${U.fmtTime(m.ts)}</span></div>`;
     if (m.kind === 'handout') {
       const src = m.img && App.Images.src(m.img);
       const who = Array.isArray(m.to) && S().gmView() ? ` · para ${U.esc(m.to.map((id) => S().playerName(id)).join(', '))}` : '';
       return `<div class="msg handout" data-handout="${U.esc(m.id)}">${head}<div class="ho-msg">${src ? `<img src="${src}" alt="">` : icHtml('scroll-text')}<div><span class="ho-eyebrow">O mestre mostrou${who}</span><b>${U.esc(m.title || 'Sem título')}</b>${m.text ? `<span class="ho-snip">${U.esc(String(m.text).slice(0, 90))}${String(m.text).length > 90 ? '…' : ''}</span>` : ''}<small>Clique para abrir</small></div></div></div>`;
     }
-    if (m.kind === 'action') return `<div class="msg act m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}">${head}${actionMsgHtml(m)}</div>`;
+    if (m.kind === 'action') return `<div class="msg act m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}${mc ? ' tinted' : ''}"${tintAttr(mc)}>${head}${actionMsgHtml(m)}</div>`;
     if (m.kind === 'roll') {
       const parts = (m.parts || []).map((p) => `<div class="roll-part"><div class="roll-main"><span class="roll-total${p.crit ? ' crit' : ''}${p.fumble ? ' fumble' : ''}">${U.esc(p.total)}</span><div>${p.label ? `<div class="roll-label">${U.esc(p.label)}</div>` : ''}<div class="roll-detail">${U.esc(p.formula)} → ${cleanDetail(p.detail)}</div></div></div></div>`).join('');
-      return `<div class="msg roll">${head}${m.label ? `<div class="roll-title">${U.esc(String(m.label).replace(/^[^\p{L}\p{N}]+\s*/u, ''))}</div>` : ''}${parts}</div>`;
+      return `<div class="msg roll${mc ? ' tinted' : ''}"${tintAttr(mc)}>${head}${m.label ? `<div class="roll-title">${U.esc(String(m.label).replace(/^[^\p{L}\p{N}]+\s*/u, ''))}</div>` : ''}${parts}</div>`;
     }
     return `<div class="msg">${head}<div class="msg-text">${U.esc(m.text)}</div></div>`;
   }
@@ -2348,7 +2366,8 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       } else if (m.mode === 'attack' && !r.hit) amt = '<div class="amt zero">—<small>sem dano</small></div>';
       if (r.noBar) sub += ` · alvo sem a barra "${U.esc(r.noBar)}"`;
       if (r.dmgNote && !calc) sub += ` · <b>${U.esc(r.dmgNote)}</b>`;
-      html += `<div class="act-target"><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}${calc}</div>`;
+      const tc = tokenColor(m.sceneId, r.tokenId, null, r.masked); // Plano 83: cada alvo com a sua cor
+      html += `<div class="act-target"${tc ? ` style="--tc:${tc}"` : ''}><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}${calc}</div>`;
     }
     if (m.undone) html += '<div class="act-foot"><span class="undone-note">Desfeito pelo mestre</span></div>';
     else if (gm && (m.applied || []).length) html += `<div class="act-foot"><button class="undo-btn" data-undo="${U.esc(m.id)}">${icHtml('undo-2')}Desfazer</button></div>`;
@@ -2365,12 +2384,14 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       else if (m.mode === 'save') tag = r.success ? '<span class="tag miss">Resistiu</span>' : '<span class="tag hit">Falhou</span>';
       if (r.amount != null) amt = `<span class="amt ${!Number(r.amount) ? 'zero' : heal ? 'heal' : 'dmg'}">${heal ? '+' : '−'}${U.esc(r.amount)}<small>${U.esc(r.bar)}</small></span>`;
       else if (m.mode === 'attack' && !r.hit) amt = '<span class="amt zero">—</span>';
-      rows += `<div class="cmp-row"><span class="who">${U.esc(seenName(r.name, r.masked))}</span>${tag}<span class="grow"></span>${amt}</div>`;
+      const tc = tokenColor(m.sceneId, r.tokenId, null, r.masked);
+      rows += `<div class="cmp-row"${tc ? ` style="--tc:${tc}"` : ''}><span class="who">${U.esc(seenName(r.name, r.masked))}</span>${tag}<span class="grow"></span>${amt}</div>`;
     }
     const undo = m.undone ? '<span class="undone-note">Desfeito</span>'
       : S().gmView() && (m.applied || []).length ? `<button class="undo-btn" data-undo="${U.esc(m.id)}" title="Devolve PV e Mana">${icHtml('undo-2')}Desfazer</button>` : '';
-    return `<div class="msg act compact m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}" title="Clique para ver os dados no chat">
-      <div class="cmp-head">${icHtml(MODE_ICON[m.mode] || 'dices')}<b>${U.esc(seenName(m.from, m.fromMasked))}</b><span class="muted">${U.esc(m.label)}</span>${m.cost ? ` <span class="badge">−${U.esc(m.cost.amount)} ${U.esc(m.cost.bar)}</span>` : ''}<span class="grow"></span>${undo}</div>${rows}</div>`;
+    const mc = msgColor(m);
+    return `<div class="msg act compact m-${U.esc(m.mode || 'roll')}${m.undone ? ' undone' : ''}${mc ? ' tinted' : ''}"${tintAttr(mc)} title="Clique para ver os dados no chat">
+      <div class="cmp-head">${icHtml(MODE_ICON[m.mode] || 'dices')}<b${mc ? ` style="color:${mc}"` : ''}>${U.esc(seenName(m.from, m.fromMasked))}</b><span class="muted">${U.esc(m.label)}</span>${m.cost ? ` <span class="badge">−${U.esc(m.cost.amount)} ${U.esc(m.cost.bar)}</span>` : ''}<span class="grow"></span>${undo}</div>${rows}</div>`;
   }
 
   function meter(b, i) {

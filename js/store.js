@@ -941,7 +941,7 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       const applied = [];
       const msg = { id: U.uid('m_'), ts: Date.now(), kind: 'action', mode, sceneId: sc.id,
         from: src ? src.name : trap ? act.name || 'Armadilha' : actor.name, trap: !!trap, fromMasked: !!(src && src.masked), srcId: src ? src.id : null, point: area > 0 ? point : null, area: area > 0 ? area : 0,
-        playerId: pid || this.me.id, label: act.name, targets: [], applied };
+        playerId: pid || this.me.id, label: act.name, targets: [], applied, actorId: actor ? actor.id : null }; // Plano 83: actorId para a cor no chat
 
       // Aplica a mudança na barra do alvo e registra (para poder desfazer)
       const applyTo = (t, row, delta) => {
@@ -1090,6 +1090,8 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       this.dispatch({ type: 'chat.add', msg: {
         id: U.uid('m_'), ts: Date.now(), kind: 'roll', from: opts.from || this.myName(), playerId: this.me.id,
         label: opts.label || '', parts, secret: !!opts.secret,
+        // Plano 83: de qual ficha e token veio (para a cor no chat)
+        actorId: opts.actor ? opts.actor.id : null, srcId: opts.token ? opts.token.id : null, sceneId: opts.token ? (this.currentScene() || {}).id || null : null, fromMasked: !!(opts.token && opts.token.masked),
       } });
       return parts;
     },

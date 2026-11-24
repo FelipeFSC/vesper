@@ -109,6 +109,21 @@ window.App = window.App || {};
     const d = new Date(ts || Date.now());
     return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
   };
+  /*
+   * Plano 83: cor da ficha no chat. Clareia a cor (mistura com branco, k = 40%) mantendo o tom, e continua
+   * clareando até ficar legível no fundo escuro (luminância mínima). Cor inválida = null.
+   */
+  U.chatColor = (c, k = 0.4) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(c || ''));
+    if (!m) return null;
+    const n = parseInt(m[1], 16), rgb = [n >> 16, (n >> 8) & 255, n & 255];
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const lum = (x) => 0.2126 * lin(x[0]) + 0.7152 * lin(x[1]) + 0.0722 * lin(x[2]);
+    const mix = (q) => rgb.map((v) => Math.round(v + (255 - v) * q));
+    let q = k, out = mix(q);
+    while (lum(out) < 0.3 && q < 0.95) { q += 0.03; out = mix(q); }
+    return '#' + out.map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
   U.fmtSize = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB');
 
   /*

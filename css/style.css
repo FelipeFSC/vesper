@@ -492,6 +492,9 @@ button.brand:hover .home-label { color: var(--gold); border-color: var(--gold); 
 
 /* Cartão de ação automática */
 .msg.act { padding: 0; overflow: hidden; }
+/* Plano 83 (opção E, "Degradê"): a cor da ficha de quem agiu na faixa à esquerda, sumindo para a direita; alvos na cor deles */
+.msg.tinted { border-left: 3px solid var(--c); background: linear-gradient(100deg, color-mix(in srgb, var(--c) 14%, var(--panel2)) 0%, var(--panel2) 65%); }
+.act-target[style*="--tc"] .who, .cmp-row[style*="--tc"] .who { color: var(--tc); }
 .msg.act .msg-head { padding: 8px 11px 0; }
 .act-title { display: flex; align-items: center; gap: 8px; font: 600 15px/1.2 var(--serif); padding: 4px 11px 9px; border-bottom: 1px solid var(--line); }
 .act-title .ico { width: 15px; height: 15px; }

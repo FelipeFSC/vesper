@@ -106,3 +106,4 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 80 | [Imagem do personagem no topo da página "Criar ficha"](80-arte-no-topo-da-pagina-criar-ficha.md) | Implementado (testes do usuário) |
 | 81 | [Fechar, duplicar e excluir ficha à vista (página e mesa)](81-fechar-duplicar-excluir-ficha.md) | Implementado (testes do usuário) |
 | 82 | [Bloco da criatura legível e com teste das ações](82-bloco-da-criatura-legivel.md) | Implementado (testes do usuário) |
+| 83 | [Cor da ficha no chat](83-cor-da-ficha-no-chat.md) | Implementado (testes do usuário) |
