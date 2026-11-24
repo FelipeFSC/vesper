@@ -130,9 +130,10 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
   function avatar(a, size) {
     const src = a?.img ? urls.src(a.img, F.assets[a.img]) : null;
     const col = U.safeColor(a && a.color, '#5f5e6a');
-    return h('div', { class: 'avatar', style: {
+    const ready = !!(src && (a.imgStyle === 'token' || a.imgStyle === 'pop')); // Plano 75/76: token pronto ou 3D inteiro, sem borda
+    return h('div', { class: 'avatar' + (ready ? ' token-ready' : ''), style: {
       width: size + 'px', height: size + 'px', fontSize: size * 0.4 + 'px',
-      background: src ? `center/cover url(${src})` : `radial-gradient(circle at 35% 30%, ${U.hexA(col, 1)}, ${shade(col, -0.35)})`,
+      background: src ? (ready ? `center/contain no-repeat url(${src})` : `center/cover url(${src})`) : `radial-gradient(circle at 35% 30%, ${U.hexA(col, 1)}, ${shade(col, -0.35)})`,
     } }, src ? '' : initials(a && a.name, size < 34 ? 1 : 2));
   }
   function meter(b, i) {
@@ -274,7 +275,8 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       main.append(App.Ficha5e.render(a, {
         wide: true, edit, rerender: render,
         roll: (label, f) => roll(label, f, a),
-        avatar: (size) => { const av = avatar(a, size); av.title = 'Clique para escolher a imagem'; av.onclick = pickImage; return av; },
+        avatar: (size) => tokenAvatar(a, size),
+        art: (el) => decorateArt(el, a), // Plano 74: arte no topo
         config: () => h('div', {}, identity(a), footer(a)),
       }));
       return;
@@ -285,16 +287,20 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
 
   // Identidade: retrato, nome e o que vale para o token
   function identity(a) {
-    const av = avatar(a, 120);
+    const av = tokenAvatar(a, 120);
     av.classList.add('fp-avatar');
-    av.title = 'Clique para escolher a imagem';
-    av.onclick = pickImage;
     const pick = (label, el, attrs = {}) => h('label', attrs, label, el);
-    return h('section', { class: 'fp-sec fp-id' },
+    // Plano 74: token (círculo) e imagem do personagem (arte ao fundo da seção)
+    return decorateArt(h('section', { class: 'fp-sec fp-id' },
       h('div', { class: 'fp-id-img' }, av,
         h('div', { class: 'row' },
-          h('button', { class: 'btn small', onclick: pickImage }, ic('image'), a.img ? 'Trocar' : 'Imagem'),
-          a.img ? iconBtn('x', 'Remover imagem', () => edit((x) => { x.img = null; })) : null)),
+          h('button', { class: 'btn small', 'data-sa': 'tok', title: 'Uma imagem própria para o token (ex.: token pronto com moldura)', onclick: pickImage }, ic('upload'), a.img && !a.imgFromArt ? 'Trocar token' : 'Enviar token'),
+          a.art ? iconBtn('crop', 'Recortar o token da imagem do personagem', cropToken) : null,
+          iconBtn('layers', a.token3d ? 'Ajustar o token 3D' : 'Montar token 3D (o personagem sai da moldura)', make3d),
+          a.img ? iconBtn('x', 'Remover o token', () => edit((x) => { x.img = null; x.imgFromArt = false; })) : null),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn small', 'data-sa': 'art', onclick: pickArt }, ic('image'), a.art ? 'Trocar imagem do personagem' : 'Imagem do personagem'),
+          a.art ? iconBtn('x', 'Remover a imagem do personagem', removeArt) : null)),
       h('div', { class: 'fp-id-body' },
         h('input', { class: 'fp-name sheet-name', value: a.name, 'data-f': 'nome', 'aria-label': 'Nome da ficha', onchange: (e) => edit((x) => { x.name = e.target.value.trim() || x.name; }) }),
         h('div', { class: 'form fp-id-form' },
@@ -311,8 +317,50 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
             h('option', { value: '' }, 'Regra da cena'), h('option', { value: 'show' }, 'Sempre visível'), h('option', { value: 'silhouette' }, 'Vulto'), h('option', { value: 'hide' }, 'Escondido')))),
         h('p', { class: 'hint' }, a.kind === 'pc'
           ? 'Personagem: todos os tokens compartilham os mesmos valores das barras.'
-          : 'NPC e criatura: cada token criado no mapa ganha uma cópia própria das barras (PV separado).')));
+          : 'NPC e criatura: cada token criado no mapa ganha uma cópia própria das barras (PV separado).'))), a);
   }
+  // ---------- Plano 74: imagem do personagem (a.art) e imagem do token (a.img), guardadas no navegador ----------
+  const pageSrc = (id) => (id ? urls.src(id, F.assets[id]) : null);
+  async function storeBlob(blob) { const id = await App.Images.idOf(blob); setAsset(F.assets, id, blob); return id; }
+  async function tokenFromArt(artId, crop) {
+    const r = await App.SheetArt.cropBlob(pageSrc(artId), crop);
+    return { img: await storeBlob(r.blob), imgFromArt: true, artCrop: r.crop, imgStyle: null };
+  }
+  async function setArt(file) {
+    try {
+      const r = await App.Images.toWebP(file, App.Images.ART), id = await storeBlob(r.blob), a = cur();
+      const patch = { art: id };
+      if (a && (!a.img || a.imgFromArt)) Object.assign(patch, await tokenFromArt(id, null));
+      edit((x) => Object.assign(x, patch));
+    } catch (e) { U.toast(e.message, 'error'); }
+  }
+  async function pickArt() { const f = await U.pickFile('image/*'); if (f) await setArt(f); }
+  function removeArt() { edit((x) => { if (x.imgFromArt) { x.img = null; x.imgFromArt = false; x.artCrop = null; } x.art = null; }); }
+  async function cropToken() {
+    const a = cur();
+    if (!a || !a.art) return;
+    const c = await App.SheetArt.crop(pageSrc(a.art), a.artCrop);
+    if (!c) return;
+    try { const p = await tokenFromArt(a.art, c); edit((x) => Object.assign(x, p)); } catch (e) { U.toast(e.message, 'error'); }
+  }
+  function tokenAvatar(a, size) {
+    const av = avatar(a, size);
+    av.title = a.art ? 'Clique para escolher onde o token pega na imagem do personagem' : 'Clique para escolher a imagem do token';
+    av.onclick = a.art ? cropToken : pickImage;
+    return av;
+  }
+  const decorateArt = (el, a) => App.SheetArt.decorate(el, { src: pageSrc(a.art), y: a.artY != null ? a.artY : 12, can: true, onPick: pickArt, onFile: setArt });
+  // Plano 76: montar token 3D
+  async function make3d() {
+    const a = cur();
+    if (!a || !App.Token3D) return;
+    const r = await App.Token3D.open({ state: a.token3d, artId: a.art || null, srcOf: pageSrc,
+      storeFile: async (f) => { const w = await App.Images.toWebP(f, App.Images.ART); return storeBlob(w.blob); } });
+    if (!r) return;
+    const id = await storeBlob(r.blob);
+    edit((x) => { x.img = id; x.imgFromArt = false; x.imgStyle = 'pop'; x.token3d = r.state; });
+  }
+  F.setArt = setArt; F.cropToken = cropToken; F.make3d = make3d;
 
   function barsSec(a) {
     const rows = (a.bars || []).map((b, i) => h('div', { class: 'fp-bar' },
@@ -546,6 +594,11 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
         setAsset(F.assets, a.img, r.blob);
       }
     } catch (err) { U.toast('Sem imagem: ' + err.message, 'error'); }
+    // Plano 74: a ilustração do 5etools vira a imagem do personagem
+    try {
+      const art = await BS.artFile(m);
+      if (art) { const r = await App.Images.toWebP(art, App.Images.ART); a.art = await App.Images.idOf(r.blob); setAsset(F.assets, a.art, r.blob); }
+    } catch (err) { console.warn('ilustração', err); }
     F.actors[a.id] = a;
     select(a.id);
     save();
@@ -561,7 +614,7 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       const r = await App.Images.toWebP(f, App.Images.TOKEN);
       const id = await App.Images.idOf(r.blob);
       setAsset(F.assets, id, r.blob);
-      edit((x) => { x.img = id; });
+      edit((x) => { x.img = id; x.imgFromArt = false; x.imgStyle = 'token'; }); // Plano 75: token enviado aparece inteiro
     } catch (e) { U.toast(e.message, 'error'); }
   }
   F.setImage = (data) => { const id = 'img_' + U.hash(data); setAsset(F.assets, id, data); edit((x) => { x.img = id; }); };

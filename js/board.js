@@ -170,12 +170,16 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     return n;
   };
 
+  // Plano 72: Linha, Retângulo e Círculo ficam num botão só (Formas)
+  B.SHAPES = ['line', 'rect', 'ellipse'];
+  B.lastShape = 'line';
   B.setTool = function (t) {
     if ((t.startsWith('fog') || t === 'wall' || t === 'door' || t === 'room' || t === 'prop' || t === 'light' || t === 'trigger' || t === 'portal' || t === 'note') && !S().gmView()) return;
     if (t !== 'room') B.roomPoly = null;
     if (t !== 'light') { B.lightPoly = null; B.lightDraft = null; }
     if (t !== 'trigger' && t !== 'portal') { B.trigPoly = null; B.trigDraft = null; }
     B.tool = t;
+    if (B.SHAPES.includes(t)) B.lastShape = t; // Plano 72: o botão Formas volta para a última forma usada
     B.canvas.style.cursor = CURSORS[t] || 'crosshair';
     if (App.UI) App.UI.renderToolbar();
   };
@@ -938,6 +942,11 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     im.onload = () => B.addProp(S().currentScene(), imgId, p || B.viewCenter(), im.naturalWidth, im.naturalHeight, old && old.name);
     im.src = src;
   };
+  // Plano 68: a cópia do objeto ganha uma cópia do som dele
+  function dupSound(sc, kind, fromId, toId) {
+    const s = App.Audio && App.Audio.soundOf(sc, kind, fromId);
+    if (s) S().dispatch({ type: 'sound.add', sceneId: sc.id, sound: Object.assign(U.clone(s), { id: U.uid('snd_'), attach: kind + ':' + toId }) });
+  }
   B.duplicateProp = function (sc, id) {
     const q = (sc.props || []).find((x) => x.id === id);
     if (!q) return;
@@ -946,6 +955,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     const run = () => {
       S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: c });
       S().dispatch({ type: 'order.move', sceneId: sc.id, kind: 'prop', id: c.id, dir: 'none' });
+      dupSound(sc, 'prop', q.id, c.id);
     };
     if (App.History) App.History.batch('duplicar imagem', run); else run();
     B.selectedProp = c.id;
@@ -1045,27 +1055,66 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     d.moved = d.moved || Math.abs(dx) + Math.abs(dy) > 0;
   }
 
+  // Bolinha com o alto-falante: violeta = repetindo, cinza = silenciado, dourado = efeito (toca quando o mestre mandar)
+  function drawSpeaker(ctx, p, r, snd, sel) {
+    const z = B.cam.z, playing = snd.once ? !!(App.Audio && App.Audio.spotPlaying(snd.id)) : snd.on;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = snd.once ? C.gold : snd.on ? C.sel : '#3a3550'; ctx.fill();
+    ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : 'rgba(17,17,20,.9)'; ctx.stroke();
+    // Plano 68: efeito tocando agora ganha um anel
+    if (snd.once && playing) { ctx.beginPath(); ctx.arc(p.x, p.y, r + 3 / z, 0, Math.PI * 2); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = C.gold; ctx.stroke(); }
+    const u = r / 13;
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6 / z * Math.min(1, u * 1.2); ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(p.x - 6 * u, p.y - 2.5 * u); ctx.lineTo(p.x - 3 * u, p.y - 2.5 * u); ctx.lineTo(p.x + 1 * u, p.y - 6 * u);
+    ctx.lineTo(p.x + 1 * u, p.y + 6 * u); ctx.lineTo(p.x - 3 * u, p.y + 2.5 * u); ctx.lineTo(p.x - 6 * u, p.y + 2.5 * u); ctx.closePath(); ctx.fill();
+    if (snd.once) ctx.fillStyle = '#17130a';
+    if (snd.on || snd.once) {
+      ctx.beginPath(); ctx.arc(p.x + 1 * u, p.y, 4.5 * u, -0.7, 0.7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x + 1 * u, p.y, 7.5 * u, -0.7, 0.7); ctx.stroke();
+    }
+  }
+  /*
+   * Plano 68: som de um objeto. v = cena como aparece agora (App.Anim.view). Devolve o objeto, o centro (de onde o
+   * som sai) e o ícone no canto de cima à direita do objeto. null = o objeto não está nesta cena.
+   */
+  const viewOf = (sc) => (sc._view || !App.Anim ? sc : App.Anim.view(sc));
+  const BADGE = 9;
+  function attachedAt(v, snd) {
+    const a = App.Audio && App.Audio.attachOf(v, snd);
+    if (!a) return null;
+    const z = B.cam.z, k = BADGE / z;
+    if (a.kind === 'token') {
+      const c = posOf(a.o), hs = ((a.o.size || 1) * v.grid) / 2;
+      return { kind: a.kind, o: a.o, c, b: { x: c.x + hs - k * 0.4, y: c.y - hs + k * 0.4 } };
+    }
+    if (a.kind === 'prop') {
+      const q = propNow(a.o), c = pCenter(q), ang = ((q.rot || 0) * Math.PI) / 180, dx = q.w / 2 - k * 0.4, dy = -q.h / 2 + k * 0.4;
+      return { kind: a.kind, o: a.o, c, b: { x: c.x + dx * Math.cos(ang) - dy * Math.sin(ang), y: c.y + dx * Math.sin(ang) + dy * Math.cos(ang) } };
+    }
+    const c = lightCenter(lightNow(a.o));
+    return { kind: a.kind, o: a.o, c, b: { x: c.x + 15 / z, y: c.y - 15 / z } };
+  }
+  B.attachedAt = (sc, snd) => attachedAt(viewOf(sc), snd);
+  // O objeto do som está selecionado? (o alcance aparece em volta dele)
+  const objSelected = (kind, id) => (kind === 'token' ? B.selected === id : kind === 'prop' ? B.selectedProp === id : B.selectedLight === id);
   function drawSounds(ctx, sc) {
     const z = B.cam.z;
     for (const snd of sc.sounds || []) {
+      if (snd.attach) {
+        const at = attachedAt(sc, snd);
+        if (!at) continue;
+        const sel = B.selectedSound === snd.id;
+        ctx.save();
+        if (sel || objSelected(at.kind, at.o.id)) drawSoundRange(ctx, sc, snd, at.c, (Number(snd.r) || 8) * sc.grid, sel);
+        drawSpeaker(ctx, at.b, BADGE / z, snd, sel);
+        ctx.restore();
+        continue;
+      }
       const p = soundPos(snd), sel = B.selectedSound === snd.id, R = (Number(snd.r) || 8) * sc.grid, r = 13 / z;
       ctx.save();
       drawSoundRange(ctx, sc, snd, p, R, sel);
-      // marcador: violeta = repetindo, cinza = silenciado, dourado = efeito (toca quando o mestre mandar)
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = snd.once ? C.gold : snd.on ? C.sel : '#3a3550'; ctx.fill();
-      ctx.lineWidth = (sel ? 2.5 : 1.5) / z; ctx.strokeStyle = sel ? '#fff' : 'rgba(17,17,20,.9)'; ctx.stroke();
-      // alto-falante
-      const u = r / 13;
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6 / z; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p.x - 6 * u, p.y - 2.5 * u); ctx.lineTo(p.x - 3 * u, p.y - 2.5 * u); ctx.lineTo(p.x + 1 * u, p.y - 6 * u);
-      ctx.lineTo(p.x + 1 * u, p.y + 6 * u); ctx.lineTo(p.x - 3 * u, p.y + 2.5 * u); ctx.lineTo(p.x - 6 * u, p.y + 2.5 * u); ctx.closePath(); ctx.fill();
-      if (snd.once) ctx.fillStyle = '#17130a';
-      if (snd.on || snd.once) {
-        ctx.beginPath(); ctx.arc(p.x + 1 * u, p.y, 4.5 * u, -0.7, 0.7); ctx.stroke();
-        ctx.beginPath(); ctx.arc(p.x + 1 * u, p.y, 7.5 * u, -0.7, 0.7); ctx.stroke();
-      }
+      drawSpeaker(ctx, p, r, snd, sel);
       // nome
       const label = App.Audio ? App.Audio.label(snd.name) : snd.name;
       ctx.font = '600 ' + 11 / z + 'px ' + SANS;
@@ -1082,10 +1131,22 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (!S().gmView() || !B.layers.sounds) return null;
     const r = 16 / B.cam.z;
     const list = sc.sounds || [];
-    for (let i = list.length - 1; i >= 0; i--) if (Math.hypot(p.x - list[i].x, p.y - list[i].y) <= r) return list[i];
+    // Plano 68: o ícone de som no canto do objeto vem antes (fica por cima dele)
+    if (list.some((x) => x.attach)) {
+      const v = viewOf(sc), rb = (BADGE + 3) / B.cam.z;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (!list[i].attach) continue;
+        const at = attachedAt(v, list[i]);
+        if (at && Math.hypot(p.x - at.b.x, p.y - at.b.y) <= rb) return list[i];
+      }
+    }
+    for (let i = list.length - 1; i >= 0; i--) if (!list[i].attach && Math.hypot(p.x - list[i].x, p.y - list[i].y) <= r) return list[i];
     return null;
   }
-  B.soundScreenPos = function (snd) { return toScreen(snd.x, snd.y); };
+  B.soundScreenPos = function (snd) {
+    if (snd.attach) { const at = B.attachedAt(S().currentScene(), snd); if (at) return toScreen(at.c.x, at.c.y); }
+    return toScreen(snd.x, snd.y);
+  };
 
   // ---------- gatilhos (só o mestre vê) ----------
   const TRIG_C = '#e0609a';
@@ -1580,7 +1641,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (B.layers.props) for (const o of sc.props || []) add('prop', o);
     if (B.layers.lights) for (const o of sc.lights || []) add('light', o);
     if (B.layers.triggers) for (const o of sc.triggers || []) add('trigger', o);
-    if (B.layers.sounds) for (const o of sc.sounds || []) add('sound', o);
+    if (B.layers.sounds) for (const o of sc.sounds || []) if (!o.attach) add('sound', o);
     if (B.layers.notes !== false) for (const o of sc.notes || []) add('note', o);
     if (B.layers.walls) for (const w of sc.walls || []) if (inR(w.x1, w.y1) && inR(w.x2, w.y2)) B.multi.add('wall:' + w.id);
   }
@@ -1596,7 +1657,7 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
         if (kind === 'token') D2({ type: 'token.move', x: o.x + dx, y: o.y + dy });
         else if (kind === 'prop') D2({ type: 'prop.update', patch: { x: o.x + dx, y: o.y + dy } });
         else if (kind === 'light' || kind === 'trigger') D2({ type: kind === 'light' ? 'lightpt.update' : 'trigger.update', patch: Object.assign({ x: o.x + dx, y: o.y + dy }, o.pts ? { pts: o.pts.map(([x, y]) => [x + dx, y + dy]) } : {}) });
-        else if (kind === 'sound') D2({ type: 'sound.update', patch: { x: o.x + dx, y: o.y + dy } });
+        else if (kind === 'sound') { if (!o.attach) D2({ type: 'sound.update', patch: { x: o.x + dx, y: o.y + dy } }); }
         else if (kind === 'note') D2({ type: 'note.update', patch: { x: o.x + dx, y: o.y + dy } });
         else if (kind === 'wall') walls.push(id);
       }
@@ -1626,7 +1687,16 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       const pts = kind === 'wall' ? [[o.x1, o.y1], [o.x2, o.y2]] : kind === 'token' || kind === 'prop' ? [[o.x, o.y]] : o.pts ? o.pts : [[o.x, o.y]];
       for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); }
     }
-    B.clipboard = { sceneId: sc.id, grid: sc.grid, ox: Math.floor(x0 / sc.grid) * sc.grid, oy: Math.floor(y0 / sc.grid) * sc.grid, items: list.map(({ kind, o }) => ({ kind, o: U.clone(o) })) };
+    // Plano 68: o objeto leva o som dele; o som de um objeto copiado sem o objeto vira som solto onde o objeto está
+    const keys = new Set(list.map(({ kind, o }) => kind + ':' + o.id)), items = list.map(({ kind, o }) => ({ kind, o: U.clone(o) }));
+    for (const s of sc.sounds || []) if (s.attach && keys.has(s.attach) && !keys.has('sound:' + s.id)) items.push({ kind: 'sound', o: U.clone(s) });
+    for (const it of items) {
+      if (it.kind !== 'sound' || !it.o.attach || keys.has(it.o.attach)) continue;
+      const p = App.Audio.soundPos(sc, it.o);
+      Object.assign(it.o, { x: Math.round(p.x), y: Math.round(p.y) });
+      delete it.o.attach;
+    }
+    B.clipboard = { sceneId: sc.id, grid: sc.grid, ox: Math.floor(x0 / sc.grid) * sc.grid, oy: Math.floor(y0 / sc.grid) * sc.grid, items };
     U.toast('Copiado: ' + countLabel(list.length) + '. Ctrl+V cola onde estiver o mouse (em qualquer cena).', 'info', 3000);
     return true;
   }
@@ -1666,7 +1736,11 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
         if (kind === 'token') { Object.assign(o, { x: X(src.x), y: Y(src.y), z: ++z, lastMove: null }); if (!same) delete o.group; S().dispatch({ type: 'token.add', sceneId: sc.id, token: o }); }
         else if (kind === 'prop') { Object.assign(o, { x: X(src.x), y: Y(src.y), w: Math.round(src.w * k), h: Math.round(src.h * k), z: ++z }); S().dispatch({ type: 'prop.add', sceneId: sc.id, prop: o }); }
         else if (kind === 'light') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); if (src.pts) o.pts = src.pts.map(([x, y]) => [X(x), Y(y)]); S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: o }); }
-        else if (kind === 'sound') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); S().dispatch({ type: 'sound.add', sceneId: sc.id, sound: o }); }
+        else if (kind === 'sound') {
+          Object.assign(o, { x: X(src.x), y: Y(src.y) });
+          if (src.attach) { const i = src.attach.indexOf(':'); o.attach = src.attach.slice(0, i) + ':' + ids.get(src.attach.slice(i + 1)); }
+          S().dispatch({ type: 'sound.add', sceneId: sc.id, sound: o });
+        }
         else if (kind === 'note') { Object.assign(o, { x: X(src.x), y: Y(src.y) }); S().dispatch({ type: 'note.add', sceneId: sc.id, note: o }); }
         else if (kind === 'trigger') {
           Object.assign(o, { x: X(src.x), y: Y(src.y), used: 0, lastAt: 0 });
@@ -1858,7 +1932,8 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     const g = sc.grid, c = Object.assign(U.clone(o), { id: U.uid('lt_'), x: o.x + g, y: o.y + g });
     delete c.animHome;
     if (c.pts) c.pts = c.pts.map(([x, y]) => [x + g, y + g]);
-    S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: c });
+    const run = () => { S().dispatch({ type: 'lightpt.add', sceneId: sc.id, light: c }); dupSound(sc, 'light', o.id, c.id); };
+    if (App.History) App.History.batch('duplicar luz', run); else run();
     B.selectedLight = c.id;
     B.requestRender();
   };
@@ -2287,7 +2362,9 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     const a = S().actorOf(t);
     const img = App.Images.get(t.img || (a && a.img));
     // Token pronto (Plano 26): a imagem já tem moldura; vai inteira, do tamanho do quadrado, sem disco nem aro
-    const ready = !!(img && a && a.imgStyle === 'token');
+    const ready = !!(img && a && (a.imgStyle === 'token' || a.imgStyle === 'pop'));
+    // Plano 76: token 3D — a imagem é mais alta que larga; o círculo fica no quadrado e o que sai da moldura sobe
+    const pop = ready && a.imgStyle === 'pop';
     const cx = x + s / 2, cy = y + s / 2, r = ready ? s * 0.5 : s * 0.4;
     const color = U.safeColor(t.color || (a && a.color), '#6b6a75');
     const bars = S().barsOf(t);
@@ -2325,7 +2402,8 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
       // Sombra que segue o desenho do próprio token
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = s * 0.12; ctx.shadowOffsetY = s * 0.04;
-      drawContain(ctx, img, x, y, s, s);
+      if (pop) { const ph = s * (img.naturalHeight / img.naturalWidth); ctx.drawImage(img, x, y + s - ph, s, ph); }
+      else drawContain(ctx, img, x, y, s, s);
       ctx.restore();
       ctx.beginPath(); ctx.arc(cx, cy, r * 0.86, 0, Math.PI * 2);
     } else {
@@ -3340,8 +3418,9 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
         }
         const snd = soundAt(sc, p);
         if (snd) {
-          B.selected = null; B.selectedSound = snd.id; B.selectedProp = null;
-          B.soundDrag = { id: snd.id, sceneId: sc.id, x: snd.x, y: snd.y, ox: p.x - snd.x, oy: p.y - snd.y, moved: false };
+          B.selected = null; B.selectedSound = snd.id; B.selectedProp = null; B.selectedLight = null;
+          // Plano 68: o som de um objeto não se arrasta (anda com o objeto; para mudar, Soltar no mapa)
+          if (!snd.attach) B.soundDrag = { id: snd.id, sceneId: sc.id, x: snd.x, y: snd.y, ox: p.x - snd.x, oy: p.y - snd.y, moved: false };
           break;
         }
         B.selectedSound = null;
@@ -3827,6 +3906,14 @@ import { SpatialIndex, bounds } from '../src/geometry/spatial.ts';
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
     if (!S().state) return;
     if (e.code === 'Space') { B.spaceDown = true; e.preventDefault(); return; }
+    // Plano 73: Tab liga e desliga o Foco (fora de janelas e painéis, onde o Tab passa de um campo para outro)
+    if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && S().gmView()
+      && (e.target === document.body || e.target === B.canvas || (e.target.closest && e.target.closest('#toolbar, #dock, #zoom, #board-actions, #btn-mode')))) {
+      e.preventDefault();
+      if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+      App.UI.setMode(App.UI.mode === 'edit' ? 'play' : 'edit');
+      return;
+    }
     // Desfazer / refazer a montagem do mapa (só o mestre)
     if ((e.ctrlKey || e.metaKey) && !e.altKey && S().isGM() && App.History && !B.drag && !B.propDrag && !B.lightDrag && !B.trigDrag) {
       const k = e.key.toLowerCase();

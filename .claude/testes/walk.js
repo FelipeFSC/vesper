@@ -46,7 +46,11 @@ window.addEventListener('load', () => setTimeout(async () => {
       10: () => { B.selected = ids().g1; B.requestRender(); },
       11: async () => {
         for (let n = 0; n < 30 && !q('[data-undo]'); n++) {
-          App.UI.useAction(hero(), 0, sc().tokens[ids().hero]); await W(50); canvasClick(...tokC('g1')); await W(250);
+          // Plano 70: o resultado chega depois dos dados (2,4 s); espera cada ataque aparecer antes de tentar de novo
+          const n0 = S.state.chat.filter((m) => m.kind === 'action').length;
+          App.UI.useAction(hero(), 0, sc().tokens[ids().hero]); await W(50); canvasClick(...tokC('g1'));
+          for (let k = 0; k < 40 && S.state.chat.filter((m) => m.kind === 'action').length === n0; k++) await W(100);
+          await W(150);
         }
         click('[data-undo]');
       },
@@ -56,7 +60,7 @@ window.addEventListener('load', () => setTimeout(async () => {
         canvasClick(g1.x + g / 2, g1.y + g * 1.5);
         await W(300);
         const m = S.state.chat.filter((x) => x.kind === 'action').pop();
-        __log.push('   explosão: ponto=' + JSON.stringify(m && m.point) + ' alvos=' + (m && m.targets.map((r) => r.name).join(', ')));
+        __log.push('   explosão: ponto=' + JSON.stringify(m && m.point) + ' alvos=' + (m && m.targets.map((r) => r.name).join(', ')) + ' · avisos: ' + [...document.querySelectorAll('#toasts > *')].map((t) => t.textContent).join(' / ') + ' · mirando=' + !!B.targeting + ' · fila=' + S._rq.length + '/' + S._rqBusy);
       },
       15: async () => { click('#token-hud .act-btn', 'Poção'); await W(100); canvasClick(...tokC('hero')); },
       16: () => click('#token-hud .btn', 'Ficha'),
@@ -85,7 +89,8 @@ window.addEventListener('load', () => setTimeout(async () => {
       const i = T.i, st = T.steps[i]; await W(300);
       const spot = st.spot ? (!document.querySelector('#tut-spot').hidden ? 'spot ok' : 'SEM SPOT') : '-';
       if (actions[i]) await actions[i]();
-      await W(st.done ? 1800 : 200);
+      // Plano 70: o resultado das rolagens chega depois dos dados (2,4 s, em fila); espera o passo concluir (até 10 s)
+      if (st.done) { await W(600); for (let k = 0; k < 47 && T.i === i && !T.doneAt; k++) await W(200); } else await W(200);
       let res;
       if (T.i !== i) res = 'auto ok';
       else if (st.done && !T.doneAt) { res = 'NÃO CONCLUIU'; click('#tut-panel .btn', 'Pular'); }

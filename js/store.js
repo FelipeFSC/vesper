@@ -170,6 +170,13 @@ import { binaryAssets } from '../src/services/image-assets.ts';
         delete r.music; delete r.vol; delete r.at;
       }
       sc.groups = Array.isArray(sc.groups) ? sc.groups : [];
+      // Plano 68: som de objeto cujo objeto não existe mais vira som solto no último lugar
+      for (const x of sc.sounds) {
+        if (!x.attach) continue;
+        const [k, id] = [String(x.attach).slice(0, String(x.attach).indexOf(':')), String(x.attach).slice(String(x.attach).indexOf(':') + 1)];
+        const ok = k === 'token' ? !!(sc.tokens || {})[id] : k === 'prop' ? (sc.props || []).some((o) => o.id === id) : k === 'light' ? (sc.lights || []).some((o) => o.id === id) : false;
+        if (!ok) delete x.attach;
+      }
       sc.props = Array.isArray(sc.props) ? sc.props : [];
       sc.lights = Array.isArray(sc.lights) ? sc.lights : [];
       sc.triggers = Array.isArray(sc.triggers) ? sc.triggers : [];
@@ -194,6 +201,10 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       a.bars = a.bars || []; a.stats = a.stats || []; a.actions = a.actions || [];
       a.testFormula = a.testFormula || '1d20+@valor'; a.initFormula = a.initFormula || '1d20';
       for (const ac of a.actions) upgradeAction(ac, a);
+      // Plano 74: imagem do personagem (a arte); img continua sendo o token
+      if (a.art === undefined) a.art = null;
+      if (a.token3d === undefined) a.token3d = null; // Plano 76: escolhas do token 3D
+      if (a.artY === undefined) a.artY = null; // Plano 78: enquadramento da arte (null = padrão)
       // Plano 26: fichas do bestiário (token do 5etools) desenham o token pronto
       if (a.source === '5etools' && a.imgStyle === undefined) a.imgStyle = 'token';
       // Plano 53: ficha do bestiário ainda genérica (com a criatura em dados5e) → ficha de criatura 5e, sem perder nada
@@ -238,10 +249,20 @@ import { binaryAssets } from '../src/services/image-assets.ts';
     if (!sc) throw new Error('Cena não encontrada');
     return sc;
   }
+  // Plano 68: o som de um objeto é apagado junto com ele
+  function dropAttached(sc, kind, id) {
+    if (sc && Array.isArray(sc.sounds)) sc.sounds = sc.sounds.filter((x) => x.attach !== kind + ':' + id);
+  }
   function tok(s, a) {
     const t = sceneOf(s, a.sceneId).tokens[a.id];
     if (!t) throw new Error('Token não encontrado');
     return t;
+  }
+  // Plano 69: a mensagem de rolagem leva os dados que acabaram de cair (para os dados 3D de cada tela)
+  function withDice(a) {
+    if (a.type !== 'chat.add' || !a.msg || a.msg.kind === 'system' || a.msg.dice || !App.Dice || !App.Dice.take) return;
+    const d = App.Dice.take();
+    if (d.length) a.msg.dice = d.slice(0, 40);
   }
   function sysMsg(s, text) {
     s.chat.push({ id: 'sys_' + s.chat.length + '_' + U.hash(text + s.combat.round), ts: Date.now(), kind: 'system', text });
@@ -393,6 +414,7 @@ import { binaryAssets } from '../src/services/image-assets.ts';
     'token.update': (s, a) => { Object.assign(tok(s, a), a.patch); },
     'token.delete': (s, a) => {
       delete sceneOf(s, a.sceneId).tokens[a.id];
+      dropAttached(sceneOf(s, a.sceneId), 'token', a.id);
       const c = s.combat, idx = c.entries.findIndex((e) => e.tokenId === a.id);
       if (idx >= 0) { c.entries.splice(idx, 1); if (idx < c.turn) c.turn--; fixTurn(s); }
     },
@@ -486,11 +508,11 @@ import { binaryAssets } from '../src/services/image-assets.ts';
     },
     'prop.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = sc.props || []; sc.props.push(a.prop); },
     'prop.update': (s, a) => { const x = (sceneOf(s, a.sceneId).props || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
-    'prop.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = (sc.props || []).filter((y) => y.id !== a.id); },
+    'prop.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.props = (sc.props || []).filter((y) => y.id !== a.id); dropAttached(sc, 'prop', a.id); },
     // Pontos de luz e de escuridão no mapa
     'lightpt.add': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = sc.lights || []; if (a.light && a.light.id) sc.lights.push(a.light); },
     'lightpt.update': (s, a) => { const x = (sceneOf(s, a.sceneId).lights || []).find((y) => y.id === a.id); if (!x) return false; Object.assign(x, a.patch); },
-    'lightpt.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = (sc.lights || []).filter((y) => y.id !== a.id); },
+    'lightpt.delete': (s, a) => { const sc = sceneOf(s, a.sceneId); sc.lights = (sc.lights || []).filter((y) => y.id !== a.id); dropAttached(sc, 'light', a.id); },
     // Memória de exploração (calculada pelo mestre em js/explore.js)
     'explore.set': (s, a) => {
       const sc = sceneOf(s, a.sceneId), d = a.data;
@@ -589,7 +611,7 @@ import { binaryAssets } from '../src/services/image-assets.ts';
       for (const sc of Object.values(s.scenes)) {
         for (const t of Object.values(sc.tokens)) {
           if (t.actorId !== a.id) continue;
-          if (a.tokens) { delete sc.tokens[t.id]; continue; }
+          if (a.tokens) { delete sc.tokens[t.id]; dropAttached(sc, 'token', t.id); continue; }
           if (t.linked) t.bars = U.clone(ac.bars);
           t.linked = false; t.actorId = null; t.img = t.img || ac.img; t.color = t.color || ac.color;
         }
@@ -680,6 +702,7 @@ import { binaryAssets } from '../src/services/image-assets.ts';
 
     dispatch(a) {
       a.by = this.me.id;
+      withDice(a);
       if (a.type === 'act.use' && this.isGM()) return this.useAction(a, null);
       // Clique numa imagem ligada a um gatilho: o mestre (vendo como jogador) resolve na hora
       if (a.type === 'trigger.click' && this.isGM()) return App.Triggers.click(a, null);
@@ -693,6 +716,11 @@ import { binaryAssets } from '../src/services/image-assets.ts';
 
     // Mestre: aplica, transmite e salva
     commit(a) {
+      if (!a.by || a.by === this.me.id) withDice(a);
+      // Plano 70: dentro de uma rolagem, o resultado espera os dados; rolagem solta no chat entra na fila
+      if (a._now) delete a._now;
+      else if (this._held) { this._held.push(a); return true; }
+      else if (a.type === 'chat.add' && a.msg && App.Dice.showable(a.msg.dice) && this.state) { this.resolve(() => this.commit(a)); return true; }
       // Movimento de jogador (ou do mestre vendo como jogador): confere os gatilhos antes (um deles pode parar o movimento)
       let fires = null;
       if (a.type === 'token.move' && !a.fromTrigger && App.Triggers && this.state) {
@@ -815,7 +843,49 @@ import { binaryAssets } from '../src/services/image-assets.ts';
      * a = { sceneId, actorId, index, attackerId, targets: [tokenIds] }
      * Rola ataque/resistência/dano, aplica nas barras e publica o resultado no chat.
      */
+    /*
+     * Plano 70: rolagem com dados 3D. O mestre resolve na hora (sorteia e confere tudo), mas segura o resultado:
+     * primeiro todas as telas rolam os dados (aviso "dice"), e só DICE_WAIT ms depois entram as barras e a mensagem.
+     * Uma rolagem de cada vez: a próxima ação é resolvida depois que a anterior aparece (vê a vida que ficou).
+     */
+    DICE_WAIT: 2400,
+    _rq: [], _rqBusy: false, _held: null,
+    // Devolve o que fn devolveu quando roda na hora (fila livre); na fila, true
+    resolve(fn) {
+      if (!this.isGM()) return fn();
+      this._rq.push(fn);
+      if (!this._rqBusy) return this._nextResolve();
+      return true;
+    },
+    _nextResolve() {
+      const fn = this._rq.shift();
+      if (!fn) { this._rqBusy = false; return; }
+      this._rqBusy = true;
+      const held = this._held = [];
+      let ret = true;
+      try { ret = fn(); } catch (e) { console.warn(e); }
+      this._held = null;
+      const rolls = held.filter((x) => x.type === 'chat.add' && x.msg && App.Dice.showable(x.msg.dice));
+      const flush = () => {
+        for (const x of held) { x._now = true; try { this.commit(x); } catch (e) { console.warn(e); } }
+        this._nextResolve();
+      };
+      if (!rolls.length || !this.state) { flush(); return ret; }
+      for (const x of rolls) this.announceDice(x.msg);
+      setTimeout(flush, this.DICE_WAIT);
+      return ret;
+    },
+    // Todas as telas começam a rolar estes dados (só os números, a cor e se é secreta)
+    announceDice(msg) {
+      const m = { t: 'dice', id: msg.id, dice: msg.dice, playerId: msg.playerId, secret: !!msg.secret };
+      if (App.Net) App.Net.broadcast(m);
+      if (App.Dice3D) App.Dice3D.announce(m);
+    },
+
     useAction(a, pid) {
+      return this.resolve(() => this.useActionNow(a, pid));
+    },
+    useActionNow(a, pid) {
       const st = this.state, D = App.Dice, rules = st.rules;
       const fail = (text) => {
         if (pid) this.commit({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'system', secret: true, playerId: pid, text: text } });

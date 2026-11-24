@@ -40,7 +40,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     // Rolar uma perícia vai para o chat
     const nChat = S.state.chat.length;
     win = UI_win(a);
-    win.querySelector('[data-skill="athletics"] .f5-link').click(); await W(150);
+    win.querySelector('[data-skill="athletics"] .f5-link').click(); await W(2800); // Plano 70: o resultado espera os dados
     ok(S.state.chat.length === nChat + 1 && /Atletismo/.test(JSON.stringify(S.state.chat[S.state.chat.length - 1])), 'rolagem no chat');
     // Aba Ações: botão de usar na mesa
     UI_win(a).querySelector('[data-tab5="acoes"]').click(); await W(100);
@@ -54,7 +54,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.dispatch({ type: 'actor.add', actor: caster }); await W(60);
     App.Board.placeActor('ac_mago'); await W(150);
     const ct = Object.values(S.currentScene().tokens).find((t) => t.actorId === 'ac_mago');
-    S.useAction({ sceneId: sid, actorId: 'ac_mago', index: 0, attackerId: ct.id, targets: [tk.id] }, null); await W(150);
+    S.useAction({ sceneId: sid, actorId: 'ac_mago', index: 0, attackerId: ct.id, targets: [tk.id] }, null); await W(2800); // Plano 70
     const msg = S.state.chat[S.state.chat.length - 1], row = msg && msg.targets && msg.targets[0];
     a = S.state.actors[a.id];
     ok(row && row.save && / \+ ?\(?5\)?|\(5\)/.test(row.save.formula || ''), 'salvaguarda de Con usa +5 (2 + prof 3): ' + (row && row.save && row.save.formula));

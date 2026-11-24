@@ -91,3 +91,14 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 65 | [Descrição das magias e cores no assistente](65-descricao-das-magias-e-cores-no-assistente.md) | Concluído |
 | 66 | [Cores dos títulos do tooltip de magias](66-cores-dos-titulos-do-tooltip-de-magias.md) | Concluído |
 | 67 | [Origens das magias abaixo da descrição](67-origem-das-magias-abaixo-da-descricao.md) | Concluído |
+| 68 | [Parar efeito e som em um objeto](68-parar-efeito-e-som-em-objeto.md) | Implementado (testes do usuário) |
+| 69 | [Dados 3D](69-dados-3d.md) | Implementado (testes do usuário) |
+| 70 | [Resultado depois do dado](70-resultado-depois-do-dado.md) | Implementado (testes do usuário) |
+| 71 | [Dados param no centro da tela](71-dados-param-no-centro.md) | Implementado (testes do usuário) |
+| 72 | [Formas num botão só](72-formas-num-botao-so.md) | Implementado (testes do usuário) |
+| 73 | ["Apresentar" vira o modo Foco](73-apresentar-vira-modo-foco.md) | Implementado (testes do usuário) |
+| 74 | [Imagem do personagem e imagem do token](74-imagem-do-personagem-e-do-token.md) | Implementado (testes do usuário) |
+| 75 | [Token enviado em PNG aparece inteiro, sem aro](75-token-png-sem-aro.md) | Implementado (testes do usuário) |
+| 76 | [Montar token 3D](76-montar-token-3d.md) | Implementado (testes do usuário) |
+| 77 | [Token 3D: abertura em relógio e molduras Vermelho e Branco](77-token-3d-relogio-e-molduras.md) | Implementado (testes do usuário) |
+| 78 | [Imagem do personagem também na barra do topo da janela da ficha](78-arte-no-topo-da-janela-da-ficha.md) | Implementado (testes do usuário) |

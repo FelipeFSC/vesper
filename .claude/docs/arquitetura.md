@@ -15,7 +15,7 @@
 |---|---|
 | `js/util.js` | `U.h` (cria elementos; o `value` de select é aplicado depois dos filhos), `U.slug` (tira acento, minúsculas, `_`), toast, uid, clone, pickFile |
 | `js/icons.js` | Ícones Lucide embutidos (`App.Icons.svg(nome)`) |
-| `js/dice.js` | Rolador: `roll`, `rollMulti` (`\|`), `substitute` (`@atributo` → `(n)`), `doubleDice` (crítico), `check` (avisos de fórmula) |
+| `js/dice.js` | Rolador: `roll`, `rollMulti` (`\|`), `substitute` (`@atributo` → `(n)`), `doubleDice` (crítico), `check` (avisos de fórmula) | · Plano 69: cada rolagem anota os dados (`take()`); `Store.dispatch`/`commit` põe a lista em `msg.dice` da mensagem do chat criada no mesmo instante
 | `js/store.js` | Estado, reducer `R`, `dispatch`, `permit()`, `migrate()`, `useAction` (combate), consultas (`currentScene`, `sceneIdOf`, `actorOf`, `statOf`, `vars`) |
 | `js/storage.js` | IndexedDB, exportar/importar campanha, cena e ficha |
 | `js/images.js` | Converte imagens para WebP (mapas até 4096 px, tokens até 512 px), deduplica por hash, `toWebP` |
@@ -31,6 +31,9 @@
 | `js/board.js` | Canvas do mapa: câmera, ferramentas, tokens, paredes, salas, mira, efeitos |
 | `js/ui.js` | Interface: laterais, dock, painel do token, fichas (abas), combate, cenas, painel Mesa, modais |
 | `js/ctxmenu.js` | Menu do botão direito (Plano 28): opções por tipo de objeto e do mapa vazio, "Colocar ficha aqui", submenus. O tabuleiro decide o clique e lista o que está no ponto (`B.hitAll`) |
+| `js/sheetart.js` | Imagem do personagem (Plano 74): `decorate` (arte ao fundo do topo da ficha, botão e soltar arquivo), `crop` (janela para escolher onde o círculo do token pega na arte), `cropBlob` (token 512 px recortado). Usado pela mesa (`UI.setArt`, `UI.cropToken`…) e pela página "Criar ficha"; não depende de Store |
+| `js/token3d.js` | Montar token 3D (Plano 76): janela (personagem sem fundo, posição e tamanho, fundo do círculo, moldura desenhada: pedra/ouro/prata/madeira, espessura e cor), `compose` (fundo → personagem no círculo → moldura → personagem da metade para cima com sombra; WebP 512×640), `hasAlpha`. Grava `img`, `imgStyle: 'pop'` e `token3d` (as escolhas). O mapa desenha a sobra acima do quadrado; o clique vale só no quadrado |
+| `js/dice3d.js` | Dados 3D (Plano 69): ao chegar `chat.add` com `msg.dice`, cada tela mostra os dados caindo por cima do mapa (`#dice3d`, `@3d-dice/dice-box-threejs` com resultado definido, carregado na primeira rolagem). Ligar/desligar e volume ficam no navegador (`vesper-dados3d`, `vesper-dados3d-volume`). Sons copiados para `dist/dados3d/` pelo `vite.config.mts` | Plano 70: começa pelo aviso do mestre (`{ t: 'dice' }`, `D3.announce`) e para em até 1,9 s desde o aviso (a animação acelera se precisar). `Store.resolve` (fila do mestre) segura os `commit` de uma rolagem com dados e aplica 2,4 s depois (`DICE_WAIT`); `useAction` = `resolve(useActionNow)` Plano 71: paredes invisíveis e lançamento numa área no centro do mapa (`AREA` = metade da largura e da altura) |
 | `js/tutorial.js` | Tutorial interativo (`?tutorial`), lista `STEPS`, campanha de demonstração |
 | `js/main.js` | Menu inicial (fundo animado, teclado, trocar fundo; Criar ficha abre `ficha.html`) |
 | `js/units.js` | Conversor de unidades (pés, milhas, libras… → m, km, kg, L), opcional, com a preferência no navegador |
@@ -50,7 +53,7 @@ campanha
   audio {music, ambient, sfx, vol {music, ambient, sfx}}   (só nomes das faixas)
   combat {active, round, turn, entries [{id, tokenId, sceneId, init}]}
   activeSceneId (cena do grupo), sceneOrder [], playerScenes {idJogador: idCena}
-  actors {id: {kind pc|npc|monster, name, owner, img, color, size, height, coverShow,
+  actors {id: {kind pc|npc|monster, name, owner, img (token), art (imagem do personagem, Plano 74; imgFromArt + artCrop quando o token foi recortado dela), color, size, height, coverShow,
                bars [{name, value, max}], stats [{name, value}], actions [], testFormula, initFormula, notes}}
   scenes {id: cena}
 
@@ -62,7 +65,7 @@ cena
   walls [{id, x1, y1, x2, y2, cover: full|high|three|half, door, open, locked, stroke (traço do lápis)}], wallsV
   light {enabled, global}
   cover {enabled, heights {high, three, half}, shadow {high, three, half}, levels {three, half}, bonus {three, half}, show, lean}
-  sounds [{id, name, x, y, r, vol, on, once, at}]
+  sounds [{id, name, x, y, r, vol, on, once, at, fill, tag, attach}]   (attach = 'token:id' | 'prop:id' | 'light:id': som de um objeto, Plano 68)
   rooms [{id, name, pts [[x,y]…], outside stop|keep, ambient stop|muffle|keep}]   (isolamentos de som; sounds[].fill = igual na área inteira)
   groups [{id, name}]
   props [{id, img, name, x, y, w, h, rot, flip, hidden, opacity, locked, z}]   (z compartilhado com tokens.z)

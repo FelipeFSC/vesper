@@ -73,6 +73,13 @@ export function renderBestiary(w, App, { CR, SIZES, SHORT, sizeText, typeOf, ali
   async function fillPreview(box, it, redraw) {
     if (!it) { box.append(h('div', { class: 'empty-state' }, h('div', { class: 'bubble' }, ic('book-open')), h('b', {}, 'Escolha uma criatura'), h('p', {}, 'Arraste da lista para o mapa, ou clique para ver a ficha completa.'))); return; }
     const go = (fn) => async () => { try { await fn(); } catch (err) { U.toast(err.message, 'error'); } };
+    // Plano 74: escolher a ilustração que vira a imagem do personagem; se a criatura já está na campanha, troca nela
+    const useArt = (e2, m2, i) => go(async () => {
+      B.artPick[e2.k] = i;
+      const a = S().state && Object.values(S().state.actors).find((x) => x.bestiaryId === e2.k && !x.mineId);
+      if (a && App.UI.setArt) { const f = await B.artFile(m2, i); if (f) await App.UI.setArt(a, f); }
+      redraw();
+    })();
     const inCamp = S().state && Object.values(S().state.actors).some((a) => (it.mine ? a.mineId === it.ref.slice(5) : a.bestiaryId === it.ref && !a.mineId));
     const acts = h('div', { class: 'row wrap bst-acts' },
       btnI('map-pin', 'Colocar no mapa', { class: 'btn primary', onclick: go(async () => { await B.place(it.ref); U.toast('Token criado no centro da tela.'); }) }),
@@ -112,7 +119,12 @@ export function renderBestiary(w, App, { CR, SIZES, SHORT, sizeText, typeOf, ali
     } else if (F.tab === 'img') {
       const imgs = fl.images || [];
       if (!imgs.length) pane.append(h('p', { class: 'empty' }, 'Sem arte no 5etools.'));
-      for (const x of imgs) pane.append(h('figure', { class: 'bst-art' }, h('img', { src: x.url, alt: m.name, loading: 'lazy' }), x.credit || x.title ? h('figcaption', { class: 'faint small-text' }, [x.title, x.credit].filter(Boolean).join(' · ')) : null));
+      // Plano 74: escolher qual ilustração vira a imagem do personagem (a primeira, se ninguém escolher)
+      const picked = B.artPick[e.k] || 0;
+      imgs.forEach((x, i) => pane.append(h('figure', { class: 'bst-art' }, h('img', { src: x.url, alt: m.name, loading: 'lazy' }),
+        h('figcaption', { class: 'faint small-text' }, [x.title, x.credit].filter(Boolean).join(' · '),
+          i === picked ? h('span', { class: 'badge gold bst-art-pick' }, 'Imagem do personagem')
+            : h('button', { class: 'btn small ghost bst-art-pick', 'data-art': String(i), onclick: () => useArt(e, m, i) }, 'Usar como imagem do personagem')))));
       if (e.tok) pane.append(h('figure', { class: 'bst-art bst-art-token' }, h('img', { src: e.tok, alt: 'Token', loading: 'lazy' }), h('figcaption', { class: 'faint small-text' }, 'Token')));
     } else {
       pane.append(h('div', { class: 'bst-block' },

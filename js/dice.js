@@ -7,6 +7,22 @@
  * Vários resultados em uma ação: "Ataque: 1d20+@forca | Dano: 1d8+@forca"
  */
 (function (App) {
+  /*
+   * Plano 69: dados 3D. Cada rolagem anota os dados que caíram ({f: faces, v: valor, drop: descartado}).
+   * A mensagem do chat criada logo em seguida (no mesmo instante) leva a lista (Store: msg.dice) e cada tela
+   * mostra os dados caindo com esses números. Fora disso a lista se apaga sozinha.
+   */
+  let pending = [], clearTimer = 0, muted = 0;
+  function note(f, rolls) {
+    if (muted) return;
+    for (const r of rolls) pending.push(r.drop ? { f, v: r.v, drop: true } : { f, v: r.v });
+    if (!clearTimer) clearTimer = setTimeout(() => { pending = []; clearTimer = 0; }, 0);
+  }
+  function take() { const out = pending; pending = []; return out; }
+  // Plano 70: algum desses dados tem modelo 3D? (aí o resultado espera os dados pararem)
+  const SHOW3D = new Set([4, 6, 8, 10, 12, 20, 100]);
+  const showable = (dice) => Array.isArray(dice) && dice.some((d) => d && SHOW3D.has(Number(d.f)));
+  const quiet = (fn) => { muted++; try { return fn(); } finally { muted--; } };
   function rnd(n) {
     const a = new Uint32Array(1);
     crypto.getRandomValues(a);
@@ -103,6 +119,7 @@
         rolls.forEach((r, k) => { r.drop = sel.mode === 'keep' ? !chosen.has(k) : chosen.has(k); });
       }
 
+      note(sides, rolls);
       let total = 0;
       for (const r of rolls) if (!r.drop) total += r.v;
       if (sides === 20) for (const r of rolls) if (!r.drop) { nat.push(r.v); if (r.v === 20) crit = true; if (r.v === 1) fumble = true; }
@@ -168,7 +185,7 @@
   }
 
   function isFormula(text) {
-    try { roll(text, {}); return /d/i.test(text); } catch { return false; }
+    try { quiet(() => roll(text, {})); return /d/i.test(text); } catch { return false; }
   }
 
   // Confere uma fórmula sem rolar para valer: devolve o problema em texto, ou null se está tudo certo.
@@ -182,11 +199,11 @@
       const m = p.match(/^([^:]+):(.+)$/), f = m ? m[2] : p;
       String(f).replace(/@\{?([\p{L}0-9_]+)\}?/gu, (x, k) => { const s = App.U.slug(k); if (!have.has(s) && !missing.includes(s)) missing.push(s); return x; });
       const vars = {}; for (const k of have) vars[k] = 1;
-      try { roll(f, vars); } catch (e) { return (m ? m[1].trim() + ': ' : '') + e.message; }
+      try { quiet(() => roll(f, vars)); } catch (e) { return (m ? m[1].trim() + ': ' : '') + e.message; }
     }
     if (missing.length) return missing.map((k) => '@' + k).join(', ') + (missing.length > 1 ? ' não existem' : ' não existe') + ' nesta ficha (vale 0).';
     return null;
   }
 
-  App.Dice = { roll, rollMulti, substitute, isFormula, doubleDice, check };
+  App.Dice = { roll, rollMulti, substitute, isFormula, doubleDice, check, take, quiet, showable };
 })(window.App);

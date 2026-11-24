@@ -250,7 +250,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     if (d.npc) return npcRender(a, ctx, K);
 
     const root = h('div', { class: 'f5' + (ctx.wide ? ' wide' : '') });
-    root.append(top(K));
+    root.append(artTop(K, top(K)));
     tabsPart(root, TABS, tab, go);
     const pane = h('div', { class: 'f5-pane' });
     if (tab === 'principal') principal(K, pane);
@@ -290,6 +290,8 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     return box;
   }
 
+  // Plano 74: imagem do personagem ao fundo do topo (quem chama decide de onde vem: ctx.art)
+  const artTop = (K, el) => (K.ctx.art ? K.ctx.art(el) || el : el);
   // ---------- Topo ----------
   function top(K) {
     const { a, d, c, ro } = K;
@@ -846,7 +848,7 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
   function npcRender(a, ctx, K) {
     const tab = NPC_TABS.some((t) => t[0] === F5.tab[a.id]) ? F5.tab[a.id] : 'bloco';
     const root = h('div', { class: 'f5 f5-npc' + (ctx.wide ? ' wide' : '') });
-    root.append(npcTop(K));
+    root.append(artTop(K, npcTop(K)));
     tabsPart(root, NPC_TABS, tab, (id) => { F5.tab[a.id] = id; ctx.rerender(); });
     const pane = h('div', { class: 'f5-pane' });
     if (tab === 'bloco') (F5.npcEdit[a.id] ? npcEditor : npcBlock)(K, pane);

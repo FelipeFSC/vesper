@@ -41,6 +41,7 @@ import { ImageUrls, joinAsset, setAsset, withImageUrl } from '../src/services/im
     MAP: 4096,
     TOKEN: 512,
     PROP: 2048, // imagens soltas no mapa
+    ART: 1600, // Plano 74: imagem do personagem (a arte do topo da ficha)
 
     async add(file, maxSide) {
       const r = await toWebP(file, maxSide);
@@ -52,6 +53,17 @@ import { ImageUrls, joinAsset, setAsset, withImageUrl } from '../src/services/im
       }
       App.U.toast(`Imagem convertida: ${r.w}×${r.h} · ${App.U.fmtSize(r.blob.size)}`);
       return { id, w: r.w, h: r.h, ow: r.ow, oh: r.oh };
+    },
+
+    // Imagem já pronta (ex.: token recortado da arte): guarda sem converter de novo
+    async addBlob(blob) {
+      const id = await I.idOf(blob);
+      if (!App.Store.assets[id]) {
+        setAsset(App.Store.assets, id, blob);
+        App.Net.sendAsset(id, blob);
+        App.Storage.autosave();
+      }
+      return { id };
     },
 
     async pick(maxSide) {

@@ -65,7 +65,7 @@
     if (kind === 'door') return (o.window ? 'Janela ' : 'Porta ') + cellOf(sc, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2);
     if (kind === 'magic') return 'Parede ' + cellOf(sc, (o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2);
     if (kind === 'light') return o.name || 'Luz';
-    if (kind === 'sound') return App.Audio.label(o.name);
+    if (kind === 'sound') return App.Audio.soundName(sc, o);
     if (kind === 'trigger') return o.name || 'Gatilho';
     if (kind === 'prop') return o.name || 'Imagem';
     if (kind === 'token') return o.name || 'Token';
@@ -669,6 +669,9 @@
     // Outra cena: o token passa para lá e quem o controla vai junto (o resto do grupo fica onde está)
     const nt = Object.assign(U.clone(t), { id: U.uid('t_'), x: pos.x, y: pos.y, lastMove: null, warp: { at: Date.now(), fx: !(tr && tr.fx === false) } });
     D({ type: 'token.add', sceneId: dest.id, token: nt });
+    // Plano 68: o som do token vai junto para a outra cena
+    const snd = (sc.sounds || []).find((x) => x.attach === 'token:' + t.id);
+    if (snd) D({ type: 'sound.add', sceneId: dest.id, sound: Object.assign(U.clone(snd), { id: U.uid('snd_'), attach: 'token:' + nt.id, x: pos.x, y: pos.y }), fromTrigger: true });
     D({ type: 'token.delete', sceneId: sc.id, id: t.id });
     const owners = Object.keys(st.players || {}).filter((pid) => S().canControl(nt, pid));
     if (owners.length) {

@@ -15,8 +15,9 @@
   const KEYS = (type) => {
     const p = type.split('.')[0];
     if (p === 'wall') return ['walls'];
-    if (p === 'prop') return ['props'];
-    if (p === 'lightpt') return ['lights'];
+    // Plano 68: apagar o objeto apaga o som dele (o desfazer devolve os dois)
+    if (p === 'prop') return type === 'prop.delete' ? ['props', 'sounds'] : ['props'];
+    if (p === 'lightpt') return type === 'lightpt.delete' ? ['lights', 'sounds'] : ['lights'];
     if (p === 'trigger' && type !== 'trigger.click') return ['triggers'];
     if (p === 'sound') return ['sounds'];
     if (p === 'room') return ['rooms'];
@@ -24,7 +25,7 @@
     if (p === 'fog') return ['fog'];
     if (p === 'note') return ['notes'];
     if (p === 'group') return ['groups', 'tokens'];
-    if (p === 'token') return ['tokens'];
+    if (p === 'token') return type === 'token.delete' ? ['tokens', 'sounds'] : ['tokens'];
     if (type === 'order.move') return ['tokens', 'props'];
     if (type === 'batch') return ['walls', 'props', 'lights', 'triggers', 'sounds', 'rooms', 'drawings', 'notes', 'tokens'];
     return null;

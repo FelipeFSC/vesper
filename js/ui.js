@@ -36,9 +36,10 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     { id: 'ping', icon: 'map-pin', title: 'Ping: chamar a atenção de todos (P)' },
     { sep: true, edit: true },
     { id: 'path', icon: 'pencil', title: 'Desenho livre (D)', edit: true, draw: true },
-    { id: 'line', icon: 'slash', title: 'Linha / parede (L)', edit: true, draw: true },
-    { id: 'rect', icon: 'square', title: 'Retângulo / sala (B)', edit: true, draw: true },
-    { id: 'ellipse', icon: 'circle', title: 'Círculo / área de efeito (E)', edit: true, draw: true },
+    // Plano 72: as três formas são um botão só na barra (Formas); a forma é escolhida no menu dele
+    { id: 'line', icon: 'slash', title: 'Linha / parede (L)', edit: true, draw: true, group: 'shape', label: 'Linha' },
+    { id: 'rect', icon: 'square', title: 'Retângulo / sala (B)', edit: true, draw: true, group: 'shape', label: 'Retângulo' },
+    { id: 'ellipse', icon: 'circle', title: 'Círculo / área de efeito (E)', edit: true, draw: true, group: 'shape', label: 'Círculo' },
     { id: 'erase', icon: 'eraser', title: 'Apagar desenho (X)', edit: true },
     { sep: true, gm: true, edit: true },
     { id: 'fog-reveal', icon: 'sun', title: 'Névoa: revelar área (F)', gm: true, edit: true },
@@ -76,6 +77,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     buildChatPanel();
     App.Board.init($('#board'));
     App.Audio.init();
+    if (App.Dice3D) App.Dice3D.init();
     App.Audio.on(() => { if (UI.tab === 'audio') renderAudio(true); });
     S().on((kind, action) => UI.schedule(kind, action));
     UI.schedule('reset');
@@ -122,8 +124,10 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     $('#app').classList.toggle('play', mode === 'play');
     const b = $('#btn-mode');
     b.innerHTML = '';
-    if (mode === 'edit') { b.className = 'btn primary'; b.append(ic('play'), 'Apresentar'); b.title = 'Esconde os painéis e mostra só a mesa de jogo'; }
-    else { b.className = 'btn'; b.append(ic('pen-line'), S().gmView() ? 'Editar' : 'Painéis'); b.title = 'Mostra os painéis laterais (fichas, propriedades)'; }
+    // Plano 73: para o mestre, o botão se chama Foco (antes "Apresentar"); tecla Tab
+    if (mode === 'edit') { b.className = 'btn primary'; b.append(ic('maximize-2'), 'Foco'); b.title = 'Esconde as laterais e as ferramentas de montagem: fica só a mesa de jogo (Tab)'; }
+    else if (S().gmView()) { b.className = 'btn'; b.append(ic('minimize-2'), 'Sair do foco'); b.title = 'Volta as laterais e as ferramentas de montagem (Tab)'; }
+    else { b.className = 'btn'; b.append(ic('pen-line'), 'Painéis'); b.title = 'Mostra os painéis laterais (fichas, propriedades)'; }
     placeHud();
     if (mode === 'play' && ['path', 'line', 'rect', 'ellipse', 'erase', 'fog-reveal', 'fog-hide'].includes(App.Board.tool)) App.Board.tool = 'select';
     toolbarKey = null;
@@ -134,7 +138,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
   // Recolhida, a barra vira uma faixa fina com ícones. O navegador lembra (só nesta máquina).
   UI.collapsed = { left: false, right: false };
   try { Object.assign(UI.collapsed, JSON.parse(localStorage.getItem('vesper.paineis') || '{}')); } catch { /* sem armazenamento */ }
-  // Painel do token flutua sobre o mapa no modo Apresentar e quando a barra da direita está recolhida
+  // Painel do token flutua sobre o mapa no modo Foco (antes "Apresentar") e quando a barra da direita está recolhida
   function hudFloats() { return UI.mode === 'play' || !!UI.collapsed.right; }
   // O que está selecionado agora (para saber se o painel flutuante foi pedido para isto)
   UI.hudFor = null;
@@ -385,11 +389,20 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       for (const t of TOOLS) {
         if ((t.gm && !gm) || (t.edit && !edit)) continue;
         if (t.sep) { bar.append(h('div', { class: 'tool-sep' })); continue; }
+        if (t.group === 'shape') {
+          if (bar.querySelector('[data-tool="shape"]')) continue;
+          // Formas: liga a última forma usada; clicar de novo com uma forma ativa volta para Selecionar
+          bar.append(h('button', { class: 'tool', 'data-tool': 'shape', title: 'Formas: linha (L), retângulo (B), círculo (E)', onclick: () => B.setTool(B.SHAPES.includes(B.tool) ? 'select' : B.lastShape || 'line') }, ic(t.icon)));
+          continue;
+        }
         // Clicar de novo na ferramenta ativa fecha as opções dela e volta para Selecionar
         bar.append(h('button', { class: 'tool', 'data-tool': t.id, title: t.title, onclick: () => B.setTool(B.tool === t.id && t.id !== 'select' ? 'select' : t.id) }, ic(t.icon)));
       }
     }
-    for (const el of bar.querySelectorAll('[data-tool]')) el.classList.toggle('on', el.dataset.tool === B.tool);
+    for (const el of bar.querySelectorAll('[data-tool]')) el.classList.toggle('on', el.dataset.tool === B.tool || (el.dataset.tool === 'shape' && B.SHAPES.includes(B.tool)));
+    // O ícone do botão Formas mostra a última forma usada
+    const shapeBtn = bar.querySelector('[data-tool="shape"]'), last = TOOLS.find((x) => x.id === (B.lastShape || 'line'));
+    if (shapeBtn && last && shapeBtn.dataset.icon !== last.icon) { shapeBtn.dataset.icon = last.icon; shapeBtn.replaceChildren(ic(last.icon)); }
     renderToolOpts();
   };
 
@@ -456,7 +469,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     const gmRuler = t && t.id === 'ruler' && S().gmView();
     if (!t || (!gmRuler && (!(t.draw || t.id === 'wall' || t.id === 'door' || t.id === 'prop' || t.id === 'light' || t.id === 'trigger' || t.id === 'portal' || t.id === 'note') || UI.mode !== 'edit'))) { box.hidden = true; closeToolSub(); return; }
     if (toolSub && toolSub.tool !== t.id) closeToolSub();
-    const btn = $('#toolbar [data-tool="' + t.id + '"]');
+    const btn = $('#toolbar [data-tool="' + (t.group || t.id) + '"]');
     const tb = $('#toolbar');
     box._want = btn ? btn.offsetTop - (tb ? tb.scrollTop : 0) + 14 - 5 : 14;
     fitToolOpts(box);
@@ -563,6 +576,11 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         toSep(),
         toRow('scan', 'Procurar paredes no mapa', { title: 'O sistema lê a imagem do mapa e sugere paredes e portas; você confere e cria', onclick: () => UI.openScan() }));
     } else {
+      // Plano 72: no botão Formas, a escolha da forma vem primeiro (como Reta e Lápis na Parede)
+      if (t.group === 'shape') {
+        box.append(...TOOLS.filter((x) => x.group === 'shape').map((x) =>
+          toRow(x.icon, x.label, { on: B.tool === x.id, title: x.title, onclick: () => B.setTool(x.id) })), toSep());
+      }
       // Desenho: cor, espessura e (retângulo e círculo) preenchimento, cada um num sub-menu
       const colorRow = toRow(dot(B.style.color), 'Cor', { sub: true, title: 'Cor do desenho',
         onclick: () => openToolSub(colorRow, 'color', (el) => {
@@ -727,7 +745,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       const t = entryToken(e);
       if (!t || (t.hidden && !gm)) return;
       const a = S().actorOf(t), veil = t.masked && !gm && !S().canControl(t);
-      const av = veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 30);
+      const av = veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img), imgStyle: !t.img && a ? a.imgStyle : null }, 30);
       av.classList.toggle('now', i === c.turn);
       av.title = (veil ? 'Vulto' : t.name) + (e.init != null ? ' · ' + e.init : '');
       av.onclick = () => focusToken(e, t);
@@ -774,12 +792,96 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     if (UI.leftTab === 'scenes') renderScenes(); else renderActors();
   }
 
+  // ---------- Plano 74: imagem do personagem (a.art) e imagem do token (a.img) ----------
+  // Token recortado da arte: a.imgFromArt = true e a.artCrop guarda onde o círculo pega (trocar a arte refaz o token)
+  async function tokenFromArt(artId, crop) {
+    const r = await App.SheetArt.cropBlob(App.Images.src(artId), crop);
+    const t = await App.Images.addBlob(r.blob);
+    return { img: t.id, imgFromArt: true, artCrop: r.crop, imgStyle: null };
+  }
+  const actorUpd = (a, patch) => S().dispatch({ type: 'actor.update', id: a.id, patch });
+  UI.setArt = async function (a, file) {
+    try {
+      const r = await App.Images.add(file, App.Images.ART);
+      const patch = { art: r.id };
+      if (!a.img || a.imgFromArt) Object.assign(patch, await tokenFromArt(r.id, null));
+      actorUpd(a, patch);
+    } catch (e) { U.toast(e.message, 'error'); }
+  };
+  UI.pickArt = async (a) => { const f = await U.pickFile('image/*'); if (f) await UI.setArt(a, f); };
+  UI.removeArt = (a) => actorUpd(a, a.imgFromArt ? { art: null, img: null, imgFromArt: false, artCrop: null } : { art: null });
+  // Plano 75: token enviado = token pronto (aparece inteiro, como foi feito; sem círculo nem aro do Vésper)
+  UI.pickToken = async (a) => { const r = await App.Images.pick(App.Images.TOKEN); if (r) actorUpd(a, { img: r.id, imgFromArt: false, imgStyle: 'token' }); };
+  UI.removeToken = (a) => actorUpd(a, { img: null, imgFromArt: false });
+  // Plano 76: montar token 3D (o personagem sai por cima da moldura). As escolhas ficam em a.token3d para ajustar depois
+  UI.make3d = async function (a) {
+    if (!App.Token3D) return;
+    const r = await App.Token3D.open({ state: a.token3d, artId: a.art || null, srcOf: (id) => App.Images.src(id),
+      storeFile: async (f) => (await App.Images.add(f, App.Images.ART)).id });
+    if (!r) return;
+    try { const t = await App.Images.addBlob(r.blob); actorUpd(a, { img: t.id, imgFromArt: false, imgStyle: 'pop', token3d: r.state }); }
+    catch (e) { U.toast(e.message, 'error'); }
+  };
+  UI.cropToken = async function (a) {
+    if (!a.art) return;
+    const c = await App.SheetArt.crop(App.Images.src(a.art), a.artCrop);
+    if (!c) return;
+    try { actorUpd(a, await tokenFromArt(a.art, c)); } catch (e) { U.toast(e.message, 'error'); }
+  };
+  // Círculo do token no topo da ficha: com arte, abre o recorte; sem arte, escolhe um arquivo
+  function tokenAvatar(a, size, can) {
+    const av = avatar(a, size);
+    av.title = !can ? '' : a.art ? 'Clique para escolher onde o token pega na imagem do personagem' : 'Clique para escolher a imagem do token';
+    if (can) av.onclick = () => (a.art ? UI.cropToken(a) : UI.pickToken(a));
+    return av;
+  }
+  // Plano 78: enquadramento da arte (a.artY: % da altura da imagem que fica à vista; padrão 12 = mais o alto, onde costuma ficar o rosto)
+  const artY = (a) => (a && a.artY != null && Number.isFinite(Number(a.artY)) ? Number(a.artY) : 12);
+  const decorateArt = (el, a, can) => App.SheetArt ? App.SheetArt.decorate(el, { src: App.Images.src(a.art), y: artY(a), can, onPick: () => UI.pickArt(a), onFile: (f) => UI.setArt(a, f) }) : el;
+  // Plano 78: na janela da ficha, a arte começa no topo (atrás do ícone, do nome e do X)
+  function applyWinArt(w, a) {
+    const src = App.Images.src(a.art);
+    w.el.classList.toggle('win-art', !!src);
+    if (src) { w.el.style.setProperty('--win-art', 'url("' + src + '")'); w.el.style.setProperty('--win-art-y', artY(a) + '%'); }
+    else { w.el.style.removeProperty('--win-art'); w.el.style.removeProperty('--win-art-y'); }
+  }
+  // Configurar → Imagens: as duas imagens, cada uma com trocar e remover
+  function imagesSection(a, can) {
+    const artSrc = App.Images.src(a.art);
+    const tokSub = a.imgFromArt ? 'Recortado da imagem do personagem' : a.imgStyle === 'pop' && a.img ? 'Token 3D: o personagem sai da moldura' : a.img ? (a.imgStyle === 'token' ? 'Imagem própria, inteira no mapa' : 'Imagem própria, recortada em círculo') : a.art ? 'Sem token' : 'Sem token: o mapa mostra a cor e a inicial';
+    return h('div', { class: 'sa-imgs' },
+      h('h4', {}, 'Imagens'),
+      h('div', { class: 'sa-img-row' },
+        h('div', { class: 'sa-thumb' + (artSrc ? '' : ' empty'), style: artSrc ? { backgroundImage: 'url("' + artSrc + '")' } : {} }, artSrc ? '' : ic('image')),
+        h('div', { class: 'grow' }, h('b', {}, 'Imagem do personagem'), h('span', { class: 'muted small-text' }, artSrc ? 'Aparece no topo da ficha' : 'A arte do personagem, no topo da ficha')),
+        can ? h('div', { class: 'sa-img-btns' },
+          btnI('image', artSrc ? 'Trocar' : 'Escolher', { class: 'btn small', 'data-sa': 'art', onclick: () => UI.pickArt(a) }),
+          artSrc ? btnI('x', 'Remover', { class: 'btn small', 'data-sa': 'art-del', onclick: () => UI.removeArt(a) }) : null) : null),
+      // Plano 78: qual altura da arte aparece no topo da ficha
+      artSrc && can ? h('label', { class: 'sa-y', title: 'Qual parte da imagem aparece no topo da ficha' }, h('span', {}, 'Enquadramento'),
+        h('span', { class: 'muted small-text' }, 'Alto'),
+        h('input', { type: 'range', min: 0, max: 60, step: 1, value: artY(a), 'data-sa': 'y',
+          oninput: (e) => { const v = e.target.value + '%', ww = UI.windows.get('actor:' + a.id); if (ww) { ww.el.style.setProperty('--win-art-y', v); for (const b of ww.el.querySelectorAll('.sa-bg')) b.style.backgroundPosition = 'center ' + v; } },
+          onchange: (e) => { actorUpd(a, { artY: Number(e.target.value) }); e.target.blur(); } }),
+        h('span', { class: 'muted small-text' }, 'Meio')) : null,
+      h('div', { class: 'sa-img-row' },
+        avatar(a, 46),
+        h('div', { class: 'grow' }, h('b', {}, 'Imagem do token'), h('span', { class: 'muted small-text' }, tokSub)),
+        can ? h('div', { class: 'sa-img-btns' },
+          artSrc ? btnI('crop', 'Recortar da imagem', { class: 'btn small', 'data-sa': 'crop', title: 'Escolha onde o círculo do token pega na imagem do personagem', onclick: () => UI.cropToken(a) }) : null,
+          btnI('upload', a.img && !a.imgFromArt && a.imgStyle !== 'pop' ? 'Trocar' : 'Enviar token', { class: 'btn small', 'data-sa': 'tok', title: 'Uma imagem própria para o token (ex.: token pronto com moldura)', onclick: () => UI.pickToken(a) }),
+          btnI('layers', a.token3d ? 'Ajustar token 3D' : 'Montar token 3D', { class: 'btn small', 'data-sa': 't3', title: 'O personagem (PNG sem fundo) sai por cima de uma moldura', onclick: () => UI.make3d(a) }),
+          a.img ? btnI('x', 'Remover', { class: 'btn small', 'data-sa': 'tok-del', onclick: () => UI.removeToken(a) }) : null) : null));
+  }
+
   function avatar(a, size) {
     const src = App.Images.src(a && a.img);
     const col = U.safeColor(a && a.color, '#5f5e6a');
-    return h('div', { class: 'avatar', style: {
+    // Plano 75: token pronto aparece inteiro (a moldura é dele), sem recorte nem borda por cima
+    const ready = !!(src && a && (a.imgStyle === 'token' || a.imgStyle === 'pop'));
+    return h('div', { class: 'avatar' + (ready ? ' token-ready' : ''), style: {
       width: size + 'px', height: size + 'px', fontSize: size * 0.4 + 'px',
-      background: src ? `center/cover url(${src})` : `radial-gradient(circle at 35% 30%, ${U.hexA(col, 1)}, ${shade(col, -0.35)})`,
+      background: src ? (ready ? `center/contain no-repeat url(${src})` : `center/cover url(${src})`) : `radial-gradient(circle at 35% 30%, ${U.hexA(col, 1)}, ${shade(col, -0.35)})`,
     } }, src ? '' : initials(a && a.name, size < 34 ? 1 : 2));
   }
   function initials(name, n) {
@@ -1527,7 +1629,8 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     const p = $('#p-audio'), Au = App.Audio, st = S().state;
     if (!st || !S().gmView()) { p.innerHTML = ''; return; }
     const sc = S().currentScene(), au = st.audio;
-    const sig = JSON.stringify([au, sc && [sc.id, sc.name, sc.music, sc.ambient, (sc.sounds || []).length], Au.files.size, Au.dirName, Au.needPerm, UI.audioFilter, Object.keys(Au.durations).length]);
+    const fxNow = Au.playingFx();
+    const sig = JSON.stringify([au, sc && [sc.id, sc.name, sc.music, sc.ambient, (sc.sounds || []).length], Au.files.size, Au.dirName, Au.needPerm, UI.audioFilter, Object.keys(Au.durations).length, fxNow]);
     if (!force && p._sig === sig) return;
     safeRender(p, () => {
       p._sig = sig;
@@ -1567,8 +1670,15 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: au.vol[ch], title: 'Volume para todos',
           oninput: (e) => Au.previewVolume(ch, Number(e.target.value)), onchange: (e) => { Au.setVolume(ch, Number(e.target.value)); e.target.blur(); } }),
         h('span', {}, Math.round(au.vol[ch] * 100) + '%'));
+      // Plano 68: o que está tocando como efeito agora, com Parar (para também nos jogadores)
+      const fxName = (x) => { const s = x.spotId && sc && (sc.sounds || []).find((y) => y.id === x.spotId); return s ? Au.soundName(sc, s) : Au.label(x.name); };
+      const fxRows = fxNow.length ? h('div', { class: 'au-fx' }, fxNow.map((x) => h('div', { class: 'au-fx-row' }, ic('zap'), h('span', { class: 'grow' }, fxName(x)),
+        iconBtn('square', 'Parar para todos', () => Au.stopFx(x.spotId ? { spotId: x.spotId } : { name: x.name })))),
+        fxNow.length > 1 ? btnI('square', 'Parar todos os efeitos', { class: 'btn small block', onclick: () => Au.stopFx({}) }) : '') : '';
+      const fxNowText = fxNow.length ? (fxNow.length === 1 ? 'Tocando 1 efeito' : 'Tocando ' + fxNow.length + ' efeitos')
+        : sc && (sc.sounds || []).length ? sc.sounds.length + (sc.sounds.length === 1 ? ' som' : ' sons') + ' no mapa desta cena' : 'Sons curtos e sons presos ao mapa';
       p.append(channel('music', 'music', 'Música'), channel('ambient', 'wind', 'Ambiente'),
-        h('div', { class: 'au-ch' }, h('div', { class: 'au-ch-top' }, ic('zap'), h('div', { class: 'grow' }, h('span', { class: 'eyebrow' }, 'Efeitos e sons no mapa'), h('div', { class: 'au-now' }, sc && (sc.sounds || []).length ? sc.sounds.length + (sc.sounds.length === 1 ? ' som' : ' sons') + ' no mapa desta cena' : 'Sons curtos e sons presos ao mapa'))), volume('sfx')));
+        h('div', { class: 'au-ch' + (fxNow.length ? ' on' : '') }, h('div', { class: 'au-ch-top' }, ic('zap'), h('div', { class: 'grow' }, h('span', { class: 'eyebrow' }, 'Efeitos e sons no mapa'), h('div', { class: 'au-now' }, fxNowText))), fxRows, volume('sfx')));
 
       // Trilha da cena
       if (sc) {
@@ -1788,6 +1898,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       if (!a) return w.loaded ? false : h('p', { class: 'muted' }, 'Carregando…');
       w.loaded = true;
       w.titleEl.textContent = a.name;
+      applyWinArt(w, a);
       return buildSheet(a);
     }, { w: S().state && S().state.actors[id] && S().state.actors[id].sistema === '5e' ? 720 : 480, icon: 'scroll-text' });
   };
@@ -1854,12 +1965,8 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       rerender: () => { const w = UI.windows.get('actor:' + a.id); if (w) renderWindow(w); },
       roll: (label, f) => S().rollPost(f, { from: a.name, label, actor: a, token: selectedTokenOf(a), secret: UI.secret }),
       use: can ? (i) => UI.useAction(a, i) : null,
-      avatar: (size) => {
-        const av = avatar(a, size);
-        av.title = can ? 'Clique para trocar a imagem' : '';
-        if (can) av.onclick = async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) S().dispatch({ type: 'actor.update', id: a.id, patch: { img: r.id } }); };
-        return av;
-      },
+      avatar: (size) => tokenAvatar(a, size, can),
+      art: (el) => decorateArt(el, a, can), // Plano 74: arte no topo
       // Configurar: o mesmo da ficha genérica, sem as barras (na 5e elas saem das contas)
       config: () => {
         const prev = UI.sheetTab[a.id];
@@ -1885,9 +1992,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     const root = h('div', { class: 'sheet' });
 
     // ---- Cabeçalho: retrato, nome e barras (sempre à vista) ----
-    const av = avatar(a, 64);
-    av.title = can ? 'Clique para trocar a imagem' : '';
-    if (can) av.onclick = async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) upd({ img: r.id }); };
+    const av = tokenAvatar(a, 64, can);
     const ownerName = !a.owner ? 'Só o mestre' : a.owner === 'all' ? 'Todos os jogadores' : ((S().state.players[a.owner] || {}).name || 'Jogador');
     const bars = h('div', { class: 'sheet-bars' }, (a.bars || []).map((b, i) => h('div', { class: 'sheet-bar' },
       h('span', { class: 'sb-name' }, b.name),
@@ -1898,11 +2003,11 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       } }),
       h('span', { class: 'sb-max' }, '/ ' + b.max))));
     if (!(a.bars || []).length) bars.append(h('p', { class: 'hint' }, 'Sem barras. Adicione em Configurar.'));
-    root.append(h('div', { class: 'sheet-top' },
+    root.append(decorateArt(h('div', { class: 'sheet-top' },
       h('div', { class: 'sheet-head' }, av, h('div', { class: 'grow' },
         h('input', { class: 'sheet-name', value: a.name, disabled: ro, onchange: (e) => upd({ name: e.target.value.trim() || a.name }) }),
         h('div', { class: 'sheet-sub' }, KIND[a.kind] || '', ' · ', ownerName))),
-      bars));
+      bars), a, can));
 
     // ---- Abas ----
     root.append(h('div', { class: 'sheet-tabs', role: 'tablist' }, SHEET_TABS.map((t) => {
@@ -1964,7 +2069,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
           [[0.5, 'Minúsculo (½)'], [1, '1 quadrado'], [2, '2×2'], [3, '3×3'], [4, '4×4'], [6, '6×6']].map(([v, l]) => h('option', { value: String(v) }, l)))),
         h('label', {}, 'Cor', h('input', { type: 'color', disabled: ro, value: U.safeColor(a.color, '#64748b'), onchange: (e) => upd({ color: e.target.value }) })),
         // Plano 26: token pronto (imagem inteira, com a moldura dela) ou retrato recortado em círculo
-        h('label', { title: 'Token pronto: a imagem já tem moldura e vai inteira, do tamanho do token. Retrato: recortada em círculo, com o aro do Vésper.' }, 'Imagem no tabuleiro',
+        h('label', { title: 'Token pronto: a imagem já tem moldura e vai inteira, do tamanho do token (o padrão de um token enviado). Retrato: recortada em círculo, com o aro do Vésper (o padrão do token recortado da imagem do personagem).' }, 'Imagem no tabuleiro',
           h('select', { disabled: ro, value: a.imgStyle === 'token' ? 'token' : 'portrait', onchange: (e) => upd({ imgStyle: e.target.value === 'token' ? 'token' : null }) },
             h('option', { value: 'portrait' }, 'Retrato (círculo)'), h('option', { value: 'token' }, 'Token pronto (imagem inteira)'))),
         // Cobertura: o mestre decide a altura e como a ficha aparece atrás de muros baixos
@@ -1973,9 +2078,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
             onchange: (e) => { const v = App.Units.distOut(e.target.value); upd({ height: v > 0 ? v : null }); } })),
         h('label', {}, 'Atrás de muro baixo', h('select', { disabled: !gm, value: a.coverShow || '', onchange: (e) => upd({ coverShow: e.target.value || null }) },
           h('option', { value: '' }, 'Regra da cena'), h('option', { value: 'show' }, 'Sempre visível'), h('option', { value: 'silhouette' }, 'Vulto'), h('option', { value: 'hide' }, 'Escondido')))));
-      if (can) pane.append(h('div', { class: 'row wrap', style: { marginTop: '10px' } },
-        btnI('image', a.img ? 'Trocar imagem' : 'Escolher imagem', { class: 'btn small', onclick: async () => { const r = await App.Images.pick(App.Images.TOKEN); if (r) upd({ img: r.id }); } }),
-        a.img ? h('button', { class: 'btn small', onclick: () => upd({ img: null }) }, 'Remover imagem') : null));
+      pane.append(imagesSection(a, can));
       pane.append(h('p', { class: 'hint' }, a.kind === 'pc'
         ? 'Personagem: todos os tokens compartilham os mesmos valores das barras.'
         : 'NPC e criatura: cada token criado no mapa ganha uma cópia própria das barras (PV separado).'));
@@ -2007,7 +2110,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         btnI('download', 'Exportar', { onclick: () => App.Storage.downloadJSON(App.Storage.actorBundle(a.id), 'ficha_' + a.name) }),
         gm && btnI('book-open', a.mineId && App.Bestiary.mine[a.mineId] ? 'Atualizar no meu bestiário' : 'Salvar no meu bestiário', { title: 'Guarda esta ficha para usar em qualquer campanha', onclick: async () => {
           await App.Bestiary.load();
-          const id = await App.Bestiary.saveMine(a, a.img ? S().assets[a.img] : null);
+          const id = await App.Bestiary.saveMine(a, a.img ? S().assets[a.img] : null, a.art ? S().assets[a.art] : null);
           if (a.mineId !== id) upd({ mineId: id });
           U.toast('Salva no meu bestiário.');
         } }),
@@ -3069,7 +3172,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         case 'door': return (sc.walls || []).filter((w) => w.door).map((w) => [w.id, door(w)]).concat(tags);
         case 'magic': return (sc.walls || []).filter((w) => w.magic).map((w) => [w.id, TG.nameOf(sc, 'magic', w)]);
         case 'light': return (sc.lights || []).map((o) => [o.id, o.name || 'Luz']).concat(tags);
-        case 'sound': return (sc.sounds || []).map((s) => [s.id, Au.label(s.name)]).concat(tags);
+        case 'sound': return (sc.sounds || []).map((s) => [s.id, Au.soundName(sc, s)]).concat(tags);
         case 'trigger': return (sc.triggers || []).filter((x) => x.id !== tr.id).map((x) => [x.id, x.name]);
         case 'token': return tokOpts.slice(1);
         case 'anim': return (sc.props || []).map((p) => ['prop:' + p.id, 'Imagem: ' + (p.name || 'Imagem')]).concat((sc.lights || []).map((o) => ['light:' + o.id, 'Luz: ' + (o.name || 'Luz')]),
@@ -3373,7 +3476,8 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
   }
   function soundHud(hud, empty, sc, snd) {
     if (empty) empty.hidden = true;
-    const sig = JSON.stringify(['snd', snd, UI.mode, App.Triggers.allTags(sc)]);
+    const Au = App.Audio, playing = snd.once && Au.spotPlaying(snd.id), owner = snd.attach ? Au.attachName(sc, snd) : '';
+    const sig = JSON.stringify(['snd', snd, UI.mode, App.Triggers.allTags(sc), playing, owner, !!App.Board.picking]);
     if (hud._sig !== sig && !isTyping(hud)) {
       hud._sig = sig;
       hud.innerHTML = '';
@@ -3386,8 +3490,10 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       hud.append(
         h('div', { class: 'hud-top' }, h('div', { class: 'snd-bubble' + (snd.once ? ' fx' : snd.on ? ' on' : '') }, ic(snd.once ? 'zap' : snd.on ? 'volume-2' : 'volume-x')),
           h('div', { class: 'grow' }, h('div', { class: 'hud-name' }, App.Audio.label(snd.name)),
-            h('div', { class: 'hud-sub' }, snd.once ? 'Efeito no mapa · toca quando você mandar' : snd.on ? 'Som no mapa · repetindo' : 'Som no mapa · silenciado'))),
-        snd.once ? btnI('zap', 'Tocar agora', { class: 'btn primary block snd-play', title: 'Toca uma vez para todos que estiverem no alcance (ou dê dois cliques no marcador)', onclick: () => App.Audio.trigger(snd) }) : '',
+            h('div', { class: 'hud-sub' }, (owner ? 'Som de ' + owner : snd.once ? 'Efeito no mapa' : 'Som no mapa') + ' · ' + (snd.once ? (playing ? 'tocando' : 'toca quando você mandar') : snd.on ? 'repetindo' : 'silenciado')))),
+        snd.once ? (playing
+          ? btnI('square', 'Parar', { class: 'btn block snd-play snd-stop', title: 'Para o efeito para todos', onclick: () => Au.stopSpot(snd) })
+          : btnI('zap', 'Tocar agora', { class: 'btn primary block snd-play', title: 'Toca uma vez para todos que estiverem no alcance (ou dê dois cliques no ' + (owner ? 'ícone' : 'marcador') + ')', onclick: () => Au.trigger(snd) })) : '',
         h('div', { class: 'seg' },
           h('button', { class: snd.once ? '' : 'on', onclick: () => { if (snd.once) App.Audio.setOnce(sc, snd, false); } }, 'Repete'),
           h('button', { class: snd.once ? 'on' : '', onclick: () => { if (!snd.once) App.Audio.setOnce(sc, snd, true); } }, 'Uma vez')),
@@ -3398,18 +3504,26 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
           h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: snd.vol ?? 1, oninput: (e) => { volLbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { upd({ vol: Number(e.target.value) }); e.target.blur(); } })),
         legend,
         (() => {
-          const iso = App.Audio.roomAt(sc, snd);
+          const iso = App.Audio.soundRoom(sc, snd);
           if (!iso) return '';
           return h('div', { class: 'hud-section' },
             h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!snd.fill, onchange: (e) => upd({ fill: e.target.checked }) }), 'Igual na área inteira do isolamento'),
             h('p', { class: 'hint', style: { margin: 0 } }, 'Dentro de "' + (iso.name || 'Isolamento') + '": só quem está dentro ouve.' + (snd.fill ? ' Mesmo volume em qualquer canto, sem depender da distância.' : '')));
         })(),
+        // Plano 68: som preso a um objeto (anda com ele) ou solto no mapa
+        h('div', { class: 'hud-section' },
+          owner
+            ? h('div', { class: 'snd-row snd-owner' }, h('span', {}, ic('link'), 'Preso em:', h('b', {}, owner)),
+              btnI('unlink', 'Soltar no mapa', { class: 'btn small', title: 'O som vira um marcador no mapa, onde o objeto está agora', onclick: () => Au.detach(sc, snd) }))
+            : btnI('link', 'Prender em um objeto', { class: 'btn small block', title: 'Clique num token, numa imagem ou numa luz: o som passa a ser dele e anda com ele',
+              onclick: () => hudPick('animable', (r) => { Au.attachTo(sc, snd, r.kind, r.obj); App.Board.selectObj('sound', snd); }, null, { bar: 'Clique no token, na imagem ou na luz que vai levar o som.' }) })),
         h('div', { class: 'hud-section' }, tagField(sc, snd, (v) => upd({ tag: v }))),
-        h('p', { class: 'hint', style: { margin: 0 } }, 'Cada jogador ouve pelo próprio token: mais alto perto do ponto, do lado em que o som está. Atrás de paredes (área apagada no mapa) chega abafado, a ' + Math.round(App.Audio.OCCLUDED * 100) + '%. Arraste o marcador para mudar de lugar.'),
+        h('p', { class: 'hint', style: { margin: 0 } }, 'Cada jogador ouve pelo próprio token: mais alto perto do ' + (owner ? 'objeto' : 'ponto') + ', do lado em que o som está. Atrás de paredes (área apagada no mapa) chega abafado, a ' + Math.round(App.Audio.OCCLUDED * 100) + '%. '
+          + (owner ? 'Anda junto com ' + owner + '; apagar o objeto apaga o som.' : 'Arraste o marcador para mudar de lugar.')),
         h('div', { class: 'hud-btns' },
           snd.once ? '' : btnI(snd.on ? 'pause' : 'play', snd.on ? 'Silenciar' : 'Tocar', { onclick: () => upd(snd.on ? { on: false } : { on: true, at: Date.now() }) }),
           h('span', { class: 'grow' }),
-          btnI('trash-2', 'Remover', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); App.Board.selectedSound = null; App.Board.requestRender(); } })));
+          btnI('trash-2', owner ? 'Remover som' : 'Remover', { class: 'btn danger', onclick: () => { S().dispatch({ type: 'sound.delete', sceneId: sc.id, id: snd.id }); App.Board.selectedSound = null; App.Board.requestRender(); } })));
     }
     hud.hidden = false;
     if (!hudFloats()) { hud.style.transform = ''; return; }
@@ -3496,7 +3610,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
 
     const sub = [a ? KIND[a.kind] : 'Token', t.hidden ? 'invisível' : t.masked ? 'vulto' : null, App.Combat.flyOf(t) > 0 ? 'voando ' + String(App.Combat.flyOf(t)).replace('.', ',') + ' m' : null, t.size && t.size !== 1 ? `${t.size}×${t.size}` : null].filter(Boolean).join(' · ');
     hud.append(h('div', { class: 'hud-top' },
-      avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 42),
+      avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img), imgStyle: !t.img && a ? a.imgStyle : null }, 42),
       h('div', { class: 'grow' },
         gm ? h('input', { class: 'hud-name', value: t.name, title: 'Nome do token', onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); }, onchange: (e) => tokUpd({ name: e.target.value }) })
           : h('div', { class: 'hud-name' }, t.name),
@@ -3627,8 +3741,14 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       } catch (err) { U.toast(t.name + ': ' + err.message, 'error'); }
     }
     if (!parts.length) { U.toast('Nenhuma iniciativa para rolar.'); return; }
-    S().dispatch({ type: 'combat.setInit', values });
-    S().dispatch({ type: 'chat.add', msg: { id: U.uid('m_'), ts: Date.now(), kind: 'roll', from: S().myName(), playerId: S().me.id, label: 'Iniciativa', parts, secret: UI.secret } });
+    // Plano 70: a ordem do combate só muda quando os dados param (junto com a mensagem)
+    const msg = { id: U.uid('m_'), ts: Date.now(), kind: 'roll', from: S().myName(), playerId: S().me.id, label: 'Iniciativa', parts, secret: UI.secret };
+    const dice = App.Dice.take();
+    if (dice.length) msg.dice = dice.slice(0, 40);
+    S().resolve(() => {
+      S().dispatch({ type: 'combat.setInit', values });
+      S().dispatch({ type: 'chat.add', msg });
+    });
     if (S().gmView() && !st.combat.active) S().dispatch({ type: 'combat.sort' });
   }
 
@@ -3663,7 +3783,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         if (!t || (t.hidden && !gm)) return;
         const mine = S().canControl(t), a = S().actorOf(t), veil = t.masked && !gm && !mine;
         p.append(h('div', { class: 'init-row' + (c.active && i === c.turn ? ' current' : '') },
-          veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img) }, 30),
+          veil ? avatar({ name: '?', color: '#17151d' }, 30) : avatar({ name: t.name, color: t.color || (a && a.color), img: t.img || (a && a.img), imgStyle: !t.img && a ? a.imgStyle : null }, 30),
           h('span', { class: 'name', title: 'Mostrar no mapa', onclick: () => focusToken(e, t) }, veil ? 'Vulto' : t.name,
             t.hidden ? h('span', { class: 'badge', style: { marginLeft: '6px' } }, 'invisível') : null,
             gm && t.masked ? h('span', { class: 'badge', style: { marginLeft: '6px' } }, 'vulto') : null),
@@ -3819,6 +3939,20 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     return box;
   }
 
+  // =============== Dados 3D (Plano 69) ===============
+  // Cada pessoa escolhe na própria tela (guardado no navegador)
+  function dice3dSection() {
+    const D3 = App.Dice3D;
+    if (!D3) return '';
+    const vol = D3.volume(), lbl = h('span', {}, Math.round(vol * 100) + '%');
+    return h('div', { class: 'units-sec dice3d-sec', id: 'dice3d-sec' }, h('h4', {}, 'Dados 3D'),
+      h('p', { class: 'hint', style: { marginTop: 0 } }, 'Os dados caem por cima do mapa e param no número que a mesa sorteou. Vale só para a sua tela.'),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', 'data-dice3d': 'on', checked: D3.enabled(), onchange: (e) => { D3.setEnabled(e.target.checked); renderTable(); } }), 'Mostrar os dados 3D'),
+      D3.enabled() ? h('div', { class: 'au-vol' }, ic(vol > 0 ? 'volume-2' : 'volume-x'),
+        h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: vol, 'data-dice3d': 'vol', title: 'Volume do som dos dados', oninput: (e) => { lbl.textContent = Math.round(e.target.value * 100) + '%'; }, onchange: (e) => { D3.setVolume(e.target.value); e.target.blur(); renderTable(); } }),
+        lbl) : '');
+  }
+
   // Plano 56: senha da mesa (mestre). Vale para as próximas entradas; quem já está dentro continua.
   function roomPassField() {
     const N = App.Net;
@@ -3891,7 +4025,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       }
       if (!players.length) p.append(h('p', { class: 'empty' }, 'Nenhum jogador entrou ainda.'));
 
-      p.append(unitsSection(gm));
+      p.append(unitsSection(gm), dice3dSection());
       const display = h('div', { style: { margin: '12px 0' } });
       p.append(display);
       resolutionControl = mount(BoardResolution, { target: display, props: { onresize: () => App.Board.resize() } });

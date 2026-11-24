@@ -183,6 +183,19 @@ import { binaryAsset, ImageUrls, setAsset } from '../src/services/image-assets.t
     return new File([blob], e.n + '.webp', { type: blob.type || 'image/webp' });
   };
 
+  // Plano 74: ilustração do 5etools (aba Imagens) para virar a imagem do personagem. B.artPick[chave] = qual delas
+  B.artPick = {};
+  B.artFile = async function (m, idx) {
+    const imgs = (m && m._fluff && m._fluff.images) || [];
+    const im = imgs[idx != null ? idx : B.artPick[(m.name + '|' + m.source).toLowerCase()] || 0] || imgs[0];
+    if (!im || !im.url) return null;
+    const fetcher = B.fetch || ((u) => fetch(u, { mode: 'cors' }));
+    const r = await fetcher(im.url);
+    if (!r.ok) throw new Error('Ilustração não encontrada (' + r.status + ')');
+    const blob = await r.blob();
+    return new File([blob], m.name + '.webp', { type: blob.type || 'image/webp' });
+  };
+
   const subs = new Set();
   B.on = (fn) => { subs.add(fn); return () => subs.delete(fn); };
   B.emit = () => { for (const fn of subs) try { fn(); } catch (err) { console.error(err); } };
@@ -517,11 +530,11 @@ import { binaryAsset, ImageUrls, setAsset } from '../src/services/image-assets.t
   };
 
   // ---------- Meu bestiário ----------
-  B.saveMine = async function (actor, imgData) {
+  B.saveMine = async function (actor, imgData, artData) {
     const c = U.clone(actor);
     const id = c.mineId || U.uid('mb_');
     c.mineId = id; delete c.id; c.owner = '';
-    B.mine[id] = { actor: c, img: imgData ? binaryAsset(imgData) : null, savedAt: Date.now() };
+    B.mine[id] = { actor: c, img: imgData ? binaryAsset(imgData) : null, art: artData ? binaryAsset(artData) : null, savedAt: Date.now() };
     await kv('mine', B.mine);
     B.emit();
     return id;
@@ -550,12 +563,21 @@ import { binaryAsset, ImageUrls, setAsset } from '../src/services/image-assets.t
         }
         a.img = id;
       }
+      // Plano 74: a imagem do personagem salva junto
+      if (mine.art) {
+        const id = a.art || await App.Images.idOf(mine.art);
+        if (!S().assets[id]) { setAsset(S().assets, id, mine.art); App.Net.sendAsset(id, S().assets[id]); }
+        a.art = id;
+      } else a.art = null;
     } else {
       const m = await B.full(e);
       if (!m) throw new Error('Não achei ' + e.n + ' no arquivo do livro.');
       a = B.toActor(m, e);
       try { const f = await B.imageFile(e); if (f) a.img = (await App.Images.add(f, App.Images.TOKEN)).id; }
       catch (err) { U.toast('Sem imagem para ' + e.n + ': ' + err.message, 'error'); }
+      // Plano 74: a ilustração do 5etools vira a imagem do personagem (sem internet, fica só o token)
+      try { const f = await B.artFile(m); if (f) a.art = (await App.Images.add(f, App.Images.ART)).id; }
+      catch (err) { console.warn('ilustração', err); }
     }
     a.id = U.uid('ac_');
     S().dispatch({ type: 'actor.add', actor: a });

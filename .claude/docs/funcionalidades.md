@@ -188,7 +188,7 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 ## Som (`js/audio.js`)
 - Pasta escolhida pelo mestre (`Sons/` com `musicas`, `ambiente`, `Efeitos`). A campanha guarda só nomes; os jogadores recebem as faixas por P2P (streaming de mp3 grandes) e guardam em cache.
 - Canais: música, ambiente (contínuos, com volume), efeitos (uma vez). Trilha da cena toca ao ativar.
-- Sons no mapa: volume pela distância, lado esquerdo/direito, abafado atrás de paredes.
+- Sons no mapa: volume pela distância, lado esquerdo/direito, abafado atrás de paredes. Podem ser de um objeto (token, imagem, luz): saem do centro dele, andam junto (inclusive animado) e são apagados com ele (Plano 68). Efeitos tocando aparecem no painel Som com Parar.
 - **Isolamento de som** (ferramenta M, Plano 29): borda que nenhum som do mapa atravessa ("parede de algodão"); não tapa visão nem impede de andar; só o mestre vê. Desenho ponto a ponto (encaixa na grade e nas pontas de parede) ou retângulo arrastando. Ajuste: arrastar canto ou borda, dois cliques na borda criam canto e num canto apagam. Para quem está dentro: **Música de fora** Continua/Para (`r.outside`) e **Ambiente de fora** Para/Abafado/Continua (`r.ambient`). A música de dentro é um som do mapa comum; opção **"Igual na área inteira do isolamento"** (`s.fill`) toca com o mesmo volume em qualquer canto. Salas antigas com música viram isolamento + som do mapa no centro (`migrate`).
 
 ## Gatilhos (Plano 14, `js/triggers.js`; ainda sem tutorial/wiki)
@@ -233,7 +233,7 @@ Quatro tipos (`w.cover`), definidos **por cena** em Configurar cena → Cobertur
 
 ## Menu do botão direito (Plano 28, `js/ctxmenu.js`; ainda sem tutorial/wiki)
 - Direito sem arrastar abre o menu do que está no ponto (`B.hitAll`): token, imagem, luz, gatilho, porta, parede, som, nota, mapa vazio ou seleção múltipla. Arrastar com o direito continua movendo a câmera; durante o arraste de token ou régua, marca ponto.
-- Painel flutuante (Apresentar ou barra da direita recolhida): só abre pelo menu (`UI.hudFor`); o clique esquerdo só seleciona e move.
+- Painel flutuante (Foco, antes "Apresentar", ou barra da direita recolhida): só abre pelo menu (`UI.hudFor`); o clique esquerdo só seleciona e move.
 - Jogador: no próprio token, Ficha, Painel, Ações e Condições; no mapa vazio, Ping.
 
 ## Painéis

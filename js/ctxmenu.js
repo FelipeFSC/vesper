@@ -87,7 +87,7 @@ import { ImageUrls } from '../src/services/image-assets.ts';
     { icon: 'bring-to-front', label: 'Trazer para frente', run: () => D({ type: kind + '.update', sceneId: sc.id, id: o.id, patch: { z: B().maxZ(sc) + 1 } }) },
     { icon: 'send-to-back', label: 'Mandar para trás', run: () => D({ type: kind + '.update', sceneId: sc.id, id: o.id, patch: { z: B().minZ(sc) - 1 } }) },
   ];
-  // Abre o painel do objeto (no modo Apresentar ele flutua; só abre por aqui)
+  // Abre o painel do objeto (no modo Foco ele flutua; só abre por aqui)
   function panel(kind, o) { B().selectObj(kind, o); UI().hudFor = UI().selKey(); UI().refresh(); B().requestRender(); }
 
   function tokenItems(sc, t) {
@@ -113,6 +113,7 @@ import { ImageUrls } from '../src/services/image-assets.ts';
         run: () => D({ type: 'token.update', sceneId: sc.id, id: t.id, patch: { darkvision: v } }) })) });
     }
     if (gm) {
+      out.push(...objSoundItems(sc, 'token', t));
       out.push('-',
         { icon: t.hidden ? 'eye' : 'eye-off', label: t.hidden ? 'Mostrar aos jogadores' : 'Esconder dos jogadores', run: () => D({ type: 'token.update', sceneId: sc.id, id: t.id, patch: { hidden: !t.hidden } }) },
         { icon: 'users', label: t.masked ? 'Deixar de ser vulto' : 'Virar vulto', title: 'Os jogadores veem só a silhueta', run: () => D({ type: 'token.update', sceneId: sc.id, id: t.id, patch: { masked: !t.masked } }) },
@@ -126,6 +127,7 @@ import { ImageUrls } from '../src/services/image-assets.ts';
     return [
       { icon: 'sliders-horizontal', label: 'Editar', run: () => panel('prop', p) },
       ...animItems(sc, 'prop', p),
+      ...objSoundItems(sc, 'prop', p),
       { icon: 'swords', label: p.hurt && p.hurt.on ? 'Área de dano: trocar' : 'Área de dano…', run: () => { panel('prop', p); B().editHurt(sc, p.id); } },
       { icon: p.locked ? 'lock-open' : 'lock', label: p.locked ? 'Destravar' : 'Travar', run: () => D({ type: 'prop.update', sceneId: sc.id, id: p.id, patch: { locked: !p.locked } }) },
       { icon: p.hidden ? 'eye' : 'eye-off', label: p.hidden ? 'Mostrar aos jogadores' : 'Esconder dos jogadores', run: () => D({ type: 'prop.update', sceneId: sc.id, id: p.id, patch: { hidden: !p.hidden } }) },
@@ -141,6 +143,7 @@ import { ImageUrls } from '../src/services/image-assets.ts';
       { icon: 'sliders-horizontal', label: 'Editar', run: () => panel('light', o) },
       { icon: on ? 'lightbulb-off' : 'lightbulb', label: on ? 'Apagar a luz' : 'Acender a luz', run: () => D({ type: 'lightpt.update', sceneId: sc.id, id: o.id, patch: { on: !on } }) },
       ...animItems(sc, 'light', o),
+      ...objSoundItems(sc, 'light', o),
       '-',
       { icon: 'copy-plus', label: 'Duplicar', kbd: 'Ctrl+D', run: () => B().duplicateLight(sc, o.id) },
       { icon: 'trash-2', label: 'Apagar', kbd: 'Del', danger: true, run: () => { B().selectObj('light', o); B().keyAct('Delete'); } },
@@ -214,15 +217,71 @@ import { ImageUrls } from '../src/services/image-assets.ts';
       { icon: 'trash-2', label: 'Apagar esta parede', danger: true, run: () => D({ type: 'wall.delete', sceneId: sc.id, id: w.id }) },
     ];
   }
+  // Tocar / Parar (uma vez) ou Ligar / Desligar (repete)
+  function soundPlayItem(sc, s) {
+    const Au = App.Audio;
+    if (s.once) return Au.spotPlaying(s.id) ? { icon: 'square', label: 'Parar', run: () => Au.stopSpot(s) } : { icon: 'play', label: 'Tocar', run: () => Au.trigger(s) };
+    return { icon: s.on ? 'volume-x' : 'volume-2', label: s.on ? 'Desligar' : 'Ligar', run: () => D({ type: 'sound.update', sceneId: sc.id, id: s.id, patch: s.on ? { on: false } : { on: true, at: Date.now() } }) };
+  }
+  const removeSound = (sc, s) => { D({ type: 'sound.delete', sceneId: sc.id, id: s.id }); if (B().selectedSound === s.id) B().selectedSound = null; };
   function soundItems(sc, s) {
     const Au = App.Audio;
     return [
-      s.once ? { icon: 'play', label: 'Tocar', run: () => Au.trigger(s) } : { icon: s.on ? 'volume-x' : 'volume-2', label: s.on ? 'Desligar' : 'Ligar', run: () => D({ type: 'sound.update', sceneId: sc.id, id: s.id, patch: s.on ? { on: false } : { on: true, at: Date.now() } }) },
-      { icon: 'sliders-horizontal', label: 'Editar', run: () => panel('sound', s) },
+      soundPlayItem(sc, s),
+      { icon: 'sliders-horizontal', label: s.attach ? 'Editar som' : 'Editar', run: () => panel('sound', s) },
+      s.attach
+        ? { icon: 'unlink', label: 'Soltar no mapa', title: 'O som vira um marcador no mapa, onde o objeto está agora', run: () => Au.detach(sc, s) }
+        : { icon: 'link', label: 'Prender em um objeto…', title: 'Clique num token, numa imagem ou numa luz: o som passa a ser dele', run: () => { panel('sound', s); App.Board.pick('animable', (r) => { Au.attachTo(sc, s, r.kind, r.obj); B().selectObj('sound', s); }); } },
       '-',
-      { icon: 'trash-2', label: 'Apagar', danger: true, run: () => { D({ type: 'sound.delete', sceneId: sc.id, id: s.id }); if (B().selectedSound === s.id) B().selectedSound = null; } },
+      { icon: 'trash-2', label: s.attach ? 'Remover som' : 'Apagar', danger: true, run: () => removeSound(sc, s) },
     ];
   }
+  /*
+   * Plano 68: som do objeto (token, imagem, luz). Sem som: "Adicionar som…"; com som: um submenu com o que fazer.
+   */
+  function objSoundItems(sc, kind, o) {
+    if (!S().gmView() || !App.Audio) return [];
+    const s = App.Audio.soundOf(sc, kind, o.id);
+    if (!s) return [{ icon: 'volume-2', label: 'Adicionar som…', title: 'O som sai deste objeto e anda junto com ele', run: () => pickTrack(sc, kind, o) }];
+    return [{ icon: 'volume-2', label: 'Som: ' + App.Audio.label(s.name), sub: [
+      soundPlayItem(sc, s),
+      { icon: 'sliders-horizontal', label: 'Editar som', run: () => panel('sound', s) },
+      { icon: 'music', label: 'Trocar a faixa…', run: () => pickTrack(sc, kind, o) },
+      { icon: 'unlink', label: 'Soltar no mapa', run: () => App.Audio.detach(sc, s) },
+      '-',
+      { icon: 'trash-2', label: 'Remover som', danger: true, run: () => removeSound(sc, s) },
+    ] }];
+  }
+  // Escolher a faixa da biblioteca para o som do objeto
+  function pickTrack(sc, kind, o) {
+    const Au = App.Audio;
+    if (!Au.files.size) { U.toast('Escolha antes a pasta de músicas no painel Som.', 'info', 5000); if (UI().showTab) UI().showTab('audio'); return; }
+    const back = h('div', { class: 'modal-back' });
+    const close2 = () => back.remove();
+    const list = h('div', { class: 'bst-list cm-place-list' });
+    const CAT = { music: 'Música', ambient: 'Ambiente', sfx: 'Efeito' };
+    const all = [...Au.files.keys()].sort((a, b) => a.localeCompare(b));
+    let q = '';
+    const fill = () => {
+      list.innerHTML = '';
+      const s = U.slug(q), L = all.filter((n) => !s || U.slug(n).includes(s)).slice(0, 80);
+      for (const n of L) list.append(h('button', { class: 'bst-item cm-place-item', onclick: () => {
+        close2();
+        const snd = Au.addToObject(sc, kind, o, n);
+        if (snd) { const cur = (S().currentScene().sounds || []).find((x) => x.id === snd.id); if (cur) panel('sound', cur); }
+      } }, h('span', { class: 'grow' }, h('div', { class: 'name' }, Au.label(n)), h('div', { class: 'sub' }, CAT[Au.catOf(n)] + (Au.catOf(n) === 'sfx' ? ' · toca uma vez quando você mandar' : ' · fica repetindo')))));
+      if (!list.children.length) list.append(h('p', { class: 'empty' }, 'Nenhuma faixa com esse nome.'));
+    };
+    const input = h('input', { placeholder: 'Nome da faixa…', oninput: (ev) => { q = ev.target.value; fill(); }, onkeydown: (ev) => { if (ev.key === 'Escape') close2(); if (ev.key === 'Enter') { const b = list.querySelector('.cm-place-item'); if (b) b.click(); } } });
+    const title = (o.name || { token: 'Token', prop: 'Imagem', light: 'Luz' }[kind]);
+    back.append(h('div', { class: 'modal cm-place cm-track' },
+      h('div', { class: 'win-head' }, ic('volume-2'), h('span', { class: 'win-title' }, 'Som de ' + title), h('button', { class: 'icon-btn', title: 'Fechar', onclick: close2 }, ic('x'))),
+      h('div', { class: 'win-body' }, h('p', { class: 'hint', style: { marginTop: 0 } }, 'O som sai do objeto e anda junto com ele. Cada jogador ouve conforme a distância.'), h('div', { class: 'search-box' }, ic('search'), input), list)));
+    back.addEventListener('pointerdown', (ev) => { if (ev.target === back) close2(); });
+    document.body.append(back);
+    fill(); input.focus();
+  }
+  App.UI.pickObjectTrack = pickTrack;
   function roomItems(sc, r) {
     const upd = (patch) => D({ type: 'room.update', sceneId: sc.id, id: r.id, patch });
     const out = r.outside || 'stop', amb = r.ambient || 'stop';

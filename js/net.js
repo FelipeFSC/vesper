@@ -455,6 +455,10 @@ import { assetIds, encodeAssets, joinAsset, setAsset } from '../src/services/ima
       case 'clock':
         if (App.Anim) App.Anim.setClock(msg.now);
         break;
+      case 'dice':
+        // Plano 70: o mestre manda rolar os dados; o resultado chega depois
+        if (App.Dice3D && Array.isArray(msg.dice)) App.Dice3D.announce(msg);
+        break;
       case 'ruler':
         if (msg.from !== S().me.id) App.Board.onRuler(msg);
         break;

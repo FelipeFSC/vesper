@@ -450,6 +450,11 @@ button.brand:hover .home-label { color: var(--gold); border-color: var(--gold); 
 .help-btn:hover { border-color: var(--accent-text); }
 
 /* Resultado recente sobre o mapa (quando o chat está fechado) */
+/* Plano 69: dados 3D por cima do mapa, sem pegar cliques */
+.dice3d { position: absolute; inset: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .45s; }
+.dice3d.on { opacity: 1; transition: opacity .15s; }
+.dice3d canvas { pointer-events: none; display: block; }
+.dice3d-sec .au-vol { margin-top: 8px; }
 #roll-feed { position: absolute; left: 64px; bottom: 66px; z-index: 12; width: 330px; max-width: calc(100% - 28px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 #roll-feed .msg { pointer-events: auto; box-shadow: var(--shadow); animation: feedIn .25s ease-out; border-color: var(--line2); }
 #roll-feed .msg.out { opacity: 0; transform: translateY(6px); transition: opacity .4s, transform .4s; }
@@ -574,6 +579,17 @@ button.brand:hover .home-label { color: var(--gold); border-color: var(--gold); 
 .snd-bubble .ico { width: 18px; height: 18px; }
 .snd-bubble.fx { background: var(--gold); color: #17130a; }
 .snd-play { padding: 9px; }
+/* Plano 68: botão Parar, som preso a um objeto e efeitos tocando no painel Som */
+.snd-stop { border-color: var(--gold); color: var(--gold); }
+.snd-owner { align-items: center; gap: 6px 8px; flex-wrap: wrap; justify-content: flex-start; }
+.snd-owner > span { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 100%; white-space: nowrap; }
+.snd-owner > .btn { flex-shrink: 0; }
+.snd-owner > span .ico { width: 13px; height: 13px; flex-shrink: 0; }
+.snd-owner b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-fx { display: flex; flex-direction: column; gap: 4px; }
+.au-fx-row { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; }
+.au-fx-row > .ico { width: 13px; height: 13px; color: var(--gold); flex-shrink: 0; }
+.au-fx-row .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vol-legend { display: flex; flex-direction: column; gap: 4px; }
 .vol-bar { height: 8px; border-radius: 4px; }
 .vol-lbls { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); }
@@ -1220,3 +1236,75 @@ input.grp-name:hover, input.grp-name:focus { border-color: var(--line2) !importa
 .portal-scene select { width: 100%; }
 .portal-link { gap: 8px; align-items: center; }
 .portal-link small { color: var(--muted); }
+
+/* Plano 74: imagem do personagem ao fundo do topo da ficha (js/sheetart.js) */
+.sa-can { position: relative; }
+.sa-top { position: relative; isolation: isolate; padding-top: 104px; --sa-bx: 0px; --sa-by: 0px; }
+.win-body .sa-top { --sa-bx: 16px; --sa-by: 14px; }
+.sa-bg { position: absolute; z-index: -1; top: calc(-1 * var(--sa-by)); left: calc(-1 * var(--sa-bx)); right: calc(-1 * var(--sa-bx)); height: calc(100% + var(--sa-by)); max-height: 320px;
+  background-size: cover; background-position: center 12%; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 100%); mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, .55) 62%, transparent 100%); }
+.sa-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(14, 13, 18, .82) 0%, rgba(14, 13, 18, .35) 50%, rgba(14, 13, 18, .08) 100%); }
+.sa-top .avatar { box-shadow: 0 0 0 2px var(--gold), 0 6px 18px rgba(0, 0, 0, .65); }
+.sa-top .sheet-name, .sa-top .f5-name { text-shadow: 0 2px 10px rgba(0, 0, 0, .9); }
+.sa-top .sheet-sub, .sa-top .f5-cls, .sa-top .f5-origin { text-shadow: 0 1px 6px rgba(0, 0, 0, .9); }
+.sa-pick { position: absolute; top: 0; right: 0; z-index: 1; background: rgba(14, 13, 18, .55); border-radius: 8px; opacity: .7; }
+.sa-pick:hover, .sa-pick:focus-visible { opacity: 1; }
+.sa-drop { outline: 2px dashed var(--gold); outline-offset: 4px; border-radius: 10px; }
+@media (max-width: 600px) { .sa-top { padding-top: 72px; } }
+/* Configurar → Imagens */
+.sa-imgs { margin-top: 12px; }
+.sa-img-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.sa-img-row b { display: block; font-size: 13px; }
+.sa-img-row .grow { min-width: 0; }
+.sa-thumb { width: 64px; height: 46px; border-radius: 8px; flex-shrink: 0; background-color: var(--panel3); background-size: cover; background-position: center 22%; display: grid; place-items: center; color: var(--faint); }
+.sa-img-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 58%; }
+/* Janela de recorte do token */
+.sa-crop { width: min(760px, 100%); }
+.sa-row { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.sa-stage { position: relative; flex-shrink: 0; cursor: move; touch-action: none; border-radius: 8px; overflow: hidden; background: #000; }
+.sa-stage img { width: 100%; height: 100%; display: block; user-select: none; pointer-events: none; }
+.sa-ring { position: absolute; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 0 0 9999px rgba(0, 0, 0, .55); pointer-events: none; }
+.sa-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sa-prev { width: 120px; height: 120px; border-radius: 50%; box-shadow: 0 0 0 2px var(--gold); }
+.sa-size { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.sa-size input { flex: 1; }
+.sa-btns { margin-top: 12px; gap: 8px; }
+/* Plano 75: token pronto (enviado) aparece inteiro, sem recorte nem borda por cima */
+.avatar.token-ready, .sa-top .avatar.token-ready { border-radius: 0; box-shadow: none; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, .55)); }
+/* Plano 76: janela Montar token 3D */
+.t3-modal { width: min(820px, 100%); }
+.t3-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.t3-left { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.t3-stage { position: relative; width: 300px; height: 375px; border-radius: 10px; overflow: hidden;
+  background: #2b241c repeating-linear-gradient(0deg, transparent 0 74px, rgba(0, 0, 0, .25) 74px 75px), #2b241c repeating-linear-gradient(90deg, transparent 0 74px, rgba(0, 0, 0, .25) 74px 75px); }
+.t3-cell { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; border: 2px dashed rgba(242, 178, 76, .55); box-sizing: border-box; pointer-events: none; }
+.t3-prev { position: absolute; inset: 0; width: 100%; height: 100%; cursor: move; touch-action: none; }
+.t3-side { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.t3-side h4 { margin: 6px 0 0; }
+.t3-side .seg { flex-wrap: wrap; }
+.t3-size { display: flex; align-items: center; gap: 8px; }
+.t3-size input { flex: 1; }
+.t3-color { align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.t3-btns { margin-top: 14px; gap: 8px; }
+/* Plano 77: relógio do token 3D (por onde o personagem sai da moldura) */
+.t3-clock-box { display: flex; gap: 14px; align-items: center; }
+.t3-clock { flex-shrink: 0; touch-action: none; }
+.t3-clock-ring { fill: var(--panel2); stroke: var(--line2); stroke-width: 7; }
+.t3-clock-arc { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; }
+.t3-clock-num { font: 600 9px var(--sans, Inter, sans-serif); fill: var(--muted); text-anchor: middle; }
+.t3-clock-h { fill: #fff; stroke: var(--accent); stroke-width: 2.5; cursor: grab; }
+.t3-clock-h:active { cursor: grabbing; }
+.t3-clock-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.t3-clock-txt { font-weight: 600; font-size: 13px; }
+/* Plano 78: na janela da ficha, a arte começa no topo, atrás do ícone, do nome e do X; o conteúdo rola por cima */
+.win.win-art::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 400px; border-radius: 12px 12px 0 0; pointer-events: none; z-index: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 64px), linear-gradient(90deg, rgba(14, 13, 18, .82) 0%, rgba(14, 13, 18, .35) 50%, rgba(14, 13, 18, .08) 100%), var(--win-art) center var(--win-art-y, 12%) / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 38%, rgba(0, 0, 0, .55) 66%, transparent 100%); mask-image: linear-gradient(to bottom, #000 38%, rgba(0, 0, 0, .55) 66%, transparent 100%); }
+.win.win-art > .win-head { position: relative; z-index: 1; background: transparent; border-bottom-color: transparent; }
+.win.win-art > .win-head .win-title, .win.win-art > .win-head .ico { color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, .9); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .8)); }
+.win.win-art > .win-body { position: relative; z-index: 1; }
+.win.win-art .sa-bg { display: none; }
+.sa-y { display: flex; align-items: center; gap: 8px; padding: 8px 0 2px; border-top: 1px solid var(--line); font-size: 13px; }
+.sa-y > span:first-child { font-weight: 600; margin-right: 4px; }
+.sa-y input { flex: 1; }

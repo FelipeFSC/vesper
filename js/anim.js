@@ -220,7 +220,7 @@
     now = now ?? A.now();
     const byKey = new Map();
     for (const e of list) { if (!byKey.has(e.key)) byKey.set(e.key, []); byKey.get(e.key).push(e); }
-    const out = Object.assign({}, sc);
+    const out = Object.assign({}, sc, { _view: true }); // _view: já é a cena como aparece (não animar de novo)
     const anim = (k, o) => {
       const es = byKey.get(A.keyOf(k, o.id));
       if (!es) return o;

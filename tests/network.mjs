@@ -97,6 +97,28 @@ export async function verifyNetwork(browser, url, v1Url) {
     await players[1].waitForFunction(({ sceneId, heroId, x }) => window.App.Store.state.scenes[sceneId].tokens[heroId].x === x, asset);
     assert.equal(await host.evaluate(({ sceneId, heroId }) => window.App.Store.state.scenes[sceneId].tokens[heroId].x, asset), asset.x);
 
+    // Plano 69: o jogador rola e as três telas mostram os mesmos números nos dados 3D
+    // Plano 70: em cada tela, quando a mensagem chega, os dados já pararam
+    for (const page of [host, ...players]) await page.evaluate(() => {
+      window.__diceArrivals = [];
+      window.App.Store.on((kind, a) => {
+        const D3 = window.App.Dice3D;
+        if (kind === 'chat.add' && a?.msg?.dice) window.__diceArrivals.push({ label: a.msg.label, done: !!D3?.last?.done, notation: D3?.last?.notation });
+      });
+    });
+    await players[1].evaluate(() => { window.App.Store.rollPost('3d6', { label: 'Teste de rede' }); });
+    const rolled = await host.waitForFunction(() => {
+      const m = window.App.Store.state.chat.find((x) => x.label === 'Teste de rede');
+      return m && m.dice && m.dice.length === 3 ? m.dice : null;
+    }).then((h) => h.jsonValue());
+    const want = '1d6+1d6+1d6@' + rolled.map((d) => d.v).join(',');
+    for (const page of [host, ...players]) {
+      await page.waitForFunction((w) => window.App.Dice3D?.last?.notation === w && window.App.Dice3D.last.done, want, { timeout: 30000 });
+      await page.waitForFunction(() => window.__diceArrivals.some((x) => x.label === 'Teste de rede'), null, { timeout: 30000 });
+      const arrival = await page.evaluate(() => window.__diceArrivals.find((x) => x.label === 'Teste de rede'));
+      assert.deepEqual(arrival, { label: 'Teste de rede', done: true, notation: want });
+    }
+
     const uploadStart = performance.now();
     const uploaded = await players[0].evaluate(({ data }) => {
       const { Net, Store, U } = window.App;

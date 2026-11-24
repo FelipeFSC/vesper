@@ -70,6 +70,9 @@ window.addEventListener('load', () => setTimeout(async () => {
     const g = S.state.actors[idG];
     log.push('ficha: ' + g.name + ' · ' + g.kind + ' · PV ' + g.bars[0].max + ' · ' + g.stats.map((s) => s.name.slice(0, 3) + ' ' + s.value).join(', ') + ' · ações ' + g.actions.length + ' · dados5e ' + Object.keys(g.dados5e).length + ' campos · token baixado de ' + (fetched[0] || '').slice(-40));
     ok(g && g.img && S.assets[g.img] && /tokens\/XMM\/Goblin%20Warrior\.webp$/.test(fetched[0] || ''), 'token da web na ficha');
+    // Plano 74: a primeira ilustração do 5etools vira a imagem do personagem
+    ok(g.art && S.assets[g.art] && fetched.some((u) => u.includes('5etools-img/main/bestiary/XMM/')), 'ilustração do 5etools vira a imagem do personagem');
+    log.push('imagem do personagem: ' + (fetched.find((u) => u.includes('5etools-img/main/bestiary/XMM/')) || 'nenhuma'));
     ok(g.bars[0].max === 10 && g.stats.find((s) => s.name === 'Defesa').value === 15 && g.stats.find((s) => s.name === 'Destreza').value === 2, 'PV, Defesa e atributos');
     // Plano 53: a ficha é a de criatura 5e, com as ações do livro prontas para a mesa
     ok(g.sistema === '5e' && g.dnd5e.npc && g.actions.length > 0 && g.dados5e && g.dados5e.name === 'Goblin Warrior', 'ficha de criatura com as ações do livro e os dados');
@@ -109,6 +112,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     S.dispatch({ type: 'actor.delete', id: idG, tokens: true }); await W(50);
     const idM = await BS.addToCampaign('mine:' + mineId);
     ok(S.state.actors[idM] && S.state.actors[idM].mineId === mineId, 'volta do meu bestiário');
+    ok(S.state.actors[idM].art && BS.mine[mineId].art, 'imagem do personagem salva no meu bestiário'); // Plano 74
 
     // Jogador não abre
     S.viewAs = '*'; App.UI.refresh(); await W(100);

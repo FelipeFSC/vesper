@@ -2,6 +2,8 @@ import '../../js/util.js';
 import '../../js/icons.js';
 import '../../js/dice.js';
 import '../../js/images.js';
+import '../../js/sheetart.js';
+import '../../js/token3d.js';
 import '../../js/combat.js';
 import '../../js/units.js';
 import '../../js/bestiary.js';

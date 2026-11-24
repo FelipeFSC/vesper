@@ -372,17 +372,28 @@
   // Cada computador guarda os efeitos que está tocando (de uma vez, soltos ou presos a um som do mapa)
   A.fx = [];
   A.lastStop = null;
+  // Plano 68: o painel Som e o do som do mapa mostram o que está tocando (e o botão Parar)
+  let fxTimer = null;
+  function fxChanged() {
+    clearTimeout(fxTimer);
+    fxTimer = setTimeout(() => { emit(); if (App.UI && App.UI.schedule) App.UI.schedule('local'); if (App.Board && App.Board.requestRender) App.Board.requestRender(); }, 30);
+  }
   function track(item) {
     A.fx.push(item);
-    item.el.addEventListener('ended', () => { A.fx = A.fx.filter((x) => x !== item); }, { once: true });
+    item.el.addEventListener('ended', () => { A.fx = A.fx.filter((x) => x !== item); fxChanged(); }, { once: true });
+    fxChanged();
     return item;
   }
+  // O que está tocando como efeito agora (neste computador): [{name, spotId}]
+  A.playingFx = () => A.fx.filter((x) => !x.stopped).map((x) => ({ name: x.name, spotId: x.spotId || null }));
+  A.spotPlaying = (id) => A.fx.some((x) => !x.stopped && x.spotId === id);
   function stopItem(item) {
     if (!item || item.stopped) return;
     item.stopped = true;
     try { item.el.pause(); } catch { /* */ }
     if (item.node) { try { item.node.gain.disconnect(); } catch { /* */ } }
     A.fx = A.fx.filter((x) => x !== item);
+    fxChanged();
   }
   // A ordem de parar vale para este efeito? (sem nome nem som do mapa = todos)
   const stopMatches = (so, item) => (so.spotId ? item.spotId === so.spotId : so.name ? item.name === so.name : true);
@@ -441,8 +452,48 @@
   A.OCCLUDED = OCCLUDED;
   A.volumeAt = (x) => Math.pow(Math.max(0, 1 - x), 1.5);
   A.distanceFor = (v) => 1 - Math.pow(v, 2 / 3);
+  /*
+   * Plano 68: som de um objeto. snd.attach = 'token:id' | 'prop:id' | 'light:id'. O som fica no centro do objeto,
+   * onde ele aparece agora (arrastado, animado). Cada computador calcula pelo estado: nada novo pela rede.
+   */
+  A.attachOf = function (sc, s) {
+    if (!sc || !s || !s.attach) return null;
+    const i = String(s.attach).indexOf(':'), kind = s.attach.slice(0, i), id = s.attach.slice(i + 1);
+    const o = kind === 'token' ? (sc.tokens || {})[id] : kind === 'prop' ? (sc.props || []).find((x) => x.id === id) : kind === 'light' ? (sc.lights || []).find((x) => x.id === id) : null;
+    return o ? { kind, id, o } : null;
+  };
+  A.objCenter = function (sc, kind, o) {
+    if (kind === 'token') {
+      const cur = S().currentScene();
+      if (App.Board && App.Board.posOf && cur && cur.id === sc.id) return App.Board.posOf(o);
+      const z = (o.size || 1) * sc.grid;
+      return { x: o.x + z / 2, y: o.y + z / 2 };
+    }
+    if (kind === 'prop') return { x: o.x + (o.w || 0) / 2, y: o.y + (o.h || 0) / 2 };
+    if (kind === 'light' && o.shape === 'area' && o.pts && o.pts.length && App.Light && App.Light.areaCenter) return App.Light.areaCenter(o.pts);
+    return { x: o.x, y: o.y };
+  };
+  // view = cena como aparece agora (App.Anim.view), para não calcular de novo a cada som
+  A.soundPos = function (sc, s, view) {
+    if (!s.attach || !sc) return { x: s.x, y: s.y };
+    const v = view || (App.Anim ? App.Anim.view(sc) : sc), a = A.attachOf(v, s);
+    return a ? A.objCenter(v, a.kind, a.o) : { x: s.x, y: s.y };
+  };
+  // Nome do objeto do som ("Goblin") e nome do som para listas ("Som de Goblin: Rosnado")
+  A.attachName = function (sc, s) {
+    const a = A.attachOf(sc, s);
+    if (!a) return '';
+    return a.o.name || { token: 'Token', prop: 'Imagem', light: 'Luz' }[a.kind];
+  };
+  A.soundName = function (sc, s) {
+    const n = A.attachName(sc, s);
+    return n ? 'Som de ' + n + ': ' + A.label(s.name) : A.label(s.name);
+  };
+  // O som do objeto (um por objeto)
+  A.soundOf = (sc, kind, id) => ((sc && sc.sounds) || []).find((x) => x.attach === kind + ':' + id) || null;
   // Quanto (0..1), de que lado (-1..1) e se está abafado
-  function hearing(sc, s, lis) {
+  function hearing(sc, s0, lis, view) {
+    const s = s0.attach ? Object.assign({}, s0, A.soundPos(sc, s0, view)) : s0;
     const g = sc.grid, R = Math.max(1, Number(s.r) || 8) * g;
     const home = A.roomAt(sc, s);
     let best = null;
@@ -458,6 +509,7 @@
     return best || { v: 0, pan: 0, occl: false };
   }
   A.hearing = (sc, s) => hearing(sc, s, listeners(sc));
+  A.soundRoom = (sc, s) => A.roomAt(sc, A.soundPos(sc, s));
   A.spots = new Map();
   let spotQueue = Promise.resolve(), tickTimer = null;
 
@@ -472,7 +524,7 @@
     const sc = S().currentScene(), list = ((sc && sc.sounds) || []).filter((s) => !s.once);
     const ids = new Set(list.map((s) => s.id));
     for (const id of [...A.spots.keys()]) if (!ids.has(id)) dropSpot(id);
-    if (!list.length || !actx()) { if (sc && (sc.rooms || []).length) startTick(); else { stopTick(); updateRoom(sc); } return; }
+    if (!list.length || !actx()) { if ((sc && (sc.rooms || []).length) || A.fx.some((x) => x.spot && !x.stopped)) startTick(); else { stopTick(); updateRoom(sc); } return; }
     for (const s of list) {
       let n = A.spots.get(s.id);
       if (n && n.name !== s.name) { dropSpot(s.id); n = null; }
@@ -508,10 +560,20 @@
     updateRoom(sc);
     if (!sc || !actxObj) return;
     const lis = listeners(sc), now = actxObj.currentTime, vol = S().state.audio.vol.sfx ?? 0.8;
+    const view = App.Anim ? App.Anim.view(sc) : sc;
+    // Plano 68: efeito "uma vez" tocando: quem se afasta ouve mais baixo; o som de um objeto vai com ele
+    for (const item of A.fx) {
+      if (!item.node || !item.spot || item.stopped) continue;
+      const sp = item.spot, live = (sc.sounds || []).find((x) => x.id === sp.id);
+      const h = sp.sceneId === sc.id ? hearing(sc, Object.assign({}, sp, { attach: live ? live.attach || null : sp.attach || null }), lis, view) : { v: 0, pan: 0, occl: false };
+      item.node.gain.gain.setTargetAtTime(h.v * (sp.vol ?? 1) * vol, now, 0.15);
+      item.node.pan.pan.setTargetAtTime(h.pan, now, 0.15);
+      item.node.filter.frequency.setTargetAtTime(h.occl ? 650 : 20000, now, 0.2);
+    }
     for (const s of sc.sounds || []) {
       const n = A.spots.get(s.id);
       if (!n) continue;
-      const h = hearing(sc, s, lis);
+      const h = hearing(sc, s, lis, view);
       n.gain.gain.setTargetAtTime(s.on ? h.v * (s.vol ?? 1) * vol : 0, now, 0.15);
       n.pan.pan.setTargetAtTime(h.pan, now, 0.15);
       n.filter.frequency.setTargetAtTime(h.occl ? 650 : 20000, now, 0.2);
@@ -529,13 +591,14 @@
     if (Date.now() - fx.at > 15000) return;
     const sc = S().currentScene();
     if (!sc || sc.id !== fx.sceneId) return;
-    const h = hearing(sc, fx, listeners(sc));
-    if (h.v <= 0.01) return;
+    // Toca mesmo para quem está longe agora (volume 0): quem chegar perto, ou o objeto que vier, passa a ouvir
     const url = await urlFor(fx.name, fx.size);
     if (!url || !actx()) return;
     if (stoppedSince({ name: fx.name, spotId: fx.id }, fx.at)) return;
+    const h = hearing(sc, fx, listeners(sc));
     const el = new Audio(url), n = chain(el);
-    track({ name: fx.name, spotId: fx.id || null, el, node: n });
+    track({ name: fx.name, spotId: fx.id || null, el, node: n, spot: fx });
+    startTick();
     n.gain.gain.value = h.v * (fx.vol ?? 1) * (S().state.audio.vol.sfx ?? 0.8);
     n.pan.pan.value = h.pan;
     n.filter.frequency.value = h.occl ? 650 : 20000;
@@ -627,10 +690,44 @@
   A.trigger = function (snd) {
     const sc = S().currentScene();
     if (!sc || !snd) return;
-    const prev = S().state.audio.spot;
-    D({ type: 'audio.spot', spot: { sceneId: sc.id, id: snd.id, name: snd.name, size: snd.size || A.sizes[snd.name] || 0, x: snd.x, y: snd.y,
-      r: snd.r, vol: snd.vol ?? 1, n: ((prev && prev.n) || 0) + 1, at: Date.now() } });
-    App.Board.addPing({ sceneId: sc.id, x: snd.x, y: snd.y, color: '#d2a24c', name: A.label(snd.name) });
+    const prev = S().state.audio.spot, p = A.soundPos(sc, snd);
+    D({ type: 'audio.spot', spot: { sceneId: sc.id, id: snd.id, name: snd.name, size: snd.size || A.sizes[snd.name] || 0, x: Math.round(p.x), y: Math.round(p.y),
+      attach: snd.attach || null, r: snd.r, vol: snd.vol ?? 1, fill: !!snd.fill, n: ((prev && prev.n) || 0) + 1, at: Date.now() } });
+    App.Board.addPing({ sceneId: sc.id, x: p.x, y: p.y, color: '#d2a24c', name: A.label(snd.name) });
+  };
+  // Plano 68: para o som "uma vez" que está tocando (o botão Tocar vira Parar)
+  A.stopSpot = (snd) => A.stopFx({ spotId: snd.id });
+  /*
+   * Plano 68: som de um objeto (um por objeto). Sai do centro dele e anda com ele. kind: token | prop | light.
+   * O objeto já tinha som: troca a faixa.
+   */
+  A.addToObject = function (sc, kind, o, name) {
+    if (!sc || !o || !name || !S().gmView()) return null;
+    const old = A.soundOf(sc, kind, o.id);
+    if (old) { D({ type: 'sound.update', sceneId: sc.id, id: old.id, patch: { name, size: A.sizes[name] || 0, at: Date.now() } }); A.preload([name]); return old; }
+    const once = A.catOf(name) === 'sfx', p = A.objCenter(sc, kind, o);
+    const s = { id: U.uid('snd_'), name, size: A.sizes[name] || 0, x: Math.round(p.x), y: Math.round(p.y), attach: kind + ':' + o.id,
+      r: once ? 12 : 8, vol: 1, on: !once, once, at: Date.now() };
+    D({ type: 'sound.add', sceneId: sc.id, sound: s });
+    A.preload([name]);
+    return s;
+  };
+  // Prende um som que estava solto no mapa num objeto (se o objeto já tinha som, o antigo sai)
+  A.attachTo = function (sc, snd, kind, o) {
+    if (!sc || !snd || !o) return;
+    const old = A.soundOf(sc, kind, o.id);
+    const run = () => {
+      if (old && old.id !== snd.id) D({ type: 'sound.delete', sceneId: sc.id, id: old.id });
+      const p = A.objCenter(sc, kind, o);
+      D({ type: 'sound.update', sceneId: sc.id, id: snd.id, patch: { attach: kind + ':' + o.id, x: Math.round(p.x), y: Math.round(p.y) } });
+    };
+    if (App.History) App.History.batch('prender som', run); else run();
+  };
+  // Solta o som do objeto: vira marcador no mapa, onde o objeto está
+  A.detach = function (sc, snd) {
+    if (!sc || !snd || !snd.attach) return;
+    const p = A.soundPos(sc, snd);
+    D({ type: 'sound.update', sceneId: sc.id, id: snd.id, patch: { attach: null, x: Math.round(p.x), y: Math.round(p.y) } });
   };
   // Alterna entre "repete" e "uma vez"
   A.setOnce = function (sc, snd, once) {
