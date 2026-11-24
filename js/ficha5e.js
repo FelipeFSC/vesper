@@ -907,9 +907,50 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
           h('label', { class: 'f5-temp' }, 'Temp.', nin(d.hp.temp || 0, (v) => K.upd((dd) => { dd.hp.temp = Math.max(0, v); }), { disabled: ro, 'data-f': 'f5-temp' })))),
       adjForm(K, 'ac', c.acAuto, 'CA') || adjForm(K, 'init', c.mod.dex, 'Iniciativa') || adjForm(K, 'pb', R.crPb(n.cr), 'Proficiência') || adjForm(K, 'hpMax', c.hpAuto, 'PV máximo'));
   }
-  // Linha do bloco: "Classe de Armadura 25 (armadura natural)"
-  const sbLine = (label, ...val) => h('div', { class: 'f5-sb-line' }, h('b', {}, label + ' '), ...val);
+  // Linha do bloco: "Classe de Armadura 25 (armadura natural)". Plano 82: o valor (texto) em destaque
+  const sbLine = (label, ...val) => h('div', { class: 'f5-sb-line' }, h('b', {}, label + ' '), ...val.map((v) => (typeof v === 'string' ? h('span', { class: 'f5-sb-v' }, v) : v)));
   const rollChip = (label, title, onclick, attrs = {}) => h('button', Object.assign({ class: 'f5-rchip', title, onclick }, attrs), label);
+  /*
+   * Plano 82: bloco da criatura legível. Cor por tipo de dano (classe dt-<tipo>), destaques no texto do livro
+   * (dano com dados clicável, CD, "Hit:", "Failure:"…, condições) e o tipo de cada cartão (ataque, resistência, traço).
+   */
+  const DMG_EN = Object.keys(DMG_PT);
+  const typeKey = (w) => { const k = String(w || '').toLowerCase(); if (DMG_PT[k]) return k; return DMG_EN.find((t) => DMG_PT[t] === k) || null; };
+  const TYPE_WORDS = DMG_EN.concat(Object.values(DMG_PT)).sort((a, b) => b.length - a.length).join('|');
+  const COND_WORDS = R.CONDITIONS.concat(['Exhaustion', 'Agarrado', 'Amedrontado', 'Atordoado', 'Caído', 'Cego', 'Contido', 'Enfeitiçado', 'Envenenado', 'Exausto', 'Impedido', 'Incapacitado', 'Inconsciente', 'Invisível', 'Paralisado', 'Petrificado', 'Surdo']).join('|');
+  const LABELS = '(?:Melee or Ranged|Melee|Ranged) (?:Weapon |Spell )?Attack(?: Roll)?|(?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw|Hit or Miss|Failure or Success|First Failure|Second Failure|Hit|Miss|Failure|Success|Trigger|Response|Acerto|Erro|Falha|Sucesso|Gatilho|Resposta';
+  const RICH = new RegExp('(\\d+)\\s*\\((\\d+d\\d+(?:\\s*[+−-]\\s*\\d+)?)\\)|\\b(DC|CD)\\s+(\\d+)\\b|\\b(' + LABELS + '):|\\b(' + TYPE_WORDS + ')(?=\\s+(?:damage|dano)\\b)|\\b(' + COND_WORDS + ')\\b', 'gi');
+  // Texto do livro com os destaques; rollF(rótulo, fórmula) rola o dano com dados
+  function richText(text, rollF, name) {
+    const out = []; const src = String(text || ''); let last = 0, m;
+    RICH.lastIndex = 0;
+    while ((m = RICH.exec(src))) {
+      if (m.index > last) out.push(src.slice(last, m.index));
+      if (m[2]) {
+        const fo = m[2].replace(/\s+/g, '').replace('−', '-');
+        out.push(rollF ? h('button', { class: 'f5-tx-dice', title: 'Rolar ' + fo, 'data-txroll': fo, onclick: () => rollF(name + ': ' + fo, fo) }, m[0]) : h('b', { class: 'f5-tx-dice' }, m[0]));
+      } else if (m[4]) out.push(h('b', { class: 'f5-tx-dc' }, m[0]));
+      else if (m[5]) out.push(h('b', { class: 'f5-tx-lbl' }, m[0]));
+      else if (m[6]) out.push(h('span', { class: 'f5-tx-type dt-' + (typeKey(m[6]) || 'x') }, m[0]));
+      else out.push(h('span', { class: 'f5-tx-cond' }, m[0]));
+      last = m.index + m[0].length;
+    }
+    if (last < src.length) out.push(src.slice(last));
+    return out;
+  }
+  // "bludgeoning, piercing, slashing" com a cor de cada tipo
+  const typedList = (txt) => {
+    const out = []; const src = String(txt || ''); const re = new RegExp('\\b(' + TYPE_WORDS + ')\\b', 'gi'); let last = 0, m;
+    while ((m = re.exec(src))) { if (m.index > last) out.push(src.slice(last, m.index)); out.push(h('span', { class: 'f5-tx-type dt-' + typeKey(m[1]) }, m[0])); last = m.index + m[0].length; }
+    if (last < src.length) out.push(src.slice(last));
+    return h('span', { class: 'f5-sb-v2' }, out);
+  };
+  const avgOf = (fo) => { const m = /^(\d+)d(\d+)(?:([+-])(\d+))?$/.exec(String(fo).replace(/\s+/g, '')); if (!m) return null; return Math.floor(Number(m[1]) * (Number(m[2]) + 1) / 2) + (m[3] ? (m[3] === '-' ? -1 : 1) * Number(m[4]) : 0); };
+  const KIND_SEC = { traits: 'Traço', actions: 'Ação', bonus: 'Ação bônus', reactions: 'Reação', legendary: 'Ação lendária', mythic: 'Ação mítica', lair: 'Ação de covil' };
+  const secTail = (key) => (key !== 'actions' && KIND_SEC[key] ? ' · ' + KIND_SEC[key].toLowerCase() : '');
+  const kindLabel = (key, x) => (x.kind === 'attack' ? (x.atk === 'ranged' ? 'Ataque à distância' : x.atk === 'both' ? 'Ataque corpo a corpo ou à distância' : 'Ataque corpo a corpo') + secTail(key)
+    : x.kind === 'save' || x.dc ? 'Resistência' + (x.save ? ' de ' + R.AB_PT[x.save] : '') + secTail(key)
+    : KIND_SEC[key] || 'Traço');
   function npcBlock(K, pane) {
     const { a, d, c, ro, upd, roll } = K, n = d.npc;
     const sb = h('div', { class: 'f5-sb' });
@@ -929,9 +970,9 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     if (saves.length) sb.append(sbLine('Salvaguardas', ...saves.map((k) => rollChip(SAVE_PT[k] + ' ' + sg(c.save[k].v), 'Rolar a salvaguarda de ' + R.AB_PT[k], () => roll('Salvaguarda de ' + R.AB_PT[k], d20(c.save[k].v)), { 'data-sv': k }))));
     const skills = R.SKILLS.filter(([id]) => n.skills[id] != null && n.skills[id] !== '');
     if (skills.length) sb.append(sbLine('Perícias', ...skills.map(([id, pt]) => rollChip(pt + ' ' + sg(c.skill[id].v), 'Rolar ' + pt, () => roll(pt, d20(c.skill[id].v)), { 'data-sk': id }))));
-    if (n.vuln) sb.append(sbLine('Vulnerabilidades a dano', n.vuln));
-    if (n.resist) sb.append(sbLine('Resistências a dano', n.resist));
-    if (n.immune) sb.append(sbLine('Imunidades a dano', n.immune));
+    if (n.vuln) sb.append(sbLine('Vulnerabilidades a dano', typedList(n.vuln)));
+    if (n.resist) sb.append(sbLine('Resistências a dano', typedList(n.resist)));
+    if (n.immune) sb.append(sbLine('Imunidades a dano', typedList(n.immune)));
     if (n.condImmune) sb.append(sbLine('Imunidades a condições', n.condImmune));
     sb.append(sbLine('Sentidos', [n.senses, 'Percepção passiva ' + c.passive.perception].filter(Boolean).join(', ')));
     sb.append(sbLine('Idiomas', n.langs || '—'));
@@ -954,34 +995,47 @@ import InventoryItems from '../src/ui/InventoryItems.svelte';
     pane.append(h('section', { class: 'f5-sec f5-sb-wrap' }, sb));
     if (n.extra && n.extra.length) pane.append(h('p', { class: 'hint' }, 'Ações feitas à mão antes da conversão continuam na mesa: ' + n.extra.map((x) => x.name).join(', ') + '.'));
   }
-  // Um traço ou ação do bloco, com os números clicáveis
+  // Um traço ou ação do bloco num cartão (Plano 82): nome, tipo, números com ícones, texto com destaques
   function npcItemView(K, key, x, i) {
     const { ro, upd, roll } = K;
     const set = (fn) => upd((dd) => fn(dd.npc[key][i]));
     const parts = (x.dmg || []).filter((p) => p && p.dice);
     const main = parts.filter((p) => !p.cond), cond = parts.filter((p) => p.cond);
     const dmgF = main.map((p) => p.dice).join('+');
-    const dmgTxt = main.map((p) => p.dice + (p.type ? ' ' + (DMG_PT[p.type] || p.type) : '')).join(' + ');
     const idx = (K.a.actions || []).findIndex((y) => y.from5e === x.id);
-    const btns = [];
-    if (K.ctx.use && !ro && idx >= 0) btns.push(h('button', { class: 'btn small primary act-use', title: 'Usar na mesa: depois clique no alvo', 'data-use': idx, onclick: () => K.ctx.use(idx) }, ic('play')));
-    if (x.kind === 'attack') btns.push(rollChip(sg(num(x.hit)), 'Rolar o ataque', () => roll(x.name + ': ataque', d20(num(x.hit))), { 'data-roll': 'atk' }));
-    if (x.dc) btns.push(rollChip('CD ' + x.dc + (x.save ? ' ' + (SAVE_PT[x.save] || x.save) : ''), 'Salvaguarda do alvo' + (x.onSave === 'half' ? ' (metade se passar)' : '')));
-    if (dmgF) btns.push(rollChip(dmgTxt, 'Rolar o dano', () => roll(x.name + ': dano', dmgF), { 'data-roll': 'dmg' }));
-    for (const p of cond) btns.push(rollChip('+' + p.dice + (p.type ? ' ' + (DMG_PT[p.type] || p.type) : '') + ' (condição)', 'Dano que só vale na condição do texto', () => roll(x.name + ': dano extra', p.dice)));
-    if (x.reach) btns.push(h('span', { class: 'muted small-text' }, 'alcance ' + mt(x.reach)));
-    if (x.range && x.range.normal) btns.push(h('span', { class: 'muted small-text' }, 'distância ' + mt(x.range.normal) + (x.range.long ? ' / ' + mt(x.range.long) : '')));
-    if (x.recharge) btns.push(rollChip('Recarga ' + x.recharge + (x.recharge < 6 ? '–6' : ''), 'Rolar a recarga (1d6)', () => {
+    const isAtk = x.kind === 'attack', isSave = !isAtk && (x.kind === 'save' || !!x.dc);
+    const kcls = isAtk ? 'k-attack' : isSave ? 'k-save' : key === 'legendary' || key === 'mythic' ? 'k-leg' : 'k-trait';
+    const chip = (icon, label, title, onclick, cls, data) => h(onclick ? 'button' : 'span', Object.assign({ class: 'f5-rchip f5-num' + (cls ? ' ' + cls : ''), title, onclick }, data || {}), icon ? ic(icon) : null, label);
+    const nums = [];
+    if (isAtk) nums.push(chip('sword', sg(num(x.hit)), 'Rolar o ataque', () => roll(x.name + ': ataque', d20(num(x.hit))), 'n-atk', { 'data-roll': 'atk' }));
+    if (x.dc) nums.push(chip('shield', 'CD ' + x.dc + (x.save ? ' ' + (SAVE_PT[x.save] || x.save) : ''), 'Salvaguarda do alvo' + (x.onSave === 'half' ? ' (metade se passar)' : ''), null, 'n-dc'));
+    main.forEach((p, j) => {
+      const avg = avgOf(p.dice);
+      nums.push(chip(null, p.dice + (p.type ? ' ' + (DMG_PT[p.type] || p.type) : '') + (avg != null ? ' (' + avg + ')' : ''), 'Rolar o dano', () => roll(x.name + ': dano', main.length > 1 ? p.dice : dmgF), 'n-dmg dt-' + (typeKey(p.type) || 'x'), j === 0 ? { 'data-roll': 'dmg' } : {}));
+    });
+    for (const p of cond) nums.push(chip(null, '+' + p.dice + (p.type ? ' ' + (DMG_PT[p.type] || p.type) : '') + ' (condição)', 'Dano que só vale na condição do texto', () => roll(x.name + ': dano extra', p.dice), 'n-dmg dt-' + (typeKey(p.type) || 'x')));
+    if (x.reach) nums.push(h('span', { class: 'f5-num-plain' }, ic('move'), 'alcance ' + mt(x.reach)));
+    if (x.range && x.range.normal) nums.push(h('span', { class: 'f5-num-plain' }, ic('crosshair'), 'distância ' + mt(x.range.normal) + (x.range.long ? ' / ' + mt(x.range.long) : '')));
+    if (x.recharge) nums.push(chip('refresh-cw', 'Recarga ' + x.recharge + (x.recharge < 6 ? '–6' : ''), 'Rolar a recarga (1d6)', () => {
       let r; try { r = App.Dice.roll('1d6'); } catch { return; }
       const ok2 = r.total >= x.recharge;
       roll(x.name + ': recarga ' + (ok2 ? '(recarregou)' : '(não recarregou)'), String(r.total));
       set((y) => { y.used = !ok2; });
-    }, { 'data-act': 'recharge' }), h('label', { class: 'check-row small-text' }, chk(x.used, (v) => set((y) => { y.used = v; }), { disabled: ro }), 'usada'));
+    }, '', { 'data-act': 'recharge' }), h('label', { class: 'check-row small-text' }, chk(x.used, (v) => set((y) => { y.used = v; }), { disabled: ro }), 'usada'));
     const pips = x.uses && num(x.uses.max) ? h('span', { class: 'f5-sb-pips', title: 'Usos: ' + num(x.uses.cur) + ' de ' + num(x.uses.max) }, Array.from({ length: num(x.uses.max) }, (_, j) => h('button', { class: 'f5-pip' + (j < num(x.uses.cur) ? ' on' : ''), disabled: ro, 'data-use-pip': x.id + ':' + j,
       onclick: () => set((y) => { y.uses.cur = j < num(y.uses.cur) ? j : j + 1; }) }))) : null;
-    return h('div', { class: 'f5-sb-item' + (x.used ? ' used' : ''), 'data-item5': x.id },
-      h('p', {}, h('b', {}, h('i', {}, x.name + (x.cost && !/cost/i.test(x.name) ? ' (custa ' + x.cost + ')' : '') + '.')), ' ', pips, ' ', x.text),
-      btns.length ? h('div', { class: 'f5-sb-btns' }, btns) : null);
+    // Mesa: ▶ usa no mapa (escolher o alvo). Página: ▶ Testar rola ataque e dano juntos (ou a CD e o dano)
+    const use = K.ctx.use && !ro && idx >= 0 ? h('button', { class: 'btn small primary act-use', title: 'Usar na mesa: depois clique no alvo', 'data-use': idx, onclick: () => K.ctx.use(idx) }, ic('play'))
+      : K.ctx.test && (isAtk || isSave || main.length) ? h('button', { class: 'btn small primary f5-test', title: isAtk ? 'Rolar o ataque e o dano juntos' : 'Mostrar a CD e rolar o dano', 'data-test': x.id,
+        onclick: () => K.ctx.test({ name: x.name, hit: isAtk ? num(x.hit) : null, dc: x.dc ? num(x.dc) : null, save: x.save || null, onSave: x.onSave || null, dmg: main.map((p) => ({ f: p.dice, type: p.type || '' })) }) }, ic('play'), 'Testar') : null;
+    return h('div', { class: 'f5-sb-item f5-card ' + kcls + (x.used ? ' used' : ''), 'data-item5': x.id },
+      h('div', { class: 'f5-card-head' },
+        h('div', { class: 'grow' },
+          h('div', { class: 'f5-card-name' }, x.name + (x.cost && !/cost/i.test(x.name) ? ' (custa ' + x.cost + ')' : ''), pips ? ' ' : null, pips),
+          h('div', { class: 'f5-card-kind' }, kindLabel(key, x))),
+        use),
+      nums.length ? h('div', { class: 'f5-sb-btns f5-nums' }, nums) : null,
+      h('p', { class: 'f5-card-text' }, richText(x.text, ro ? null : roll, x.name)));
   }
   // Conjuração da criatura: atributo, CD, ataque; grupos com usos ou espaços; cada magia abre o texto do cadastro
   function npcSpellcasting(K, sc, i) {

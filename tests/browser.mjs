@@ -41,14 +41,14 @@ try {
   if (legacy.length) {
     for (const name of legacy) {
       assert.match(name, /^[a-z0-9_]+$/i);
-      const standalone = /^(assist5e|atrib5e|ficha5e|criatura5e|ficha|multi5e|imagens_pagina)$/.test(name);
+      const standalone = /^(assist5e|atrib5e|ficha5e|criatura5e|ficha|multi5e|imagens_pagina|pagina_arte|ficha_acoes|bloco_criatura)$/.test(name);
       const finish = {
         lightdrag: 'cancelou o arraste:', bestiario: 'fim do bestiário', ficha: 'largura: página ', ficha5e: 'largura ', assist5e: 'Torvin: ',
         assist5e_mesa: 'Kael nível 3:', stories: 'importou como nova:',
         criatura5e: 'Dragão: ', multi5e: 'Cleric 3 / Wizard 3:', animsom: 'cartão: opções ',
         ficha5e_mesa: 'Rajada CD 40 Con: ',
         nofile: 'jogador tentando remover outro:', atrib5e: 'atributos confirmados na ficha',
-        walk: 'chance 1d20+3', cadastros: 'largura sem rolagem horizontal: ', paredes57: 'fim das paredes 57', somobjeto: 'fim do som em objeto', dados3d: 'fim dos dados 3D', formas: 'fim das formas', foco: 'fim do foco', imagens: 'fim das imagens', imagens_pagina: 'fim das imagens da página', token3d: 'fim do token 3D', token3d_relogio: 'fim do relógio', janela_arte: 'fim da janela com arte',
+        walk: 'chance 1d20+3', cadastros: 'largura sem rolagem horizontal: ', paredes57: 'fim das paredes 57', somobjeto: 'fim do som em objeto', dados3d: 'fim dos dados 3D', formas: 'fim das formas', foco: 'fim do foco', imagens: 'fim das imagens', imagens_pagina: 'fim das imagens da página', token3d: 'fim do token 3D', token3d_relogio: 'fim do relógio', janela_arte: 'fim da janela com arte', dados_chat: 'fim dos dados no chat', pagina_arte: 'fim da arte na página', ficha_acoes: 'fim das ações da ficha', bloco_criatura: 'fim do bloco da criatura', bloco_criatura_mesa: 'fim do bloco da criatura na mesa', ficha_acoes_mesa: 'fim das ações da ficha na mesa',
       }[name];
       await checkPage(standalone ? 'ficha.html' : name === 'cadastros' ? 'cadastros.html' : name === 'stories' ? 'index.html' : 'index.html?tutorial',
         async (page) => {

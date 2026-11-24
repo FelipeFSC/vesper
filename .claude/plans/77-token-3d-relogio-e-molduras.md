@@ -68,3 +68,10 @@ Implementado em 24/11/2026, só em `js/token3d.js` (mais o CSS do relógio).
   - A hipótese "o resultado atrasado do ataque cancela a mira" foi testada à parte e **descartada** (a mira continua).
   - A causa segue em aberto. O `walk.js` agora registra os avisos e o estado da fila nesse passo, para a próxima investigação.
 - 0 processos no fim.
+
+## Correção (24/11/2026)
+O usuário apontou que o Vermelho "não tem nada a ver" com a referência e que o Branco "mudou muito o design". Os dois tinham sido **redesenhados por código**.
+- Agora usam **as próprias imagens enviadas** (`imagens/molduras/vermelho.png` e `branco.png`). O aro da imagem é levado para o aro do token ponto a ponto (mesmo ângulo, mesma fração da largura), então o desenho é o da imagem em Fina, Média ou Grossa. Nada de relevo, luz ou linhas por cima.
+- Cor escolhida: no **Branco**, multiplica (o branco vira a cor exata e o cinza do brilho vira a mesma cor mais escura); no **Vermelho**, tinge como os outros estilos.
+- As texturas carregam uma vez (`Token3D.ready`); a janela espera por elas antes de montar.
+- Testes: `token3d_relogio.js` e `token3d.js` sem erros (Branco + #ff0000 = 255,0,0; Vermelho 10h30 dourado 219,188,103, 4h30 vermelho escuro 108,30,16). Foto das molduras conferida.

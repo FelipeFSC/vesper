@@ -48,11 +48,21 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
   }
   // Só as imagens que alguma ficha usa
   const usedAssets = (obj) => referencedAssets(obj, F.assets);
+  /*
+   * Plano 80: imagem recém-guardada ainda sem ficha que a use (ex.: a arte enquanto o token é recortado dela).
+   * Um salvamento nesse meio tempo não pode tirá-la da memória, senão a ficha aponta para uma imagem que sumiu.
+   */
+  const fresh = new Map(), FRESH_MS = 60000;
+  const putAsset = (id, data) => { setAsset(F.assets, id, data); fresh.set(id, Date.now()); };
   async function saveNow() {
     try {
-      const assets = usedAssets(F.actors);
-      F.assets = assets;
-      urls.retain(new Set(Object.keys(assets)));
+      const assets = usedAssets(F.actors), mem = Object.assign(Object.create(null), assets), now = Date.now();
+      for (const [id, t] of fresh) {
+        if (assets[id] || now - t > FRESH_MS) fresh.delete(id);
+        else if (F.assets[id]) mem[id] = F.assets[id];
+      }
+      F.assets = mem;
+      urls.retain(new Set(Object.keys(mem)));
       await idbSet('fichas', { actors: structuredClone(F.actors), assets, savedAt: Date.now() });
       const el = $('#fp-saved');
       if (el) { el.textContent = 'Salvo neste navegador · ' + U.fmtTime(); el.classList.add('on'); }
@@ -187,6 +197,35 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
     renderRolls();
   }
   F.roll = roll;
+  /*
+   * Plano 82: "Testar" uma ação do bloco da criatura aqui na página (na mesa o ▶ usa no mapa).
+   * Ataque: rola o ataque e o dano juntos; com 20 natural os dados do dano dobram. Resistência: a CD e o dano (e a metade).
+   */
+  function testAction(t) {
+    const D = App.Dice, parts = [];
+    try {
+      let crit = false;
+      if (t.hit != null) {
+        const r = D.roll('1d20' + (t.hit ? (t.hit > 0 ? '+' : '-') + Math.abs(t.hit) : ''));
+        crit = (r.nat || []).includes(20);
+        parts.push(Object.assign(r, { label: 'Ataque' + (crit ? ' · crítico, dados dobrados' : r.fumble ? ' · 1 natural' : '') }));
+      }
+      // Num ataque, a CD é do efeito (ex.: escapar da agarrada); numa resistência, é a do alvo
+      if (t.dc != null) parts.push({ label: (t.hit != null ? 'CD do efeito' : 'CD') + (t.save && App.Regras5e ? ' de ' + App.Regras5e.AB_PT[t.save] : ''), total: t.dc, plain: true });
+      let tot = 0;
+      for (const p of t.dmg || []) {
+        const r = D.roll(crit ? D.doubleDice(p.f) : p.f);
+        tot += r.total;
+        parts.push(Object.assign(r, { label: 'Dano' + (p.type ? ' ' + (D.TYPE_PT[p.type] || p.type) : '') }));
+      }
+      if ((t.dmg || []).length > 1) parts.push({ label: 'Dano total', total: tot, plain: true });
+      if (t.dc != null && t.onSave === 'half' && (t.dmg || []).length) parts.push({ label: 'Se passar (metade)', total: Math.floor(tot / 2), plain: true });
+    } catch (e) { U.toast(t.name + ': ' + e.message, 'error'); return; }
+    F.rolls.unshift({ label: t.name, parts, at: Date.now() });
+    F.rolls.length = Math.min(F.rolls.length, 6);
+    renderRolls();
+  }
+  F.testAction = testAction;
   // O detalhe do dado traz <span class="die">; qualquer outra marcação sai
   const cleanDetail = (s) => String(s || '').replace(/<(?!\/?span(\s+class="[a-z ]*")?>)[^>]*>/gi, '');
   function renderRolls() {
@@ -203,7 +242,9 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       r.parts.map((p) => h('div', { class: 'fp-roll-part' },
         p.label ? h('span', { class: 'muted' }, p.label + ' ') : null,
         h('b', { class: p.crit ? 'crit' : p.fumble ? 'fumble' : '' }, String(p.total)),
-        h('span', { class: 'fp-roll-detail', html: U.esc(p.formula) + ' → ' + cleanDetail(p.detail) }))))));
+        // Plano 82: os dados em pecinhas, como no chat (Plano 79)
+        p.plain ? null : App.Dice.html.hasGroups(p) ? h('span', { class: 'fp-roll-detail dline', html: App.Dice.html.chips(p) })
+          : h('span', { class: 'fp-roll-detail', html: U.esc(p.formula) + ' → ' + cleanDetail(p.detail) }))))));
   }
 
   function sub5e(a) {
@@ -235,10 +276,14 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
         iconBtn('plus', 'Nova ficha: ' + KIND[kind], () => newActor(kind), { 'data-new': kind })));
       if (!group.length) body.append(h('div', { class: 'empty' }, 'Nenhuma ainda.'));
       for (const a of group) {
-        body.append(h('button', { class: 'actor-item fp-item' + (a.id === F.sel ? ' on' : ''), onclick: () => select(a.id) },
+        // Plano 81: ⋯ e clique direito com Abrir, Duplicar, Exportar e Excluir (sem abrir a ficha)
+        const more = (e) => { e.preventDefault(); e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); U.menu(e.type === 'contextmenu' ? e.clientX : r.right - 6, e.type === 'contextmenu' ? e.clientY : r.bottom + 4, a.name, actorMenuItems(a)); };
+        body.append(h('div', { class: 'actor-item fp-item' + (a.id === F.sel ? ' on' : ''), role: 'button', tabindex: 0, onclick: () => select(a.id), oncontextmenu: more,
+          onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(a.id); } } },
           avatar(a, 34),
           h('div', { class: 'grow' }, h('div', { class: 'name' }, a.name),
-            h('div', { class: 'sub' }, a.sistema === '5e' ? sub5e(a) : (a.bars || []).slice(0, 2).map((b) => `${b.name} ${b.max}`).join(' · ') || KIND[a.kind]))));
+            h('div', { class: 'sub' }, a.sistema === '5e' ? sub5e(a) : (a.bars || []).slice(0, 2).map((b) => `${b.name} ${b.max}`).join(' · ') || KIND[a.kind])),
+          iconBtn('ellipsis', 'Mais ações: ' + a.name, more, { class: 'icon-btn fp-more', 'data-more': a.id })));
       }
     }
     side.append(body);
@@ -258,6 +303,8 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
     App.Ficha5e?.release(main.firstElementChild);
     main.innerHTML = '';
     const a = cur();
+    applyPageArt(a);
+    if (a) main.append(sheetBar(a)); // Plano 81
     if (!a) {
       main.append(h('div', { class: 'fp-empty' },
         h('div', { class: 'bubble' }, ic('scroll-text')),
@@ -277,12 +324,13 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
         roll: (label, f) => roll(label, f, a),
         avatar: (size) => tokenAvatar(a, size),
         art: (el) => decorateArt(el, a), // Plano 74: arte no topo
-        config: () => h('div', {}, identity(a), footer(a)),
+        test: testAction, // Plano 82: ▶ Testar nas ações do bloco
+        config: () => h('div', {}, identity(a)),
       }));
       return;
     }
     main.append(datalist('fp-attrs', attrNames(a)), datalist('fp-bars', barNames(a)));
-    main.append(identity(a), barsSec(a), statsSec(a), actionsSec(a), notesSec(a), footer(a));
+    main.append(identity(a), barsSec(a), statsSec(a), actionsSec(a), notesSec(a));
   }
 
   // Identidade: retrato, nome e o que vale para o token
@@ -300,7 +348,12 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
           a.img ? iconBtn('x', 'Remover o token', () => edit((x) => { x.img = null; x.imgFromArt = false; })) : null),
         h('div', { class: 'row' },
           h('button', { class: 'btn small', 'data-sa': 'art', onclick: pickArt }, ic('image'), a.art ? 'Trocar imagem do personagem' : 'Imagem do personagem'),
-          a.art ? iconBtn('x', 'Remover a imagem do personagem', removeArt) : null)),
+          a.art ? iconBtn('x', 'Remover a imagem do personagem', removeArt) : null),
+        // Plano 80: Enquadramento (Plano 78) também na página: qual altura da arte aparece no topo
+        a.art ? h('label', { class: 'fp-art-y', title: 'Qual parte da imagem aparece no topo da ficha' }, 'Enquadramento',
+          h('input', { type: 'range', min: 0, max: 60, step: 1, value: artY(a), 'data-sa': 'y', 'aria-label': 'Enquadramento: de Alto (0) a Meio (60)',
+            oninput: (e) => { const v = e.target.value + '%'; document.body.style.setProperty('--fp-art-y', v); for (const bg of document.querySelectorAll('#fp-main .sa-bg')) bg.style.backgroundPosition = 'center ' + v; },
+            onchange: (e) => { edit((x) => { x.artY = Number(e.target.value); }); e.target.blur(); } })) : null),
       h('div', { class: 'fp-id-body' },
         h('input', { class: 'fp-name sheet-name', value: a.name, 'data-f': 'nome', 'aria-label': 'Nome da ficha', onchange: (e) => edit((x) => { x.name = e.target.value.trim() || x.name; }) }),
         h('div', { class: 'form fp-id-form' },
@@ -321,7 +374,7 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
   }
   // ---------- Plano 74: imagem do personagem (a.art) e imagem do token (a.img), guardadas no navegador ----------
   const pageSrc = (id) => (id ? urls.src(id, F.assets[id]) : null);
-  async function storeBlob(blob) { const id = await App.Images.idOf(blob); setAsset(F.assets, id, blob); return id; }
+  async function storeBlob(blob) { const id = await App.Images.idOf(blob); putAsset(id, blob); return id; }
   async function tokenFromArt(artId, crop) {
     const r = await App.SheetArt.cropBlob(pageSrc(artId), crop);
     return { img: await storeBlob(r.blob), imgFromArt: true, artCrop: r.crop, imgStyle: null };
@@ -349,7 +402,15 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
     av.onclick = a.art ? cropToken : pickImage;
     return av;
   }
-  const decorateArt = (el, a) => App.SheetArt.decorate(el, { src: pageSrc(a.art), y: a.artY != null ? a.artY : 12, can: true, onPick: pickArt, onFile: setArt });
+  const artY = (a) => (a && a.artY != null && Number.isFinite(Number(a.artY)) ? Number(a.artY) : 12);
+  const decorateArt = (el, a) => App.SheetArt.decorate(el, { src: pageSrc(a.art), y: artY(a), can: true, onPick: pickArt, onFile: setArt });
+  // Plano 80: a arte da ficha aberta no topo da página, atrás da barra (como na janela da mesa, Plano 78)
+  function applyPageArt(a) {
+    const src = a && a.art ? pageSrc(a.art) : null, b = document.body;
+    b.classList.toggle('fp-art', !!src);
+    if (src) { b.style.setProperty('--fp-art', 'url("' + src + '")'); b.style.setProperty('--fp-art-y', artY(a) + '%'); }
+    else { b.style.removeProperty('--fp-art'); b.style.removeProperty('--fp-art-y'); }
+  }
   // Plano 76: montar token 3D
   async function make3d() {
     const a = cur();
@@ -533,20 +594,34 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       h('textarea', { class: 'fp-notes', rows: 10, 'data-f': 'notas', value: a.notes || '', placeholder: 'Histórico, inventário, magias, anotações…', onchange: (e) => edit((x) => { x.notes = e.target.value; }) }));
   }
 
-  function footer(a) {
-    return h('div', { class: 'fp-foot' },
-      btnI('download', 'Exportar', { class: 'btn primary', onclick: () => exportActor(a) }),
-      btnI('copy-plus', 'Duplicar', { onclick: () => {
-        const c = U.clone(a); c.id = U.uid('ac_'); c.name = a.name + ' (cópia)';
-        F.actors[c.id] = c; select(c.id); save();
-      } }),
-      h('span', { class: 'grow' }),
-      btnI('trash-2', 'Excluir', { class: 'btn danger', onclick: () => {
-        if (!confirm(`Excluir a ficha "${a.name}" deste navegador? Arquivos já exportados não são apagados.`)) return;
-        delete F.actors[a.id];
-        F.sel = null;
-        saveNow(); render();
-      } }));
+  // ---------- Plano 81: fechar, duplicar, exportar e excluir à vista (barra no topo da ficha e menu da lista) ----------
+  function closeSheet() { select(null); }
+  function duplicateActor(a) {
+    const c = U.clone(a); c.id = U.uid('ac_'); c.name = a.name + ' (cópia)';
+    F.actors[c.id] = c; select(c.id); save();
+  }
+  // Exclui como antes (pergunta antes). Só a ficha deste navegador: o bestiário e os arquivos exportados não mudam.
+  function deleteActor(a) {
+    const bst = a.kind !== 'pc' && (a.source === '5etools' || a.dados5e || a.mineId) ? ' A criatura continua no bestiário.' : '';
+    if (!confirm(`Excluir a ficha "${a.name}" deste navegador?${bst} Arquivos já exportados não são apagados.`)) return;
+    delete F.actors[a.id];
+    if (F.sel === a.id) F.sel = null;
+    saveNow(); render();
+  }
+  const actorMenuItems = (a) => [
+    a.id !== F.sel ? { icon: 'arrow-right', label: 'Abrir', run: () => select(a.id) } : null,
+    { icon: 'copy-plus', label: 'Duplicar', run: () => duplicateActor(a) },
+    { icon: 'download', label: 'Exportar', run: () => exportActor(a) },
+    '-',
+    { icon: 'trash-2', label: 'Excluir', danger: true, run: () => deleteActor(a) },
+  ];
+  F.deleteActor = deleteActor; F.closeSheet = closeSheet;
+  function sheetBar(a) {
+    return h('div', { class: 'fp-sheetbar', role: 'toolbar', 'aria-label': 'Ações da ficha' },
+      btnI('download', 'Exportar', { class: 'btn small', 'data-fa': 'export', onclick: () => exportActor(a) }),
+      btnI('copy-plus', 'Duplicar', { class: 'btn small', 'data-fa': 'dup', onclick: () => duplicateActor(a) }),
+      btnI('trash-2', 'Excluir', { class: 'btn small danger', 'data-fa': 'del', onclick: () => deleteActor(a) }),
+      iconBtn('x', 'Fechar a ficha (ela continua salva na lista)', closeSheet, { 'data-fa': 'close' }));
   }
 
   // ---------- A partir do bestiário (Plano 25) ----------
@@ -591,13 +666,13 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
       if (file) {
         const r = await App.Images.toWebP(file, App.Images.TOKEN);
         a.img = await App.Images.idOf(r.blob);
-        setAsset(F.assets, a.img, r.blob);
+        putAsset(a.img, r.blob);
       }
     } catch (err) { U.toast('Sem imagem: ' + err.message, 'error'); }
     // Plano 74: a ilustração do 5etools vira a imagem do personagem
     try {
       const art = await BS.artFile(m);
-      if (art) { const r = await App.Images.toWebP(art, App.Images.ART); a.art = await App.Images.idOf(r.blob); setAsset(F.assets, a.art, r.blob); }
+      if (art) { const r = await App.Images.toWebP(art, App.Images.ART); a.art = await App.Images.idOf(r.blob); putAsset(a.art, r.blob); }
     } catch (err) { console.warn('ilustração', err); }
     F.actors[a.id] = a;
     select(a.id);
@@ -613,11 +688,11 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
     try {
       const r = await App.Images.toWebP(f, App.Images.TOKEN);
       const id = await App.Images.idOf(r.blob);
-      setAsset(F.assets, id, r.blob);
+      putAsset(id, r.blob);
       edit((x) => { x.img = id; x.imgFromArt = false; x.imgStyle = 'token'; }); // Plano 75: token enviado aparece inteiro
     } catch (e) { U.toast(e.message, 'error'); }
   }
-  F.setImage = (data) => { const id = 'img_' + U.hash(data); setAsset(F.assets, id, data); edit((x) => { x.img = id; }); };
+  F.setImage = (data) => { const id = 'img_' + U.hash(data); putAsset(id, data); edit((x) => { x.img = id; }); };
 
   async function bundle(a) {
     const obj = { format: 'mesarpg-actor', version: 1, actor: U.clone(a) };
@@ -636,7 +711,7 @@ import { binaryAssets, encodeAssets, ImageUrls, referencedAssets, setAsset } fro
 
   function importObj(obj) {
     if (!obj || obj.format !== 'mesarpg-actor' || !obj.actor) throw new Error('Esse arquivo não é uma ficha. Exporte a ficha pela mesa (Configurar → Exportar).');
-    for (const [id, data] of Object.entries(obj.assets || {})) if (/^img_[0-9a-f]{16}$/.test(id) && typeof data === 'string') setAsset(F.assets, id, data);
+    for (const [id, data] of Object.entries(obj.assets || {})) if (/^img_[0-9a-f]{16}$/.test(id) && typeof data === 'string') putAsset(id, data);
     const a = U.clone(obj.actor);
     a.id = U.uid('ac_');
     a.kind = KIND[a.kind] ? a.kind : 'pc';

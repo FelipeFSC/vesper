@@ -128,10 +128,10 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok(a.img && F.assets[a.img] && /url\(/.test($('.fp-avatar').style.background), 'imagem');
 
     // Duplicar ficha e excluir a cópia
-    [...$$('.fp-foot .btn')].find((b) => /Duplicar/.test(b.textContent)).click(); await W(20);
+    $('.fp-sheetbar [data-fa="dup"]').click(); await W(20);
     ok(Object.keys(F.actors).length === 2 && F.actors[F.sel].name === 'Lyra (cópia)', 'duplicar ficha');
     const oc = window.confirm; window.confirm = () => true;
-    $('.fp-foot .btn.danger').click(); await W(20);
+    $('.fp-sheetbar [data-fa="del"]').click(); await W(20);
     window.confirm = oc;
     ok(Object.keys(F.actors).length === 1 && !F.sel && $('.fp-empty'), 'excluir ficha');
     F.select(a.id); await W(20);

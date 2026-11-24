@@ -507,6 +507,24 @@ button.brand:hover .home-label { color: var(--gold); border-color: var(--gold); 
 .act-target .amt.zero { color: var(--faint); }
 .act-target .sub { font-size: 11.5px; color: var(--muted); }
 .act-target .roll-detail { grid-column: 1; }
+/* Plano 79: dados legíveis no chat (pecinhas na ordem em que caíram, um grupo por tipo de dano) */
+.act-dmg { padding: 8px 11px 0; }
+.act-dmg.in { padding: 4px 0 0; grid-column: 1; }
+.act-dmg-head { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.act-dmg-head b { color: var(--text); font-size: 13px; }
+.dblock { display: flex; flex-direction: column; gap: 5px; }
+.dgroup { border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px 6px; background: var(--panel2); }
+.dg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font: 11px/1.3 var(--mono); color: var(--muted); margin-bottom: 5px; }
+.dg-head b { font: 700 13px/1 var(--sans); color: var(--text); font-variant-numeric: tabular-nums; }
+.dg-type { font-family: var(--sans); color: var(--accent-text); }
+.dg-dice, .dline { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font: 12px/1.4 var(--mono); color: var(--muted); }
+.dline { grid-column: 1; margin-top: 3px; }
+.dg-dice .die, .dline .die { min-width: 22px; margin: 0; padding: 1px 4px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dsep, .dflat { color: var(--faint); padding: 0 2px; }
+.dtot { margin-left: 4px; }
+.dtot b { color: var(--text); }
+.act-calc { grid-column: 1; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.act-calc b { color: var(--text); }
 .act-foot { display: flex; justify-content: flex-end; padding: 5px 8px; border-top: 1px solid var(--line); }
 .undo-btn { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: var(--muted); font-size: 11.5px; cursor: pointer; padding: 3px 6px; border-radius: 5px; }
 .undo-btn:hover { background: var(--panel3); color: var(--text); }
@@ -620,6 +638,12 @@ button.brand:hover .home-label { color: var(--gold); border-color: var(--gold); 
 .win-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; cursor: move; user-select: none; border-bottom: 1px solid var(--line); }
 .win-head .ico { color: var(--muted); }
 .win-title { flex: 1; font: 600 16px/1.2 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Plano 81: Duplicar, Exportar e Excluir na barra da janela da ficha; ⋯ na lista de fichas */
+.win-acts { display: flex; align-items: center; gap: 2px; }
+.win-acts .icon-btn.danger:hover { color: var(--danger); }
+.actor-item .ai-more { opacity: 0; transition: opacity .12s; }
+.actor-item:hover .ai-more, .actor-item:focus-within .ai-more, .ai-more:focus-visible { opacity: 1; }
+@media (hover: none) { .actor-item .ai-more { opacity: 1; } }
 .win-body { overflow-y: auto; min-height: 0; padding: 14px 16px 16px; }
 
 /* ---------- Ficha ---------- */

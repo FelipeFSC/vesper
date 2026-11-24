@@ -234,7 +234,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     ok(F.actors[w.id].dnd5e.bio.personalidade === 'Curioso.', 'biografia');
     if (shot === 'shotbio') { await W(200); return; }
     await tab('config');
-    ok($('[data-f="tipo"]') && $('.fp-foot'), 'configurar com tipo e exportar');
+    ok($('[data-f="tipo"]') && $('.fp-sheetbar [data-fa="export"]'), 'configurar com tipo e exportar (na barra do topo, Plano 81)');
     noJunk('Configurar');
 
     // Exportar e importar

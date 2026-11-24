@@ -936,7 +936,8 @@ import { binaryAssets } from '../src/services/image-assets.ts';
         const k = U.slug(name);
         return bars.findIndex((b) => U.slug(b.name) === k);
       };
-      const pick = (r) => ({ formula: r.formula, total: r.total, detail: r.detail });
+      // Plano 79: leva também os grupos de dados (groups, flat, mult) e as partes do dano, para o chat mostrar cada dado
+      const pick = (r) => { const o = { formula: r.formula, total: r.total, detail: r.detail }; for (const k of ['groups', 'flat', 'mult', 'parts']) if (r[k] != null) o[k] = r[k]; return o; };
       const applied = [];
       const msg = { id: U.uid('m_'), ts: Date.now(), kind: 'action', mode, sceneId: sc.id,
         from: src ? src.name : trap ? act.name || 'Armadilha' : actor.name, trap: !!trap, fromMasked: !!(src && src.masked), srcId: src ? src.id : null, point: area > 0 ? point : null, area: area > 0 ? area : 0,
@@ -962,18 +963,19 @@ import { binaryAssets } from '../src/services/image-assets.ts';
           return r;
         }
         const r = D.roll(f, vars);
-        if (crit && rules.critMode === 'double') { r.total *= 2; r.formula = f + ' ×2 (crítico)'; }
+        if (crit && rules.critMode === 'double') { r.total *= 2; r.formula = f + ' ×2 (crítico)'; r.mult = 2; }
         return r;
       };
       // Plano 53: dano com tipo (act.parts = [{ f, type }]) rola cada parte; sem partes, a fórmula inteira (act.dmgType opcional)
       const rollDamage = (crit) => {
         const parts = Array.isArray(act.parts) && act.parts.length ? act.parts : null;
-        if (!parts) { const r = rollOne(act.damage || '0', crit); r.parts = [{ type: String(act.dmgType || '').toLowerCase(), total: r.total }]; return r; }
+        const partOf = (r, type) => { const o = { type, total: r.total, formula: r.formula }; if (r.groups) Object.assign(o, { groups: r.groups, flat: r.flat }); else o.detail = r.detail; if (r.mult) o.mult = r.mult; return o; };
+        if (!parts) { const r = rollOne(act.damage || '0', crit); r.parts = [partOf(r, String(act.dmgType || '').toLowerCase())]; return r; }
         const rs = parts.map((p) => Object.assign(rollOne(p.f || '0', crit), { type: String(p.type || '').toLowerCase() }));
-        return { total: rs.reduce((t, r) => t + r.total, 0), formula: rs.map((r) => r.formula + (r.type ? ' ' + r.type : '')).join(' + '), detail: rs.map((r) => r.detail).join(' + '), nat: [], parts: rs.map((r) => ({ type: r.type, total: r.total })) };
+        return { total: rs.reduce((t, r) => t + r.total, 0), formula: rs.map((r) => r.formula + (r.type ? ' ' + r.type : '')).join(' + '), detail: rs.map((r) => r.detail).join(' + '), nat: [], parts: rs.map((r) => partOf(r, r.type)) };
       };
       // Imunidade, resistência e vulnerabilidade do alvo (ficha 5e), por tipo de dano; half = passou na salvaguarda
-      const TYPE_PT = { acid: 'ácido', bludgeoning: 'concussão', cold: 'frio', fire: 'fogo', force: 'energia', lightning: 'elétrico', necrotic: 'necrótico', piercing: 'perfurante', poison: 'veneno', psychic: 'psíquico', radiant: 'radiante', slashing: 'cortante', thunder: 'trovejante' };
+      const TYPE_PT = D.TYPE_PT;
       const typed = (t, d, half) => {
         const ta = this.actorOf(t);
         const def = App.Regras5e && ta ? App.Regras5e.defensesOf(ta) : null;
@@ -1038,7 +1040,7 @@ import { binaryAssets } from '../src/services/image-assets.ts';
             const r = D.roll(f, ta ? this.vars(ta, t) : {});
             // Cobertura vista do ponto da área (ou do lançador): bônus no teste de resistência
             const cov = area > 0 && point ? CB.coverOf(sc, point, t) : CB.coverFromToken(sc, src, t);
-            if (cov.bonus) { r.total += cov.bonus; r.detail += ' + ' + cov.bonus + ' (cobertura)'; }
+            if (cov.bonus) { r.total += cov.bonus; r.detail += ' + ' + cov.bonus + ' (cobertura)'; if (r.flat != null) r.flat += cov.bonus; }
             const ok = cov.level === 'total' || r.total >= dc;
             const row = { tokenId: t.id, name: t.name, masked: !!t.masked, save: pick(r), success: ok };
             if (cov.level !== 'none') row.cover = { level: cov.level, label: cov.label, bonus: cov.bonus };

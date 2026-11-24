@@ -10,6 +10,7 @@ window.addEventListener('load', () => setTimeout(async () => {
   try {
     setInterval(() => document.querySelectorAll('#tut-panel, #tut-spot').forEach((e) => e.remove()), 50);
     const T = App.Token3D, UI = App.UI, S = App.Store;
+    await T.ready;
     const waitFor = async (cond, n = 100) => { for (let i = 0; i < n && !cond(); i++) await W(50); return cond(); };
     const canvasImg = (w, hh, draw) => new Promise((res) => { const c = document.createElement('canvas'); c.width = w; c.height = hh; draw(c.getContext('2d')); const im = new Image(); im.onload = () => res(im); im.src = c.toDataURL('image/png'); });
     // Mesmo personagem do teste do Plano 76: rosto no alto do círculo (passa pela moldura às 12h)

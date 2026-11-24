@@ -111,5 +111,65 @@ window.App = window.App || {};
   };
   U.fmtSize = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB');
 
+  /*
+   * Menu flutuante (Plano 28; vira peça comum no Plano 81): o do botão direito da mesa e o ⋯ das listas de fichas.
+   * U.menu(x, y, título, itens); U.closeMenu(). Itens: {icon, label, kbd, danger, disabled, on, title, sub: [...], run()} | '-' | {head}
+   */
+  const ic = (n) => { const t = document.createElement('template'); t.innerHTML = App.Icons.svg(n); return t.content.firstChild; };
+  const h = (...x) => U.h(...x);
+  let menu = null;
+  function close() {
+    if (!menu) return;
+    menu.remove(); menu = null;
+    window.removeEventListener('pointerdown', onOutside, true);
+    window.removeEventListener('keydown', onEsc, true);
+    window.removeEventListener('wheel', close, true);
+  }
+  const onOutside = (e) => { if (menu && !menu.contains(e.target)) close(); };
+  const onEsc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+
+  // items: [{icon, label, kbd, danger, disabled, on (marcado), sub: [...], run()} | '-' (separador)]
+  function render(x, y, title, items) {
+    close();
+    const build = (list) => h('div', { class: 'cm-list' }, list.filter(Boolean).map((it) => {
+      if (it === '-') return h('div', { class: 'cm-sep' });
+      if (it.head) return h('div', { class: 'cm-head' }, it.head);
+      const row = h('button', { class: 'cm-item' + (it.danger ? ' danger' : '') + (it.on ? ' on' : ''), disabled: !!it.disabled, title: it.title || '' },
+        it.icon ? ic(it.icon) : h('span', { class: 'cm-ico' }), h('span', { class: 'grow' }, it.label),
+        it.kbd ? h('kbd', {}, it.kbd) : null, it.sub ? ic('chevron-right') : null);
+      if (it.sub) {
+        const sub = build(it.sub);
+        sub.classList.add('cm-sub');
+        const wrap = h('div', { class: 'cm-has-sub' }, row, sub);
+        row.addEventListener('click', (e) => { e.preventDefault(); wrap.classList.toggle('open'); place(sub, true); });
+        wrap.addEventListener('pointerenter', () => { wrap.classList.add('open'); place(sub, true); });
+        wrap.addEventListener('pointerleave', () => wrap.classList.remove('open'));
+        return wrap;
+      }
+      row.addEventListener('click', () => { close(); try { it.run && it.run(); } catch (err) { U.toast(err.message, 'error'); } });
+      return row;
+    }));
+    menu = h('div', { class: 'ctx-menu', role: 'menu' }, title ? h('div', { class: 'cm-title' }, title) : null, build(items));
+    document.body.append(menu);
+    // Nunca sai da tela
+    const r = menu.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    menu.style.left = Math.max(6, Math.min(x, W - r.width - 6)) + 'px';
+    menu.style.top = Math.max(6, Math.min(y, H - r.height - 6)) + 'px';
+    setTimeout(() => {
+      window.addEventListener('pointerdown', onOutside, true);
+      window.addEventListener('keydown', onEsc, true);
+      window.addEventListener('wheel', close, true);
+    }, 0);
+  }
+  // Submenu do lado que cabe
+  function place(sub) {
+    sub.classList.remove('left', 'up');
+    const r = sub.getBoundingClientRect();
+    if (r.right > window.innerWidth - 4) sub.classList.add('left');
+    if (r.bottom > window.innerHeight - 4) sub.classList.add('up');
+  }
+  U.menu = render;
+  U.closeMenu = close;
+
   App.U = U;
 })(window.App);

@@ -102,3 +102,7 @@ A partir da versão 1.0, **cada tarefa começa com um plano** nesta pasta. O usu
 | 76 | [Montar token 3D](76-montar-token-3d.md) | Implementado (testes do usuário) |
 | 77 | [Token 3D: abertura em relógio e molduras Vermelho e Branco](77-token-3d-relogio-e-molduras.md) | Implementado (testes do usuário) |
 | 78 | [Imagem do personagem também na barra do topo da janela da ficha](78-arte-no-topo-da-janela-da-ficha.md) | Implementado (testes do usuário) |
+| 79 | [Dados legíveis no chat](79-dados-legiveis-no-chat.md) | Implementado (testes do usuário) |
+| 80 | [Imagem do personagem no topo da página "Criar ficha"](80-arte-no-topo-da-pagina-criar-ficha.md) | Implementado (testes do usuário) |
+| 81 | [Fechar, duplicar e excluir ficha à vista (página e mesa)](81-fechar-duplicar-excluir-ficha.md) | Implementado (testes do usuário) |
+| 82 | [Bloco da criatura legível e com teste das ações](82-bloco-da-criatura-legivel.md) | Implementado (testes do usuário) |

@@ -936,10 +936,13 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
             class: 'actor-item', draggable: true, title: 'Clique para abrir · arraste para o mapa',
             ondragstart: (e) => { e.dataTransfer.setData('text/x-actor', a.id); e.dataTransfer.effectAllowed = 'copy'; },
             onclick: () => UI.openActor(a.id),
+            oncontextmenu: (e) => { e.preventDefault(); U.menu(e.clientX, e.clientY, a.name, UI.actorMenuItems(a)); },
           },
           avatar(a, 34),
           h('div', { class: 'grow' }, h('div', { class: 'name' }, a.name), h('div', { class: 'sub' }, actorSub(a, gm))),
-          iconBtn('plus', 'Colocar no mapa', (e) => { e.stopPropagation(); App.Board.placeActor(a.id); })));
+          iconBtn('plus', 'Colocar no mapa', (e) => { e.stopPropagation(); App.Board.placeActor(a.id); }),
+          // Plano 81: ⋯ com Abrir, Colocar no mapa, Duplicar, Exportar e Excluir
+          iconBtn('ellipsis', 'Mais ações: ' + a.name, (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); U.menu(r.right - 6, r.bottom + 4, a.name, UI.actorMenuItems(a)); }, { class: 'icon-btn ai-more', 'data-more': a.id })));
         }
       }
       body.append(h('p', { class: 'hint' }, 'Arraste uma ficha para o mapa para criar um token. Duplo clique no token abre a ficha.'));
@@ -1891,6 +1894,43 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
   }
 
   // =============== Ficha ===============
+  // Plano 81: duplicar, exportar e excluir à vista (barra da janela e menu da lista), como na página "Criar ficha"
+  function duplicateActor(a) {
+    const c = U.clone(a); c.id = U.uid('ac_'); c.name = a.name + ' (cópia)';
+    S().dispatch({ type: 'actor.add', actor: c }); UI.openActor(c.id);
+  }
+  const exportActor = (a) => App.Storage.downloadJSON(App.Storage.actorBundle(a.id), 'ficha_' + a.name);
+  // Exclui a ficha da campanha (e os tokens dela, com aviso). O bestiário não muda.
+  function deleteActor(a) {
+    const n = Object.values(S().state.scenes).reduce((k, sc) => k + Object.values(sc.tokens).filter((t) => t.actorId === a.id).length, 0);
+    const bst = a.kind !== 'pc' && (a.source === '5etools' || a.dados5e || a.mineId) ? ' A criatura continua no bestiário.' : '';
+    if (!confirm(`Excluir a ficha "${a.name}"` + (n ? ` e ${n === 1 ? 'o token dela' : 'os ' + n + ' tokens dela'} no mapa? Eles também saem do combate.` : '?') + bst)) return;
+    S().dispatch({ type: 'actor.delete', id: a.id, tokens: true }); UI.closeWindow('actor:' + a.id);
+  }
+  UI.deleteActor = deleteActor;
+  UI.actorMenuItems = (a) => {
+    const gm = S().gmView(), can = S().ownsActor(a);
+    return [
+      { icon: 'arrow-right', label: 'Abrir', run: () => UI.openActor(a.id) },
+      can ? { icon: 'map-pin', label: 'Colocar no mapa', run: () => App.Board.placeActor(a.id) } : null,
+      gm ? { icon: 'copy-plus', label: 'Duplicar', run: () => duplicateActor(a) } : null,
+      { icon: 'download', label: 'Exportar', run: () => exportActor(a) },
+      gm ? '-' : null,
+      gm ? { icon: 'trash-2', label: 'Excluir', danger: true, run: () => deleteActor(a) } : null,
+    ];
+  };
+  // Ícones na barra do topo da janela da ficha, antes do X
+  function winActorActs(w, a) {
+    const head = w.el.querySelector('.win-head');
+    let box = head.querySelector('.win-acts');
+    if (!box) { box = h('span', { class: 'win-acts' }); head.insertBefore(box, head.lastElementChild); }
+    const gm = S().gmView();
+    box.replaceChildren(...[
+      gm ? iconBtn('copy-plus', 'Duplicar a ficha', () => duplicateActor(a), { 'data-wa': 'dup' }) : null,
+      iconBtn('download', 'Exportar a ficha', () => exportActor(a), { 'data-wa': 'export' }),
+      gm ? iconBtn('trash-2', 'Excluir a ficha', () => deleteActor(a), { 'data-wa': 'del', class: 'icon-btn danger' }) : null,
+    ].filter(Boolean));
+  }
   UI.openActor = function (id, tab) {
     if (tab) { UI.sheetTab = UI.sheetTab || {}; UI.sheetTab[id] = tab; if (App.Ficha5e) App.Ficha5e.tab[id] = tab === 'acoes' ? 'acoes' : tab === 'config' ? 'config' : App.Ficha5e.tab[id]; const open = UI.windows.get('actor:' + id); if (open) renderWindow(open); }
     UI.openWindow('actor:' + id, 'Ficha', (w) => {
@@ -1899,6 +1939,7 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       w.loaded = true;
       w.titleEl.textContent = a.name;
       applyWinArt(w, a);
+      winActorActs(w, a);
       return buildSheet(a);
     }, { w: S().state && S().state.actors[id] && S().state.actors[id].sistema === '5e' ? 720 : 480, icon: 'scroll-text' });
   };
@@ -2103,23 +2144,14 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
 
       pane.append(h('div', { class: 'sheet-footer' },
         can && btnI('map-pin', 'Colocar no mapa', { onclick: () => App.Board.placeActor(a.id) }),
-        gm && btnI('copy-plus', 'Duplicar', { onclick: () => {
-          const c = U.clone(a); c.id = U.uid('ac_'); c.name = a.name + ' (cópia)';
-          S().dispatch({ type: 'actor.add', actor: c }); UI.openActor(c.id);
-        } }),
-        btnI('download', 'Exportar', { onclick: () => App.Storage.downloadJSON(App.Storage.actorBundle(a.id), 'ficha_' + a.name) }),
+        // Plano 81: Duplicar, Exportar e Excluir ficam na barra do topo da janela
         gm && btnI('book-open', a.mineId && App.Bestiary.mine[a.mineId] ? 'Atualizar no meu bestiário' : 'Salvar no meu bestiário', { title: 'Guarda esta ficha para usar em qualquer campanha', onclick: async () => {
           await App.Bestiary.load();
           const id = await App.Bestiary.saveMine(a, a.img ? S().assets[a.img] : null, a.art ? S().assets[a.art] : null);
           if (a.mineId !== id) upd({ mineId: id });
           U.toast('Salva no meu bestiário.');
         } }),
-        h('span', { class: 'grow' }),
-        gm && btnI('trash-2', 'Excluir', { class: 'btn danger', onclick: () => {
-          const n = Object.values(S().state.scenes).reduce((k, sc) => k + Object.values(sc.tokens).filter((t) => t.actorId === a.id).length, 0);
-          if (!confirm(`Excluir a ficha "${a.name}"` + (n ? ` e ${n === 1 ? 'o token dela' : 'os ' + n + ' tokens dela'} no mapa? Eles também saem do combate.` : '?'))) return;
-          S().dispatch({ type: 'actor.delete', id: a.id, tokens: true }); UI.closeWindow('actor:' + a.id);
-        } })));
+      ));
     }
     return root;
   }
@@ -2270,6 +2302,9 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
       h('button', { class: 'btn small', onclick: () => App.Board.cancelTargeting() }, 'Cancelar', h('kbd', {}, 'Esc')));
   };
 
+  // Plano 79: pecinhas de dados (em js/dice.js desde o Plano 82, para a página "Criar ficha" usar também)
+  const { line: rollLine, block: diceBlock } = App.Dice.html;
+
   function actionMsgHtml(m) {
     const gm = S().gmView(), st = S().state, rules = st.rules || {}, sc = st.scenes[m.sceneId];
     const canSee = (tid) => {
@@ -2280,8 +2315,9 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
     const tag = (cls, txt) => `<span class="tag ${cls}">${txt}</span>`;
     const heal = m.mode === 'heal';
     let html = `<div class="act-title">${icHtml(MODE_ICON[m.mode] || 'dices')}${U.esc(m.label)}${m.cost ? ` <span class="badge">−${U.esc(m.cost.amount)} ${U.esc(m.cost.bar)}</span>` : ''}</div>`;
-    if (m.mode === 'save') html += `<div class="act-line">CD <b>${U.esc(m.dc)}</b>${m.saveStat ? ' · ' + U.esc(m.saveStat) : ''}${m.dmg ? ` · dano ${U.esc(m.dmg.total)}` : ''}</div>`;
-    else if (m.dmg) html += `<div class="act-line">${heal ? 'Cura' : 'Dano'} <b>${U.esc(m.dmg.total)}</b> <span class="roll-detail">${U.esc(m.dmg.formula)} → ${cleanDetail(m.dmg.detail)}</span></div>`;
+    if (m.mode === 'save') html += `<div class="act-line">CD <b>${U.esc(m.dc)}</b>${m.saveStat ? ' · ' + U.esc(m.saveStat) : ''}</div>`;
+    // Plano 79: o dano (ou a cura) com cada dado, um grupo por tipo
+    if (m.dmg) html += `<div class="act-dmg"><div class="act-dmg-head">${heal ? 'Cura' : 'Dano'} <b>${U.esc(m.dmg.total)}</b></div>${diceBlock(m.dmg)}</div>`;
     for (const r of m.targets || []) {
       const see = canSee(r.tokenId);
       let who = U.esc(seenName(r.name, r.masked)), sub = '', extra = '', amt = '';
@@ -2289,21 +2325,30 @@ import { mergePanelChange } from '../src/domain/ui-changes.ts';
         who += r.hit ? (r.crit ? tag('crit', 'Crítico') : tag('hit', 'Acertou')) : (r.fumble ? tag('miss', 'Falha crítica') : tag('miss', 'Errou'));
         sub = `Ataque <b>${U.esc(r.atk.total)}</b>` + (r.noDef ? ' · alvo sem defesa' : ` contra ${see ? U.esc(r.def) : '?'}`);
         if (r.cover) sub += r.cover.level === 'total' ? ' · <b>cobertura total</b>' : ` (${U.esc(r.cover.label.toLowerCase())} +${U.esc(r.cover.bonus)})`;
-        extra += `<div class="roll-detail">${U.esc(r.atk.formula)} → ${cleanDetail(r.atk.detail)}</div>`;
-        if (r.dmg) extra += `<div class="roll-detail">dano ${U.esc(r.dmg.formula)} → ${cleanDetail(r.dmg.detail)}</div>`;
+        extra += rollLine(r.atk);
+        if (r.dmg) extra += `<div class="act-dmg in"><div class="act-dmg-head">Dano <b>${U.esc(r.dmg.total)}</b></div>${diceBlock(r.dmg)}</div>`;
       } else if (m.mode === 'save') {
         who += r.success ? tag('hit', 'Passou') : tag('miss', 'Falhou');
         sub = `Resistiu com <b>${U.esc(r.save.total)}</b>`;
         if (r.cover) sub += r.cover.level === 'total' ? ' · <b>cobertura total</b>, sem dano' : ` (${U.esc(r.cover.label.toLowerCase())} +${U.esc(r.cover.bonus)})`;
-        extra += `<div class="roll-detail">${U.esc(r.save.formula)} → ${cleanDetail(r.save.detail)}</div>`;
+        extra += rollLine(r.save);
+      }
+      // Plano 79: quando o dano do alvo não é o total rolado, mostra a conta (metade, resistência, imune…)
+      let calc = '';
+      const base = m.mode === 'attack' ? r.dmg && r.dmg.total : m.dmg && m.dmg.total;
+      if (!heal && r.amount != null && base != null && Number(r.amount) !== Number(base) && !(r.cover && r.cover.level === 'total')) {
+        const steps = [];
+        if (m.mode === 'save' && r.success) steps.push(Number(r.amount) === 0 && !r.dmgNote ? 'passou: sem dano' : 'metade (passou)');
+        if (r.dmgNote) steps.push(U.esc(r.dmgNote));
+        if (steps.length) calc = `<div class="act-calc">${U.esc(base)} → ${steps.join(' → ')} = <b>${U.esc(r.amount)}</b></div>`;
       }
       if (r.amount != null) {
         const zero = !Number(r.amount);
         amt = `<div class="amt ${zero ? 'zero' : heal ? 'heal' : 'dmg'}">${heal ? '+' : '−'}${U.esc(r.amount)}<small>${U.esc(r.bar)}${see ? ` ${U.esc(r.after)}${r.max ? '/' + U.esc(r.max) : ''}` : ''}</small></div>`;
       } else if (m.mode === 'attack' && !r.hit) amt = '<div class="amt zero">—<small>sem dano</small></div>';
       if (r.noBar) sub += ` · alvo sem a barra "${U.esc(r.noBar)}"`;
-      if (r.dmgNote) sub += ` · <b>${U.esc(r.dmgNote)}</b>`;
-      html += `<div class="act-target"><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}</div>`;
+      if (r.dmgNote && !calc) sub += ` · <b>${U.esc(r.dmgNote)}</b>`;
+      html += `<div class="act-target"><div class="who">${who}</div>${amt}${sub ? `<div class="sub">${sub}</div>` : ''}${extra}${calc}</div>`;
     }
     if (m.undone) html += '<div class="act-foot"><span class="undone-note">Desfeito pelo mestre</span></div>';
     else if (gm && (m.applied || []).length) html += `<div class="act-foot"><button class="undo-btn" data-undo="${U.esc(m.id)}">${icHtml('undo-2')}Desfazer</button></div>`;

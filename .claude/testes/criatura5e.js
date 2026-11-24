@@ -29,7 +29,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     log.push('Tarrasque: ' + $$('.f5-sb-line').slice(0, 4).map((x) => x.textContent).join(' | '));
     if (shot === 'shot') { await W(300); return; }
     // Mordida: acerto e dano clicáveis
-    const bite = $$('.f5-sb-item').find((x) => /^Bite\./.test(x.textContent));
+    const bite = $$('.f5-sb-item').find((x) => /^Bite\b/.test((x.querySelector('.f5-card-name') || x).textContent)); // Plano 82: o nome fica no cartão, sem o ponto
     ok(bite && /\+19/.test(bite.textContent) && /4d12\+10 perfurante/.test(bite.textContent), 'Mordida +19, 4d12+10 perfurante');
     bite.querySelector('[data-roll="atk"]').click(); await W(60);
     ok(/Bite: ataque/.test($('#fp-rolls').textContent), 'rolou a Mordida');

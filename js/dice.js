@@ -39,6 +39,7 @@
 
   function evaluate(src) {
     let i = 0, crit = false, fumble = false;
+    const groups = []; // Plano 79: cada grupo de dados (n×d faces, modificador, valores na ordem em que caíram, descartados, soma)
     const nat = []; // valores naturais dos d20 mantidos (para crítico/falha)
     const err = (m) => { throw new Error(m || 'Fórmula inválida perto de "' + src.slice(i) + '"'); };
     const peek = () => src[i];
@@ -122,6 +123,7 @@
       note(sides, rolls);
       let total = 0;
       for (const r of rolls) if (!r.drop) total += r.v;
+      groups.push({ n: count, s: sides, m: mod, v: rolls.map((r) => r.v), x: rolls.map((r, k) => (r.drop ? k : -1)).filter((k) => k >= 0), sum: total });
       if (sides === 20) for (const r of rolls) if (!r.drop) { nat.push(r.v); if (r.v === 20) crit = true; if (r.v === 1) fumble = true; }
 
       const faces = rolls.map((r) => {
@@ -137,7 +139,12 @@
 
     const r = expr();
     if (i < src.length) err();
-    return { total: Math.round(r.val * 100) / 100, detail: r.txt, crit, fumble, nat };
+    const total = Math.round(r.val * 100) / 100;
+    // Plano 79: conta simples (só somas de dados e números) = dados + bônus fixo; com × / ou dado subtraído fica só o texto
+    const plain = r.txt.replace(/<[^>]*>/g, ''), simple = !/[×/]/.test(plain) && !/-\s*\d+d[\d%f]/i.test(plain);
+    const res = { total, detail: r.txt, crit, fumble, nat };
+    if (simple) { res.groups = groups; res.flat = Math.round((total - groups.reduce((t, g) => t + g.sum, 0)) * 100) / 100; }
+    return res;
   }
 
   // Crítico: dobra a quantidade de dados ("2d6+3" -> "4d6+3"). Use após substitute().
@@ -205,5 +212,46 @@
     return null;
   }
 
-  App.Dice = { roll, rollMulti, substitute, isFormula, doubleDice, check, take, quiet, showable };
+  /*
+   * Plano 79 (movido no Plano 82): os dados em pecinhas, na ordem em que caíram, um grupo por linha com a soma.
+   * A rolagem traz groups ({ n, s, m, v, x, sum }) e flat (bônus fixo); rolagens antigas só têm o texto (detail).
+   * html.line(r): os dados, o bônus e o total; html.block(d): um grupo por parte (tipo de dano). Devolvem HTML (texto).
+   */
+  const esc = (x) => App.U.esc(x);
+  const cleanDetail = (s) => String(s || '').replace(/<(?!\/?span(\s+class="[a-z ]*")?>)[^>]*>/gi, '');
+  const dieChip = (g, v, k) => {
+    const fudge = g.s === 'F', s = Number(g.s);
+    let cls = 'die';
+    if (!fudge && v === s) cls += ' max';
+    if (!fudge && v === 1) cls += ' min';
+    if ((g.x || []).includes(k)) cls += ' drop';
+    return `<span class="${cls}">${esc(fudge ? (v > 0 ? '+' : v < 0 ? '−' : '0') : v)}</span>`;
+  };
+  const signedHtml = (n) => (n < 0 ? '− ' : '+ ') + esc(Math.abs(n));
+  const hasGroups = (r) => !!(r && Array.isArray(r.groups) && r.groups.length);
+  const groupsLabel = (r) => r.groups.map((g) => esc(g.n + 'd' + g.s + (g.m || ''))).join(' + ') + (r.flat ? ' ' + signedHtml(Number(r.flat)) : '') + (r.mult ? ' ×' + esc(r.mult) : '');
+  const diceChips = (r) => r.groups.map((g) => (Array.isArray(g.v) ? g.v : []).map((v, k) => dieChip(g, Number(v), k)).join('')).join('<span class="dsep">+</span>')
+    + (r.flat ? `<span class="dflat">${signedHtml(Number(r.flat))}</span>` : '') + (r.mult ? `<span class="dflat">×${esc(r.mult)}</span>` : '');
+  // Uma linha: os dados, o bônus e o total (teste do alvo, ataque)
+  function rollLine(r) {
+    if (!hasGroups(r)) return `<div class="roll-detail">${esc(r.formula)} → ${cleanDetail(r.detail)}</div>`;
+    return `<div class="dline">${diceChips(r)}<span class="dtot">= <b>${esc(r.total)}</b></span></div>`;
+  }
+  // Bloco do dano (ou cura): um grupo por parte (tipo de dano), com a fórmula, o tipo, a soma e os dados
+  function diceBlock(d) {
+    const parts = Array.isArray(d.parts) && d.parts.length && d.parts.every((p) => hasGroups(p) || p.detail) ? d.parts : [Object.assign({}, d, { type: d.parts && d.parts.length === 1 ? d.parts[0].type : '' })];
+    return '<div class="dblock">' + parts.map((p) => {
+      const type = p.type ? (TYPE_PT[p.type] || p.type) : '';
+      const label = hasGroups(p) ? groupsLabel(p) : esc(p.formula || '');
+      const body = hasGroups(p) ? diceChips(p) : cleanDetail(p.detail);
+      return `<div class="dgroup"><div class="dg-head"><span>${label}${type ? ` <span class="dg-type">${esc(type)}</span>` : ''}</span><b>${esc(p.total)}</b></div><div class="dg-dice">${body}</div></div>`;
+    }).join('') + '</div>';
+  }
+
+
+  const html = { line: rollLine, block: diceBlock, chips: (r) => (hasGroups(r) ? diceChips(r) : cleanDetail(r && r.detail)), hasGroups, cleanDetail };
+
+  // Tipos de dano em português (Plano 53; usado também no chat, Plano 79)
+  const TYPE_PT = { acid: 'ácido', bludgeoning: 'concussão', cold: 'frio', fire: 'fogo', force: 'energia', lightning: 'elétrico', necrotic: 'necrótico', piercing: 'perfurante', poison: 'veneno', psychic: 'psíquico', radiant: 'radiante', slashing: 'cortante', thunder: 'trovejante' };
+  App.Dice = { roll, rollMulti, substitute, isFormula, doubleDice, check, take, quiet, showable, TYPE_PT, html };
 })(window.App);

@@ -74,7 +74,15 @@ body.fp { display: grid; grid-template-rows: 54px minmax(0, 1fr); height: 100vh;
 
 .fp-notes { min-height: 200px; line-height: 1.55; }
 
-.fp-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 10px; }
+/* Plano 81: ações da ficha à vista no topo (em qualquer aba) e o ⋯ de cada ficha da lista */
+.fp-sheetbar { position: relative; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-bottom: 8px; }
+.fp-sheetbar .btn { text-decoration: none; }
+.fp-sheetbar .icon-btn { background: var(--panel); border: 1px solid var(--line2); }
+.fp-item { display: flex; align-items: center; cursor: pointer; }
+.fp-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fp-more { flex-shrink: 0; opacity: 0; transition: opacity .12s; }
+.fp-item:hover .fp-more, .fp-item:focus-within .fp-more, .fp-item.on .fp-more, .fp-more:focus-visible { opacity: 1; }
+@media (hover: none) { .fp-more { opacity: 1; } }
 
 .fp-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 12vh 16px 40px; }
 .fp-empty .bubble { width: 64px; height: 64px; border-radius: 50%; background: var(--panel2); display: grid; place-items: center; color: var(--accent-text); }
@@ -130,3 +138,25 @@ body.fp { display: grid; grid-template-rows: 54px minmax(0, 1fr); height: 100vh;
 .fp-bst-modal .win-body { display: flex; flex-direction: column; gap: 8px; }
 .fp-bst-list { max-height: 56vh; overflow-y: auto; }
 .fp-bst-item { width: 100%; background: none; text-align: left; color: inherit; font: inherit; }
+
+/* Plano 80: como na janela da ficha na mesa (Plano 78), a arte começa no topo, atrás da barra ("Criar ficha", "Salvo",
+   "Voltar ao menu"), de ponta a ponta acima da ficha; a ficha rola por cima dela. A parte da barra acima da lista não muda.
+   Em tela estreita a lista de fichas fica entre a barra e a ficha: lá continua a arte dentro do topo da ficha. */
+@media (min-width: 761px) {
+  body.fp.fp-art::before { content: ''; position: fixed; top: 0; left: 260px; right: 0; height: 400px; pointer-events: none; z-index: 0;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 64px), linear-gradient(90deg, rgba(14, 13, 18, .82) 0%, rgba(14, 13, 18, .35) 50%, rgba(14, 13, 18, .08) 100%), var(--fp-art) center var(--fp-art-y, 12%) / cover no-repeat;
+    -webkit-mask-image: linear-gradient(to bottom, #000 38%, rgba(0, 0, 0, .55) 66%, transparent 100%); mask-image: linear-gradient(to bottom, #000 38%, rgba(0, 0, 0, .55) 66%, transparent 100%); }
+  body.fp.fp-art > .fp-top { position: relative; z-index: 2; background: transparent; border-bottom-color: transparent; }
+  body.fp.fp-art .fp-brand { background: var(--panel); box-shadow: inset 0 -1px var(--line); }
+  body.fp.fp-art .fp-title { color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, .9); }
+  body.fp.fp-art .fp-saved { color: rgba(255, 255, 255, .78); text-shadow: 0 1px 5px rgba(0, 0, 0, .9); }
+  body.fp.fp-art .fp-top .btn { color: #fff; background: rgba(14, 13, 18, .45); border-color: rgba(255, 255, 255, .18); }
+  body.fp.fp-art .fp-top .btn:hover { background: rgba(14, 13, 18, .7); }
+  body.fp.fp-art > .fp-wrap { position: relative; z-index: 1; }
+  body.fp.fp-art .fp-main .sa-bg { display: none; }
+  /* Ficha genérica: o topo (retrato e nome) fica sem caixa, com espaço em cima para a arte, como na janela */
+  body.fp.fp-art .fp-id.sa-top { background: transparent; border-color: transparent; padding-top: 104px; }
+}
+/* Enquadramento (Plano 78, também na página) */
+.fp-art-y { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.fp-art-y input { width: 110px; }

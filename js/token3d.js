@@ -24,16 +24,42 @@
     gold: { mid: '#c89a3e', light: '#f8df92', dark: '#5e400f' },
     silver: { mid: '#a9adb6', light: '#f3f5f8', dark: '#474b53' },
     wood: { mid: '#7a5230', light: '#b0804f', dark: '#33200f', grain: true },
-    // Plano 77: vermelho da comunidade (dourado no alto à esquerda → vermelho escuro embaixo) e branco liso (a cor escolhida sai pura)
-    red: { dir: ['#ffe48a', '#f2a330', '#cc431a', '#6a0f07'], mottle: true },
-    white: { flat: '#f3f3f5' },
+    // Plano 77 (corrigido): Vermelho e Branco usam as imagens enviadas pelo usuário, sem redesenhar.
+    // c = centro do aro na imagem, r = raio de fora, ri = raio de dentro (medidos em pixels na imagem 256×256).
+    red: { img: new URL('../imagens/molduras/vermelho.png', import.meta.url).href, c: [126.5, 125.75], r: 124.5, ri: 105.5 },
+    white: { img: new URL('../imagens/molduras/branco.png', import.meta.url).href, c: [127.5, 127.5], r: 127, ri: 113.75, multiply: true },
   };
-  // Relevo só de luz e sombra (sem cor), por cima da cor da moldura
-  function bevel(ctx, ri, k, hi = 0.3) {
-    const g = ctx.createRadialGradient(CX, CY, ri, CX, CY, R);
-    g.addColorStop(0, 'rgba(0,0,0,' + 0.55 * k + ')'); g.addColorStop(0.22, 'rgba(0,0,0,0)'); g.addColorStop(0.5, 'rgba(255,255,255,' + hi * k + ')');
-    g.addColorStop(0.78, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,' + 0.6 * k + ')');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // Texturas das molduras com imagem: carregadas uma vez; T.ready espera todas
+  const TEX = {};
+  T.ready = Promise.all(Object.entries(STYLE).filter(([, S]) => S.img).map(([k, S]) => load(S.img).then((im) => {
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    TEX[k] = { w: c.width, h: c.height, d: x.getImageData(0, 0, c.width, c.height).data, rings: {} };
+  }).catch(() => {})));
+  /*
+   * Aro da imagem levado para o aro do token: cada ponto do aro do token pega o ponto da imagem no mesmo ângulo e na
+   * mesma fração da largura (de dentro para fora). Assim o desenho é o da imagem, em qualquer largura (Fina/Média/Grossa).
+   */
+  function ringFromTexture(k, S, fw) {
+    const tx = TEX[k]; if (!tx) return null;
+    const key = fw.toFixed(2); if (tx.rings[key]) return tx.rings[key];
+    const ri = R - fw, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'), out = x.createImageData(2 * R + 4, 2 * R + 4), od = out.data, ox = CX - R - 2, oy = CY - R - 2;
+    const sample = (sx, sy, ch) => {
+      const x0 = Math.max(0, Math.min(tx.w - 2, Math.floor(sx))), y0 = Math.max(0, Math.min(tx.h - 2, Math.floor(sy))), fx = sx - x0, fy = sy - y0;
+      const p = (xx, yy) => tx.d[(yy * tx.w + xx) * 4 + ch];
+      return (p(x0, y0) * (1 - fx) + p(x0 + 1, y0) * fx) * (1 - fy) + (p(x0, y0 + 1) * (1 - fx) + p(x0 + 1, y0 + 1) * fx) * fy;
+    };
+    for (let py = 0; py < out.height; py++) for (let px = 0; px < out.width; px++) {
+      const dx = ox + px + 0.5 - CX, dy = oy + py + 0.5 - CY, d = Math.hypot(dx, dy);
+      const cov = Math.max(0, Math.min(1, R - d + 0.5)) * Math.max(0, Math.min(1, d - ri + 0.5)); // borda suave
+      if (cov <= 0) continue;
+      const t = Math.max(0, Math.min(1, (d - ri) / fw)), sd = S.ri + t * (S.r - S.ri);
+      const sx = S.c[0] + (dx / (d || 1)) * sd - 0.5, sy = S.c[1] + (dy / (d || 1)) * sd - 0.5, i = (py * out.width + px) * 4;
+      od[i] = sample(sx, sy, 0); od[i + 1] = sample(sx, sy, 1); od[i + 2] = sample(sx, sy, 2); od[i + 3] = 255 * cov;
+    }
+    x.putImageData(out, ox, oy);
+    return (tx.rings[key] = c);
   }
   // Aleatório com semente: a mesma moldura sai sempre igual
   const rng = (seed) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -42,31 +68,28 @@
     const S = STYLE[st.frame];
     if (!S) return;
     const fw = frameWidth(st), ri = R - fw;
+    if (S.img) {
+      // Moldura da imagem: só a textura, sem relevo nem luz por cima (o desenho é o da imagem)
+      const tex = ringFromTexture(st.frame, S, fw);
+      if (!tex) return;
+      if (!st.frameColor) { ctx.drawImage(tex, 0, 0); return; }
+      const t = document.createElement('canvas'); t.width = W; t.height = H;
+      const x = t.getContext('2d'); x.drawImage(tex, 0, 0);
+      // Branco: multiplica (o branco vira a cor escolhida e o cinza do brilho vira a mesma cor mais escura).
+      // Vermelho: tinge como os outros estilos.
+      x.globalCompositeOperation = S.multiply ? 'multiply' : 'color'; x.globalAlpha = S.multiply ? 1 : 0.75;
+      x.fillStyle = st.frameColor; x.fillRect(0, 0, W, H);
+      x.globalCompositeOperation = 'destination-in'; x.globalAlpha = 1; x.drawImage(tex, 0, 0);
+      ctx.drawImage(t, 0, 0); return;
+    }
     const ring = () => { ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.arc(CX, CY, ri, 0, Math.PI * 2, true); };
     ctx.save();
     ring(); ctx.clip();
-    if (S.dir) {
-      // Vermelho: degradê na diagonal + relevo
-      const d = ctx.createLinearGradient(CX - R, CY - R, CX + R, CY + R);
-      S.dir.forEach((c, i) => d.addColorStop(i / (S.dir.length - 1), c));
-      ctx.fillStyle = d; ctx.fillRect(0, 0, W, H);
-      bevel(ctx, ri, 1, 0.1); // brilho fraco, para o vermelho não desbotar
-    } else if (S.flat) {
-      // Branco: a cor escolhida (ou o branco) chapada, só com relevo leve
-      ctx.fillStyle = st.frameColor || S.flat; ctx.fillRect(0, 0, W, H);
-      bevel(ctx, ri, 0.45);
-    } else {
-      // Relevo: escuro nas bordas, claro no meio do aro
-      const g = ctx.createRadialGradient(CX, CY, ri, CX, CY, R);
-      g.addColorStop(0, S.dark); g.addColorStop(0.18, S.mid); g.addColorStop(0.5, S.light); g.addColorStop(0.82, S.mid); g.addColorStop(1, S.dark);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
+    // Relevo: escuro nas bordas, claro no meio do aro
+    const g = ctx.createRadialGradient(CX, CY, ri, CX, CY, R);
+    g.addColorStop(0, S.dark); g.addColorStop(0.18, S.mid); g.addColorStop(0.5, S.light); g.addColorStop(0.82, S.mid); g.addColorStop(1, S.dark);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     const rnd = rng(st.frame.length * 7919 + 13);
-    if (S.mottle) for (let i = 0; i < 700; i++) {
-      const a = rnd() * Math.PI * 2, d = ri + rnd() * fw, r0 = 1.5 + rnd() * 5;
-      ctx.fillStyle = rnd() < 0.55 ? 'rgba(90,10,0,.22)' : 'rgba(255,215,120,.16)';
-      ctx.beginPath(); ctx.arc(CX + Math.cos(a) * d, CY + Math.sin(a) * d, r0, 0, Math.PI * 2); ctx.fill();
-    }
     if (S.speck) for (let i = 0; i < 900; i++) {
       const a = rnd() * Math.PI * 2, d = ri + rnd() * fw, r0 = 0.6 + rnd() * 2.2;
       ctx.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,.18)' : 'rgba(255,255,255,.14)';
@@ -78,15 +101,14 @@
       ctx.beginPath(); ctx.arc(CX, CY, d, a0, a0 + 1 + rnd() * 3); ctx.stroke();
     }
     // Cor escolhida: tinge a moldura mantendo o relevo
-    if (st.frameColor && !S.flat) { ctx.globalCompositeOperation = 'color'; ctx.globalAlpha = 0.75; ctx.fillStyle = st.frameColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+    if (st.frameColor) { ctx.globalCompositeOperation = 'color'; ctx.globalAlpha = 0.75; ctx.fillStyle = st.frameColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
     // Luz de cima à esquerda
     const l = ctx.createLinearGradient(CX - R, CY - R, CX + R, CY + R);
-    const lk = S.flat ? 0.4 : 1; // no Branco a luz é leve, para a cor ficar fiel
-    l.addColorStop(0, 'rgba(255,255,255,' + 0.28 * lk + ')'); l.addColorStop(0.5, 'rgba(255,255,255,0)'); l.addColorStop(1, 'rgba(0,0,0,' + 0.35 * lk + ')');
+    l.addColorStop(0, 'rgba(255,255,255,.28)'); l.addColorStop(0.5, 'rgba(255,255,255,0)'); l.addColorStop(1, 'rgba(0,0,0,.35)');
     ctx.fillStyle = l; ctx.fillRect(0, 0, W, H);
     ctx.restore();
     // Linhas finas nas duas bordas
-    ctx.lineWidth = 2; ctx.strokeStyle = S.flat ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.55)';
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.55)';
     ctx.beginPath(); ctx.arc(CX, CY, R - 1, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.arc(CX, CY, ri, 0, Math.PI * 2); ctx.stroke();
   }
@@ -192,6 +214,7 @@
       async function paint() {
         try {
           const cut = await imgOf(st.cutout), bg = st.bg === 'art' ? await imgOf(opts.artId) : st.bg === 'image' ? await imgOf(st.bgImage) : null;
+          await T.ready;
           const c = T.compose(st, { cutout: cut, bg });
           const x = prev.getContext('2d'); x.clearRect(0, 0, W, H); x.drawImage(c, 0, 0);
         } catch (e) { U.toast(e.message, 'error'); }
@@ -289,6 +312,7 @@
         if (!st.cutout) { U.toast('Envie primeiro o personagem sem fundo.', 'info'); return; }
         try {
           const cut = await imgOf(st.cutout), bg = st.bg === 'art' ? await imgOf(opts.artId) : st.bg === 'image' ? await imgOf(st.bgImage) : null;
+          await T.ready;
           done({ blob: await T.toBlob(T.compose(st, { cutout: cut, bg })), state: Object.assign({}, st) });
         } catch (e) { U.toast(e.message, 'error'); }
       };

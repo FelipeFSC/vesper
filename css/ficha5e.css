@@ -410,3 +410,40 @@
 .a5-roll-dice { gap: 2px; white-space: nowrap; }
 .a5-roll-dice span, .a5-roll-dice s { width: 14px; }
 .a5-roll-dice b { white-space: nowrap; margin-left: 6px; }
+
+/* Plano 82: bloco da criatura legível. Cada traço ou ação é um cartão com faixa pelo tipo; números com ícones; cor por tipo de dano */
+.f5-sb-v { font-weight: 700; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+.f5-sb-line { margin: 2px 0; }
+.f5-sb-sec { margin-top: 22px; }
+.f5-sb-sec > h4 { margin-bottom: 10px; letter-spacing: .06em; }
+.f5-card { position: relative; margin-bottom: 10px; padding: 10px 12px 11px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel2); }
+.f5-card::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--k, var(--line2)); }
+.f5-card.k-attack { --k: #d9574f; }
+.f5-card.k-save { --k: #5b8def; }
+.f5-card.k-leg { --k: var(--gold); }
+.f5-card.k-trait { --k: #8a8794; }
+.f5-card.used { opacity: .6; }
+.f5-card-head { display: flex; align-items: flex-start; gap: 10px; }
+.f5-card-name { font: 600 16.5px/1.25 var(--serif); color: var(--text); display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.f5-card-kind { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--k, var(--faint)); margin-top: 2px; }
+.f5-card .f5-nums { margin-top: 8px; gap: 6px; }
+.f5-card-text { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.6; color: var(--muted); }
+.f5-num { gap: 5px; padding: 2px 9px; font-size: 13px; }
+.f5-num .ico { width: 13px; height: 13px; }
+.f5-num.n-atk { color: #f0a29d; border-color: rgba(217, 87, 79, .55); background: rgba(217, 87, 79, .12); }
+.f5-num.n-dc { color: #a9c3fb; border-color: rgba(91, 141, 239, .55); background: rgba(91, 141, 239, .12); }
+.f5-num.n-dmg { color: var(--dt, var(--text)); border-color: color-mix(in srgb, var(--dt, #888) 50%, transparent); background: color-mix(in srgb, var(--dt, #888) 12%, transparent); }
+.f5-num-plain { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); }
+.f5-num-plain .ico { width: 13px; height: 13px; }
+.f5-test { flex-shrink: 0; gap: 5px; }
+/* Destaques no texto do livro */
+.f5-tx-dice { font: inherit; font-weight: 700; color: var(--text); background: none; border: 0; padding: 0 2px; border-radius: 4px; border-bottom: 1px dashed var(--line2); cursor: pointer; }
+button.f5-tx-dice:hover { background: var(--panel3); color: var(--accent-text); }
+.f5-tx-dc { color: #a9c3fb; }
+.f5-tx-lbl { color: var(--text); font-style: italic; }
+.f5-tx-cond { color: #e0b65e; font-weight: 600; }
+.f5-tx-type { color: var(--dt, var(--text)); font-weight: 600; }
+/* Cor de cada tipo de dano */
+.dt-fire { --dt: #f08a3c; } .dt-cold { --dt: #7cc8f0; } .dt-thunder { --dt: #b48cf0; } .dt-acid { --dt: #8fd16a; } .dt-poison { --dt: #5fb37c; }
+.dt-lightning { --dt: #f2d14b; } .dt-necrotic { --dt: #9fb59a; } .dt-radiant { --dt: #f5cf6e; } .dt-psychic { --dt: #ef8fc4; } .dt-force { --dt: #c3a6f5; }
+.dt-slashing, .dt-piercing, .dt-bludgeoning { --dt: #d4d2dc; }
